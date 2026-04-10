@@ -19,7 +19,7 @@ async def import_student_profile(json_data: dict):
         "overall_mastery_score": json_data["mastery_profile"]["overall_mastery_score"],
         "weaknesses": weaknesses,
         "strengths": json_data["mastery_profile"]["strengths"],
-        "recommendations": json_data["recommendations"],
+        "recommendations": json_data.get("recommendations", []),
         
         # System tracking fields (not in original JSON)
         "current_weak_topic": weaknesses[0]["topic_id"] if weaknesses else None,

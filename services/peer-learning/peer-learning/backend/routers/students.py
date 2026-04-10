@@ -1,5 +1,6 @@
 # backend/routers/students.py
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from database import get_db
 from services.import_service import import_student_profile
 
 router = APIRouter(prefix="/api/students")
@@ -20,4 +21,6 @@ async def get_student_status(student_id: str):
         {"student_id": student_id},
         {"_id": 0}  # exclude MongoDB's internal _id from response
     )
+    if not student:
+        raise HTTPException(status_code=404, detail=f"Student '{student_id}' not found")
     return student

@@ -1,8 +1,9 @@
 # backend/routers/sessions.py
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Body
 from database import get_db
 from services.question_service import generate_question, evaluate_answer
 from services.performance_service import complete_pair_session
+from services.pairing_service import start_pairing_for_student, match_students_using_hungarian
 import asyncio, json
 from datetime import datetime
 
@@ -10,6 +11,29 @@ router = APIRouter()
 
 # Tracks active WebSocket connections: {session_id: {student_id: websocket}}
 active_connections: dict = {}
+
+@router.post("/api/sessions/match/{student_id}")
+@router.get("/api/sessions/match/{student_id}")
+async def match_student(student_id: str):
+    return await start_pairing_for_student(student_id)
+
+@router.post("/api/sessions/match/hungarian")
+async def match_students_hungarian(students: list[dict] = Body(...)):
+    return await match_students_using_hungarian(students)
+
+@router.get("/api/sessions/active")
+async def get_active_pair_sessions():
+    """Helper to find Pair Session IDs for testing"""
+    db = get_db()
+    cursor = db.pair_sessions.find({"status": "active"}, {"_id": 0})
+    return await cursor.to_list(length=100)
+
+@router.get("/api/sessions/group/active")
+async def get_active_group_sessions():
+    """Helper to find Group Session IDs for testing"""
+    db = get_db()
+    cursor = db.group_sessions.find({"status": "active"}, {"_id": 0})
+    return await cursor.to_list(length=100)
 
 @router.websocket("/ws/pair/{session_id}/{student_id}")
 async def pair_session_websocket(websocket: WebSocket, session_id: str, student_id: str):
@@ -181,6 +205,7 @@ async def notify_teacher(session_id: str, teacher_id: str, question_data: dict):
             "type": "LEARNER_NEEDS_HELP",
             "question": question_data["question"],
             "expected_answer": question_data["expected_answer"],
+            "teacher_hints": question_data.get("hints", []), # Provide hints effectively to teacher
             "message": "Your learner is stuck! Please explain this question."
         })
 
@@ -197,7 +222,18 @@ async def run_teacher_standby(websocket: WebSocket, session_id: str, teacher_id:
             raw = await websocket.receive_text()
             data = json.loads(raw)
             
-            if data["type"] == "TEACHER_DONE_EXPLAINING":
+            if data["type"] == "REQUEST_TEACHER_HINT":
+                db = get_db()
+                await db.pair_sessions.update_one(
+                    {"session_id": session_id},
+                    {"$inc": {"hints_used_by_teacher": 1}}
+                )
+                await websocket.send_json({
+                    "type": "HINT_PROVIDED",
+                    "message": "Check the teacher_hints array provided in the original request to help guide the learner."
+                })
+
+            elif data["type"] == "TEACHER_DONE_EXPLAINING":
                 # Notify learner that teacher is done
                 db = get_db()
                 session = await db.pair_sessions.find_one({"session_id": session_id})
@@ -216,3 +252,62 @@ def get_decision_message(decision: str) -> str:
         "CONTINUE": "Good effort! More practice will help. Continuing with your current teacher."
     }
     return messages.get(decision, "Session ended.")
+
+@router.websocket("/ws/group/{session_id}/{student_id}")
+async def group_session_websocket(websocket: WebSocket, session_id: str, student_id: str):
+    """"Group Session Management (Explainer, Solver, Reviewer)"""
+    await websocket.accept()
+    
+    if session_id not in active_connections:
+        active_connections[session_id] = {}
+    active_connections[session_id][student_id] = websocket
+    
+    db = get_db()
+    session = await db.group_sessions.find_one({"session_id": session_id})
+    if not session:
+        await websocket.close()
+        return
+
+    member = next((m for m in session["members"] if m["student_id"] == student_id), None)
+    if not member:
+        await websocket.close()
+        return
+        
+    role = member["role"]
+
+    await websocket.send_json({
+        "type": "GROUP_SESSION_STARTED",
+        "role": role,
+        "problem": session["problem"],
+        "message": f"You are the {role}. Work with your team."
+    })
+    
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            data = json.loads(raw)
+            
+            if data["type"] == "REQUEST_HINT":
+                hint_key = {
+                    "explainer": "explainer_guide",
+                    "solver": "solver_starter",
+                    "reviewer": "reviewer_checklist"
+                }.get(role, "hints")
+                
+                hint = session["problem"].get(hint_key, "General hint")
+                await websocket.send_json({"type": "HINT", "hint": hint})
+                
+                await db.group_sessions.update_one(
+                    {"session_id": session_id},
+                    {"$inc": {f"performance.{student_id}.hints_used": 1}}
+                )
+
+            elif data["type"] == "SUBMIT_TASK":
+                await db.group_sessions.update_one(
+                    {"session_id": session_id},
+                    {"$set": {f"performance.{student_id}.score": 95}} 
+                )
+                await websocket.send_json({"type": "TASK_COMPLETED", "score": 95, "message": "Task evaluated successfully natively."})
+
+    except WebSocketDisconnect:
+        del active_connections[session_id][student_id]

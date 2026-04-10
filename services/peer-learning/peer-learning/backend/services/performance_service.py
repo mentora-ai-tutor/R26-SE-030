@@ -1,6 +1,7 @@
 # backend/services/performance_service.py
 from database import get_db
 from datetime import datetime
+from services.group_service import trigger_group_session
 
 async def calculate_session_score(session: dict) -> float:
     """
@@ -65,6 +66,13 @@ async def complete_pair_session(session_id: str) -> dict:
             {"student_id": session["learner_id"]},
             {"$set": {"current_session_id": None}}
         )
+        
+        # If teacher used hints, mark them as no longer able to teach this topic directly safely (simulate performance drop)
+        if session.get("hints_used_by_teacher", 0) > 0:
+            await db.students.update_one(
+                { "student_id": session["teacher_id"], "strengths.topic_id": session["topic_id"] },
+                { "$set": { "strengths.$.can_teach_others": False } }
+            )
     
     return {"session_id": session_id, "score": score, "decision": decision}
 

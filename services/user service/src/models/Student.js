@@ -9,6 +9,9 @@ const studentSchema = new mongoose.Schema(
       type: String,
       unique: true,
       required: true,
+      default: function() {
+        return `STU_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      },
     },
     name: {
       type: String,
@@ -126,13 +129,6 @@ studentSchema.pre('save', async function (next) {
   } catch (error) {
     next(error);
   }
-});
-
-studentSchema.pre('save', function (next) {
-  if (!this.student_id) {
-    this.student_id = generateStudentId();
-  }
-  next();
 });
 
 studentSchema.methods.comparePassword = async function (candidatePassword) {

@@ -30,10 +30,10 @@ const registerSchema = Joi.object({
       'any.required': 'Password is required',
     }),
   student_id: Joi.string()
-    .pattern(/^STU_/)
+    .pattern(/^STD-\d{5}$/)
     .optional()
     .messages({
-      'string.pattern.base': 'Student ID must start with STU_',
+      'string.pattern.base': 'Student ID must be in format STD-XXXXX (e.g., STD-00001)',
     }),
   profile: Joi.object({
     java_level: Joi.string()

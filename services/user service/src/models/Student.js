@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { generateStudentId } = require('../utils/generateStudentId');
 const config = require('../config/env');
 
 const studentSchema = new mongoose.Schema(
@@ -9,9 +8,7 @@ const studentSchema = new mongoose.Schema(
       type: String,
       unique: true,
       required: true,
-      default: function() {
-        return `STU_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
-      },
+      default: () => `STU_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
     },
     name: {
       type: String,
@@ -83,6 +80,7 @@ const studentSchema = new mongoose.Schema(
         type: Date,
       },
     },
+    // Account Security
     is_active: {
       type: Boolean,
       default: true,
@@ -91,6 +89,57 @@ const studentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Account Lockout
+    login_attempts: {
+      type: Number,
+      default: 0,
+    },
+    lock_until: {
+      type: Date,
+    },
+    // Soft Delete
+    is_deleted: {
+      type: Boolean,
+      default: false,
+    },
+    deleted_at: {
+      type: Date,
+    },
+    deleted_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Student',
+    },
+    // User Preferences
+    preferences: {
+      notifications: {
+        email: {
+          type: Boolean,
+          default: true,
+        },
+        push: {
+          type: Boolean,
+          default: true,
+        },
+        marketing: {
+          type: Boolean,
+          default: false,
+        },
+      },
+      theme: {
+        type: String,
+        enum: ['light', 'dark', 'system'],
+        default: 'system',
+      },
+      language: {
+        type: String,
+        default: 'en',
+      },
+      timezone: {
+        type: String,
+        default: 'UTC',
+      },
+    },
+    // Timestamps
     enrolled_at: {
       type: Date,
       default: Date.now,
@@ -102,9 +151,13 @@ const studentSchema = new mongoose.Schema(
     last_login: {
       type: Date,
     },
+    // Tokens
     refresh_token: {
       type: String,
       select: false,
+    },
+    email_verified_at: {
+      type: Date,
     },
   },
   {
@@ -112,16 +165,23 @@ const studentSchema = new mongoose.Schema(
   }
 );
 
-studentSchema.index({ student_id: 1 }, { unique: true });
-studentSchema.index({ email: 1 }, { unique: true });
+// Indexes
 studentSchema.index({ is_active: 1 });
+studentSchema.index({ is_deleted: 1 });
 studentSchema.index({ enrolled_at: -1 });
+studentSchema.index({ name: 'text', email: 'text', student_id: 'text' });
 
+// Virtual for account locked status
+studentSchema.virtual('isLocked').get(function () {
+  return !!(this.lock_until && this.lock_until > Date.now());
+});
+
+// Pre-save hooks
 studentSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     return next();
   }
-  
+
   try {
     const salt = await bcrypt.genSalt(config.bcryptSaltRounds);
     this.password = await bcrypt.hash(this.password, salt);
@@ -131,6 +191,7 @@ studentSchema.pre('save', async function (next) {
   }
 });
 
+// Instance Methods
 studentSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
@@ -155,8 +216,75 @@ studentSchema.methods.updateLastActive = async function () {
   return this.save({ validateBeforeSave: false });
 };
 
+// Account Lockout Methods
+studentSchema.methods.incrementLoginAttempts = async function () {
+  // If lock has expired, reset attempts
+  if (this.lock_until && this.lock_until < Date.now()) {
+    return this.updateOne({
+      $set: { login_attempts: 1 },
+      $unset: { lock_until: 1 },
+    });
+  }
+
+  const updates = { $inc: { login_attempts: 1 } };
+
+  // Lock account after 5 failed attempts (15 minutes)
+  if (this.login_attempts + 1 >= 5 && !this.isLocked) {
+    updates.$set = { lock_until: Date.now() + 15 * 60 * 1000 }; // 15 minutes
+  }
+
+  return this.updateOne(updates);
+};
+
+studentSchema.methods.resetLoginAttempts = async function () {
+  return this.updateOne({
+    $set: { login_attempts: 0 },
+    $unset: { lock_until: 1 },
+  });
+};
+
+// Soft Delete Methods
+studentSchema.methods.softDelete = async function (deletedBy = null) {
+  this.is_deleted = true;
+  this.is_active = false;
+  this.deleted_at = new Date();
+  if (deletedBy) {
+    this.deleted_by = deletedBy;
+  }
+  return this.save({ validateBeforeSave: false });
+};
+
+studentSchema.methods.restore = async function () {
+  this.is_deleted = false;
+  this.is_active = true;
+  this.deleted_at = undefined;
+  this.deleted_by = undefined;
+  return this.save({ validateBeforeSave: false });
+};
+
+// Static Methods
 studentSchema.statics.hashRefreshToken = async function (token) {
   return bcrypt.hash(token, config.bcryptSaltRounds);
+};
+
+studentSchema.statics.findByCredentials = async function (email, password) {
+  const student = await this.findOne({ email: email.toLowerCase(), is_deleted: false }).select('+password');
+
+  if (!student) {
+    return null;
+  }
+
+  const isMatch = await student.comparePassword(password);
+
+  if (!isMatch) {
+    return null;
+  }
+
+  return student;
+};
+
+studentSchema.statics.findActive = function () {
+  return this.find({ is_deleted: false });
 };
 
 const Student = mongoose.model('Student', studentSchema);

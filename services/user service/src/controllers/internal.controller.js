@@ -1,8 +1,9 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/env');
-const Student = require('../models/Student');
+const { Student } = require('../models');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const logger = require('../utils/logger');
+const { logAuth } = require('../utils/auditLogger');
 
 const verifyToken = async (req, res, _next) => {
   try {
@@ -33,6 +34,13 @@ const verifyToken = async (req, res, _next) => {
       });
     }
 
+    if (student.is_deleted) {
+      return res.status(401).json({
+        valid: false,
+        error: 'Account has been deleted',
+      });
+    }
+
     if (!student.is_active) {
       return res.status(403).json({
         valid: false,
@@ -47,6 +55,8 @@ const verifyToken = async (req, res, _next) => {
     ).catch((err) => {
       logger.warn('Failed to update last_active:', err.message);
     });
+
+    await logAuth.tokenVerified(student._id, req, req.requestId);
 
     logger.info(`Token verified for student: ${student.student_id} by internal service`);
 
@@ -75,7 +85,7 @@ const getStudentById = async (req, res, next) => {
   try {
     const { studentId } = req.params;
 
-    const student = await Student.findOne({ student_id: studentId });
+    const student = await Student.findOne({ student_id: studentId, is_deleted: false });
 
     if (!student) {
       return sendError(res, 'Student not found', 404, 'STUDENT_NOT_FOUND');
@@ -101,7 +111,7 @@ const updateStudentStats = async (req, res, next) => {
       materials_generated_increment,
     } = req.body;
 
-    const student = await Student.findOne({ student_id: studentId });
+    const student = await Student.findOne({ student_id: studentId, is_deleted: false });
 
     if (!student) {
       return sendError(res, 'Student not found', 404, 'STUDENT_NOT_FOUND');

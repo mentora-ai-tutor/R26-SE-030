@@ -9,35 +9,52 @@ const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
 const { protect } = require('./middleware/auth.middleware');
 const { internalOnly } = require('./middleware/internal.middleware');
+const { requestId, requestTiming } = require('./middleware/request.middleware');
+const { collectMetrics, getMetrics, getHealth, getAnalytics, getRecentActivity } = require('./middleware/metrics.middleware');
+
+// Import routes
 const authRoutes = require('./routes/auth.routes');
 const studentRoutes = require('./routes/student.routes');
 const internalRoutes = require('./routes/internal.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
 
+// Request ID and timing middleware (first)
+app.use(requestId);
+app.use(requestTiming);
+
+// Security middleware
 app.use(helmet());
 
+// CORS configuration
 app.use(
   cors({
     origin: config.corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Internal-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Internal-Key', 'X-Request-ID'],
   })
 );
 
+// Body parsing
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
+// Request logging
 app.use(
   morgan('combined', {
     stream: {
       write: (message) => logger.info(message.trim()),
     },
-    skip: (req) => req.url === '/health',
+    skip: (req) => req.url === '/health' || req.url === '/metrics',
   })
 );
 
+// Metrics collection
+app.use(collectMetrics);
+
+// Rate limiting
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -50,24 +67,50 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use('/api/auth', authLimiter);
-
-app.get('/health', (req, res) => {
-  res.json({
-    service: config.serviceName,
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  });
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: {
+    success: false,
+    error: 'Too many requests. Please try again later.',
+    code: 'RATE_LIMIT_EXCEEDED',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
+// Health check (no auth required)
+app.get('/health', getHealth);
+
+// Metrics endpoint (internal only)
+app.get('/metrics', getMetrics);
+
+// Analytics endpoints (protected, admin only concept)
+app.get('/analytics', protect, getAnalytics);
+app.get('/analytics/recent', protect, getRecentActivity);
+
+// Auth routes with rate limiting
+app.use('/api/auth', authLimiter);
 app.use('/api/auth', authRoutes);
 
-app.use('/api/students', protect, studentRoutes);
+// Protected routes
+app.use('/api/students', protect, apiLimiter, studentRoutes);
 
+// Admin routes
+app.use('/api/admin', protect, apiLimiter, adminRoutes);
+
+// Internal service routes
 app.use('/internal', internalOnly, internalRoutes);
 
+// API v1 prefix (for versioning)
+app.use('/v1/auth', authLimiter, authRoutes);
+app.use('/v1/students', protect, apiLimiter, studentRoutes);
+app.use('/v1/admin', protect, apiLimiter, adminRoutes);
+
+// 404 handler
 app.use(notFoundHandler);
 
+// Error handler
 app.use(errorHandler);
 
 module.exports = app;

@@ -1,7 +1,10 @@
-const Student = require('../models/Student');
+const mongoose = require('mongoose');
 
 const generateStudentId = async () => {
   try {
+    // Use mongoose.model() to avoid circular dependency
+    const Student = mongoose.model('Student');
+
     // Find the student with the highest student_id starting with STD-
     const lastStudent = await Student.findOne(
       { student_id: { $regex: '^STD-' } },

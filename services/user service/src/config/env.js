@@ -27,13 +27,24 @@ const config = {
   mongodbUri: process.env.MONGODB_URI,
   jwt: {
     secret: process.env.JWT_SECRET,
-    expiresIn: process.env.JWT_EXPIRES_IN,
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     refreshSecret: process.env.JWT_REFRESH_SECRET,
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
   internalServiceKey: process.env.INTERNAL_SERVICE_KEY,
   corsOrigin: process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim()),
-  bcryptSaltRounds: 12,
+  bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 12,
+  // Optional features
+  features: {
+    emailVerification: process.env.ENABLE_EMAIL_VERIFICATION === 'true',
+    accountLockout: process.env.ENABLE_ACCOUNT_LOCKOUT !== 'false', // enabled by default
+    auditLogging: process.env.ENABLE_AUDIT_LOGGING !== 'false', // enabled by default
+  },
+  // Redis config (optional)
+  redis: {
+    url: process.env.REDIS_URL,
+    enabled: !!process.env.REDIS_URL,
+  },
 };
 
 if (config.nodeEnv === 'development' && config.jwt.secret.length < 32) {

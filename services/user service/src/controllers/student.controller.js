@@ -1,8 +1,10 @@
-const Student = require('../models/Student');
+const { Student } = require('../models');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const logger = require('../utils/logger');
+const { activity } = require('../utils/activityLogger');
 
 const getMe = async (req, res) => {
+  await activity.profileView(req.student._id, req);
   return sendSuccess(res, req.student.toSafeObject());
 };
 
@@ -12,13 +14,33 @@ const updateProfile = async (req, res, next) => {
     const studentId = req.student._id;
 
     const updateFields = {};
-    if (name) updateFields.name = name;
+    const updatedFields = [];
+
+    if (name) {
+      updateFields.name = name;
+      updatedFields.push('name');
+    }
     if (profile) {
-      if (profile.avatar_url !== undefined) updateFields['profile.avatar_url'] = profile.avatar_url;
-      if (profile.bio !== undefined) updateFields['profile.bio'] = profile.bio;
-      if (profile.java_level !== undefined) updateFields['profile.java_level'] = profile.java_level;
-      if (profile.institution !== undefined) updateFields['profile.institution'] = profile.institution;
-      if (profile.country !== undefined) updateFields['profile.country'] = profile.country;
+      if (profile.avatar_url !== undefined) {
+        updateFields['profile.avatar_url'] = profile.avatar_url;
+        updatedFields.push('profile.avatar_url');
+      }
+      if (profile.bio !== undefined) {
+        updateFields['profile.bio'] = profile.bio;
+        updatedFields.push('profile.bio');
+      }
+      if (profile.java_level !== undefined) {
+        updateFields['profile.java_level'] = profile.java_level;
+        updatedFields.push('profile.java_level');
+      }
+      if (profile.institution !== undefined) {
+        updateFields['profile.institution'] = profile.institution;
+        updatedFields.push('profile.institution');
+      }
+      if (profile.country !== undefined) {
+        updateFields['profile.country'] = profile.country;
+        updatedFields.push('profile.country');
+      }
     }
 
     const updatedStudent = await Student.findByIdAndUpdate(
@@ -26,6 +48,8 @@ const updateProfile = async (req, res, next) => {
       { $set: updateFields },
       { new: true, runValidators: true }
     );
+
+    await activity.profileUpdate(studentId, req, updatedFields);
 
     logger.info(`Profile updated for student: ${updatedStudent.email}`);
 
@@ -51,6 +75,8 @@ const updatePassword = async (req, res, next) => {
     student.password = new_password;
     student.refresh_token = null;
     await student.save();
+
+    await activity.passwordChange(studentId, req);
 
     logger.info(`Password updated for student: ${student.email}`);
 
@@ -99,6 +125,12 @@ const updateStats = async (req, res, next) => {
       { new: true }
     );
 
+    await activity.statsUpdate(studentId, req, {
+      overall_mastery_score,
+      total_materials_generated_increment,
+      total_sessions_increment,
+    });
+
     return sendSuccess(res, {
       overall_mastery_score: updatedStudent.stats.overall_mastery_score,
       total_materials_generated: updatedStudent.stats.total_materials_generated,
@@ -128,10 +160,83 @@ const getSummary = async (req, res) => {
   });
 };
 
+// Get User Preferences
+const getPreferences = async (req, res) => {
+  return sendSuccess(res, req.student.preferences);
+};
+
+// Update User Preferences
+const updatePreferences = async (req, res, next) => {
+  try {
+    const { notifications, theme, language, timezone } = req.body;
+    const studentId = req.student._id;
+
+    const updateFields = {};
+
+    if (notifications) {
+      if (notifications.email !== undefined) updateFields['preferences.notifications.email'] = notifications.email;
+      if (notifications.push !== undefined) updateFields['preferences.notifications.push'] = notifications.push;
+      if (notifications.marketing !== undefined) updateFields['preferences.notifications.marketing'] = notifications.marketing;
+    }
+    if (theme) updateFields['preferences.theme'] = theme;
+    if (language) updateFields['preferences.language'] = language;
+    if (timezone) updateFields['preferences.timezone'] = timezone;
+
+    const updatedStudent = await Student.findByIdAndUpdate(
+      studentId,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    );
+
+    await activity.apiCall(studentId, req, '/api/students/me/preferences');
+
+    logger.info(`Preferences updated for student: ${updatedStudent.email}`);
+
+    return sendSuccess(res, updatedStudent.preferences, 'Preferences updated successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete Account (Self)
+const deleteAccount = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    const studentId = req.student._id;
+
+    const student = await Student.findById(studentId).select('+password');
+
+    // Verify password
+    const isPasswordValid = await student.comparePassword(password);
+    if (!isPasswordValid) {
+      return sendError(res, 'Password is incorrect', 400, 'INVALID_PASSWORD');
+    }
+
+    // Soft delete
+    await student.softDelete();
+
+    // Revoke all sessions
+    const { UserSession } = require('../models');
+    await UserSession.updateMany(
+      { student: studentId, is_active: true },
+      { $set: { is_active: false, is_revoked: true, revoked_at: new Date(), revoked_reason: 'account_self_deleted' } }
+    );
+
+    logger.info(`Student self-deleted account: ${student.email}`);
+
+    return sendSuccess(res, null, 'Account deleted successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getMe,
   updateProfile,
   updatePassword,
   updateStats,
   getSummary,
+  getPreferences,
+  updatePreferences,
+  deleteAccount,
 };

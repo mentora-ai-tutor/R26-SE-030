@@ -51,7 +51,7 @@ const generateTokens = async (student, deviceInfo, req) => {
 // Register
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, student_id, profile } = req.body;
+    const { name, email, password, country } = req.body;
     const requestId = req.requestId;
 
     const existingStudent = await Student.findOne({ email: email.toLowerCase(), is_deleted: false });
@@ -63,15 +63,10 @@ const register = async (req, res, next) => {
       name,
       email,
       password,
-      profile: profile || {},
+      profile: {
+        country: country || '',
+      },
     };
-
-    if (student_id) {
-      const existingStudentId = await Student.findOne({ student_id, is_deleted: false });
-      if (existingStudentId) {
-        return sendError(res, 'Student ID already exists', 409, 'STUDENT_ID_EXISTS');
-      }
-    }
 
     const student = new Student(studentData);
     await student.save();

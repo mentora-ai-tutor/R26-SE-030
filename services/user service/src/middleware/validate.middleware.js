@@ -29,19 +29,7 @@ const registerSchema = Joi.object({
       'string.min': 'Password must be at least 6 characters',
       'any.required': 'Password is required',
     }),
-  student_id: Joi.string()
-    .pattern(/^STD-\d{5}$/)
-    .optional()
-    .messages({
-      'string.pattern.base': 'Student ID must be in format STD-XXXXX (e.g., STD-00001)',
-    }),
-  profile: Joi.object({
-    java_level: Joi.string()
-      .valid('beginner', 'intermediate', 'advanced')
-      .optional(),
-    institution: Joi.string().max(200).optional().allow(''),
-    country: Joi.string().max(100).optional().allow(''),
-  }).optional(),
+  country: Joi.string().max(100).optional().allow(''),
 });
 
 const loginSchema = Joi.object({

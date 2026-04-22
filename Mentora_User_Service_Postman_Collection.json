@@ -1,0 +1,1162 @@
+{
+  "info": {
+    "_postman_id": "mentora-user-service-v2-1",
+    "name": "Mentora User Service API v2.1",
+    "description": "Complete Postman collection for Mentora User Service with all advanced features.\n\n## Features\n- JWT Authentication with Refresh Tokens\n- Account Lockout (5 failed attempts = 15min lock)\n- Password Reset via Email Token\n- Email Verification\n- Multi-device Session Management\n- Soft Delete / Restore\n- Admin User Management\n- Bulk Operations\n- Audit Logging\n- Analytics & Metrics\n\n## Environment Variables Needed\n- `base_url`: http://localhost:3001\n- `access_token`: JWT token from login/register\n- `admin_token`: Admin user JWT token\n- `internal_service_key`: Key for internal service endpoints\n- `student_id`: Format STD-XXXXX (e.g., STD-00001)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. Health & Monitoring",
+      "description": "Public endpoints for health checks and system monitoring",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check service health with detailed status including DB connection, memory usage, and uptime"
+          },
+          "response": [
+            {
+              "name": "Healthy Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"service\": \"user-service\",\n  \"status\": \"ok\",\n  \"timestamp\": \"2026-04-15T10:30:00.000Z\",\n  \"uptime\": 3600,\n  \"version\": \"1.0.0\",\n  \"environment\": \"development\",\n  \"database\": {\n    \"status\": \"connected\",\n    \"name\": \"mentora_users\",\n    \"host\": \"localhost\"\n  },\n  \"memory\": {\n    \"used\": \"45MB\",\n    \"total\": \"128MB\"\n  }\n}"
+            },
+            {
+              "name": "Unhealthy (DB Disconnected)",
+              "status": "Service Unavailable",
+              "code": 503,
+              "body": "{\n  \"service\": \"user-service\",\n  \"status\": \"error\",\n  \"timestamp\": \"2026-04-15T10:30:00.000Z\",\n  \"database\": {\n    \"status\": \"disconnected\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Request Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["metrics"]
+            },
+            "description": "Get request metrics including response times, error rates, and route statistics"
+          },
+          "response": [
+            {
+              "name": "Metrics Response",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"uptime\": 7200,\n    \"requests\": {\n      \"total\": 1250,\n      \"responses\": 1248,\n      \"errors\": 2,\n      \"error_rate\": \"0.16%\"\n    },\n    \"response_time\": {\n      \"avg\": 45,\n      \"p50\": 32,\n      \"p95\": 120,\n      \"p99\": 250\n    },\n    \"by_status\": {\n      \"200\": 1100,\n      \"201\": 100,\n      \"400\": 30,\n      \"401\": 15,\n      \"500\": 2\n    },\n    \"by_route\": {\n      \"POST /api/auth/login\": {\n        \"count\": 150,\n        \"errors\": 5,\n        \"avg_duration\": 85,\n        \"error_rate\": \"3.33%\"\n      }\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Usage Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/analytics?days=7",
+              "host": ["{{base_url}}"],
+              "path": ["analytics"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7",
+                  "description": "Number of days to analyze (1-90)"
+                }
+              ]
+            },
+            "description": "Get usage analytics. Requires authentication."
+          },
+          "response": [
+            {
+              "name": "Analytics Response",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"period\": \"7 days\",\n    \"users\": {\n      \"total\": 150,\n      \"active\": 142,\n      \"new\": 23\n    },\n    \"auth\": {\n      \"logins\": 450,\n      \"registrations\": 23\n    },\n    \"activity_by_day\": [\n      { \"_id\": \"2026-04-08\", \"count\": 45 },\n      { \"_id\": \"2026-04-09\", \"count\": 52 }\n    ],\n    \"top_actions\": [\n      { \"action\": \"LOGIN\", \"count\": 450 },\n      { \"action\": \"PROFILE_VIEW\", \"count\": 230 }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Recent Activity",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/analytics/recent?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["analytics", "recent"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of records (1-100)"
+                }
+              ]
+            },
+            "description": "Get recent logins, registrations, and errors"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02. Authentication",
+      "description": "Authentication endpoints. Rate limited: 20 requests per 15 minutes",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"securepassword123\",\n  \"profile\": {\n    \"java_level\": \"beginner\",\n    \"institution\": \"SLIIT\",\n    \"country\": \"Sri Lanka\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user. Student ID auto-generated as STD-XXXXX."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Registration successful. Please verify your email.\",\n  \"data\": {\n    \"student\": {\n      \"student_id\": \"STD-00001\",\n      \"name\": \"John Doe\",\n      \"email\": \"john.doe@example.com\",\n      \"role\": \"student\",\n      \"profile\": {\n        \"java_level\": \"beginner\",\n        \"institution\": \"SLIIT\",\n        \"country\": \"Sri Lanka\",\n        \"avatar_url\": \"\",\n        \"bio\": \"\"\n      },\n      \"stats\": {\n        \"overall_mastery_score\": 0,\n        \"total_materials_generated\": 0,\n        \"total_sessions\": 0,\n        \"last_mastery_update\": null\n      },\n      \"is_active\": true,\n      \"is_verified\": false,\n      \"preferences\": {\n        \"notifications\": {\n          \"email\": true,\n          \"push\": true,\n          \"marketing\": false\n        },\n        \"theme\": \"system\",\n        \"language\": \"en\",\n        \"timezone\": \"UTC\"\n      },\n      \"enrolled_at\": \"2026-04-15T10:30:00.000Z\",\n      \"last_active\": \"2026-04-15T10:30:00.000Z\"\n    },\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"refresh_token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"expires_in\": \"1h\",\n    \"requires_verification\": true\n  }\n}"
+            },
+            {
+              "name": "Email Already Exists",
+              "status": "Conflict",
+              "code": 409,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Email already registered\",\n  \"code\": \"EMAIL_EXISTS\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"securepassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login with email and password. Account locks after 5 failed attempts for 15 minutes."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"student\": {\n      \"student_id\": \"STD-00001\",\n      \"name\": \"John Doe\",\n      \"email\": \"john.doe@example.com\",\n      \"role\": \"student\",\n      \"is_active\": true,\n      \"is_verified\": true,\n      \"profile\": {\n        \"java_level\": \"beginner\"\n      },\n      \"stats\": {\n        \"overall_mastery_score\": 75,\n        \"total_materials_generated\": 10,\n        \"total_sessions\": 5\n      }\n    },\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"refresh_token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"session_token\": \"abc123def456...\",\n    \"expires_in\": \"1h\"\n  }\n}"
+            },
+            {
+              "name": "Account Locked",
+              "status": "Locked",
+              "code": 423,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Account is locked. Please try again in 12 minutes.\",\n  \"code\": \"ACCOUNT_LOCKED\"\n}"
+            },
+            {
+              "name": "Invalid Credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Invalid email or password\",\n  \"code\": \"INVALID_CREDENTIALS\"\n}"
+            },
+            {
+              "name": "Account Deactivated",
+              "status": "Forbidden",
+              "code": 403,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Account has been deactivated\",\n  \"code\": \"ACCOUNT_DEACTIVATED\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Get a new access token using refresh token"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIs...\",\n    \"expires_in\": \"1h\"\n  }\n}"
+            },
+            {
+              "name": "Token Expired",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Refresh token expired\",\n  \"code\": \"REFRESH_TOKEN_EXPIRED\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"all_devices\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout current session. Set `all_devices: true` to logout from all devices."
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "forgot-password"]
+            },
+            "description": "Request password reset. Always returns success to prevent email enumeration."
+          },
+          "response": [
+            {
+              "name": "Success (Generic)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"If an account exists, a password reset email has been sent\",\n  \"data\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token-from-email\",\n  \"new_password\": \"newsecurepassword456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "description": "Reset password with token from email. Token expires in 1 hour."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Password reset successful. Please log in with your new password.\",\n  \"data\": null\n}"
+            },
+            {
+              "name": "Invalid Token",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Invalid or expired reset token\",\n  \"code\": \"INVALID_TOKEN\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"verification-token-from-email\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/verify-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "verify-email"]
+            },
+            "description": "Verify email address with token. Token expires in 24 hours."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/resend-verification",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "resend-verification"]
+            },
+            "description": "Resend verification email"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "sessions"]
+            },
+            "description": "List all active sessions with device information"
+          },
+          "response": [
+            {
+              "name": "Sessions List",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"sessions\": [\n      {\n        \"_id\": \"session-id-1\",\n        \"device_name\": \"Chrome on Windows\",\n        \"device_type\": \"desktop\",\n        \"os\": \"Windows\",\n        \"browser\": \"Chrome\",\n        \"ip_address\": \"192.168.1.1\",\n        \"is_active\": true,\n        \"last_active_at\": \"2026-04-15T10:30:00.000Z\",\n        \"createdAt\": \"2026-04-15T08:00:00.000Z\"\n      },\n      {\n        \"_id\": \"session-id-2\",\n        \"device_name\": \"Safari on iOS\",\n        \"device_type\": \"mobile\",\n        \"os\": \"iOS\",\n        \"browser\": \"Safari\",\n        \"ip_address\": \"192.168.1.2\",\n        \"is_active\": true,\n        \"last_active_at\": \"2026-04-14T18:00:00.000Z\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Revoke Session",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/sessions/{{session_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "sessions", "{{session_id}}"]
+            },
+            "description": "Revoke a specific session (logout from that device)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. Student Profile",
+      "description": "Protected endpoints requiring Bearer token",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/students/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me"]
+            },
+            "description": "Get current user's complete profile"
+          },
+          "response": [
+            {
+              "name": "Profile",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"student_id\": \"STD-00001\",\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"role\": \"student\",\n    \"profile\": {\n      \"avatar_url\": \"https://example.com/avatar.jpg\",\n      \"bio\": \"Learning Java programming\",\n      \"java_level\": \"intermediate\",\n      \"institution\": \"SLIIT\",\n      \"country\": \"Sri Lanka\"\n    },\n    \"stats\": {\n      \"overall_mastery_score\": 75,\n      \"total_materials_generated\": 25,\n      \"total_sessions\": 12,\n      \"last_mastery_update\": \"2026-04-15T08:00:00.000Z\"\n    },\n    \"preferences\": {\n      \"notifications\": {\n        \"email\": true,\n        \"push\": true,\n        \"marketing\": false\n      },\n      \"theme\": \"dark\",\n      \"language\": \"en\",\n      \"timezone\": \"Asia/Colombo\"\n    },\n    \"is_active\": true,\n    \"is_verified\": true,\n    \"enrolled_at\": \"2026-04-10T10:00:00.000Z\",\n    \"last_active\": \"2026-04-15T10:30:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Updated\",\n  \"profile\": {\n    \"avatar_url\": \"https://example.com/new-avatar.jpg\",\n    \"bio\": \"Learning Java and loving it!\",\n    \"java_level\": \"intermediate\",\n    \"institution\": \"SLIIT\",\n    \"country\": \"Sri Lanka\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me"]
+            },
+            "description": "Update profile. All fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"securepassword123\",\n  \"new_password\": \"newsecurepassword456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/me/password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me", "password"]
+            },
+            "description": "Change password. Requires current password."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Password updated. Please log in again.\",\n  \"data\": null\n}"
+            },
+            {
+              "name": "Invalid Current Password",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Current password is incorrect\",\n  \"code\": \"INVALID_PASSWORD\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Stats",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"overall_mastery_score\": 85,\n  \"total_materials_generated_increment\": 5,\n  \"total_sessions_increment\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/me/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me", "stats"]
+            },
+            "description": "Update user stats. All fields optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/students/me/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me", "summary"]
+            },
+            "description": "Get condensed user summary"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Preferences",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/students/me/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me", "preferences"]
+            },
+            "description": "Get user preferences"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notifications\": {\n    \"email\": true,\n    \"push\": false,\n    \"marketing\": false\n  },\n  \"theme\": \"dark\",\n  \"language\": \"en\",\n  \"timezone\": \"Asia/Colombo\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/me/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me", "preferences"]
+            },
+            "description": "Update user preferences"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"securepassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/students/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "students", "me"]
+            },
+            "description": "Soft delete own account. Requires password confirmation."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Admin",
+      "description": "Admin-only endpoints. Requires user with role='admin'",
+      "item": [
+        {
+          "name": "Search Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users?query=john&role=student&is_active=true&is_verified=true&java_level=intermediate&sort_by=createdAt&sort_order=desc&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "john",
+                  "description": "Search by name/email/student_id"
+                },
+                {
+                  "key": "role",
+                  "value": "student",
+                  "description": "Filter by role: student, instructor, admin"
+                },
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "description": "Filter by active status"
+                },
+                {
+                  "key": "is_verified",
+                  "value": "true",
+                  "description": "Filter by verified status"
+                },
+                {
+                  "key": "java_level",
+                  "value": "intermediate",
+                  "description": "Filter by Java level"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "createdAt",
+                  "description": "createdAt, updatedAt, name, email, enrolled_at"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc",
+                  "description": "asc or desc"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Max 100"
+                }
+              ]
+            },
+            "description": "Search and filter users with pagination"
+          },
+          "response": [
+            {
+              "name": "Search Results",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"users\": [\n      {\n        \"_id\": \"user-id-1\",\n        \"student_id\": \"STD-00001\",\n        \"name\": \"John Doe\",\n        \"email\": \"john@example.com\",\n        \"role\": \"student\",\n        \"is_active\": true,\n        \"is_verified\": true,\n        \"enrolled_at\": \"2026-04-10T10:00:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"page\": 1,\n      \"limit\": 20,\n      \"total\": 150,\n      \"pages\": 8\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get User Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}"]
+            },
+            "description": "Get detailed user info with audit logs and sessions"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"role\": \"student\",\n  \"is_active\": true,\n  \"is_verified\": true,\n  \"profile\": {\n    \"java_level\": \"advanced\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}"]
+            },
+            "description": "Update any user field"
+          },
+          "response": []
+        },
+        {
+          "name": "Activate User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}/activate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}", "activate"]
+            },
+            "description": "Activate a deactivated user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Violation of terms of service\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}/deactivate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}", "deactivate"]
+            },
+            "description": "Deactivate user account (prevents login)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User (Soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}"]
+            },
+            "description": "Soft delete user (can be restored)"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}/restore",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}", "restore"]
+            },
+            "description": "Restore a soft-deleted user"
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Actions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"activate\",\n  \"user_ids\": [\n    \"user-id-1\",\n    \"user-id-2\",\n    \"user-id-3\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "bulk"]
+            },
+            "description": "Bulk action on multiple users. Actions: activate, deactivate, verify, delete"
+          },
+          "response": [
+            {
+              "name": "Bulk Result",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Bulk activate completed\",\n  \"data\": {\n    \"success\": [\"user-id-1\", \"user-id-2\"],\n    \"failed\": [\n      { \"user_id\": \"user-id-3\", \"reason\": \"User not found\" }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get User Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/{{user_id}}/audit-logs?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "{{user_id}}", "audit-logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get user's audit history"
+          },
+          "response": []
+        },
+        {
+          "name": "System Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "stats"]
+            },
+            "description": "Get system-wide statistics"
+          },
+          "response": [
+            {
+              "name": "Stats",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Success\",\n  \"data\": {\n    \"users\": {\n      \"total\": 150,\n      \"active\": 142,\n      \"verified\": 135,\n      \"deleted\": 5\n    },\n    \"new_users\": {\n      \"today\": 3,\n      \"this_week\": 15,\n      \"this_month\": 45\n    },\n    \"by_role\": {\n      \"student\": 140,\n      \"instructor\": 8,\n      \"admin\": 2\n    },\n    \"by_java_level\": {\n      \"beginner\": 60,\n      \"intermediate\": 70,\n      \"advanced\": 20\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Export Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"filters\": {\n    \"role\": \"student\",\n    \"is_active\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "export"]
+            },
+            "description": "Export users as JSON or CSV"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05. Internal Service",
+      "description": "Internal microservice endpoints requiring X-Internal-Key header",
+      "item": [
+        {
+          "name": "Verify Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Internal-Key",
+                "value": "{{internal_service_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{access_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/internal/auth/verify",
+              "host": ["{{base_url}}"],
+              "path": ["internal", "auth", "verify"]
+            },
+            "description": "Verify JWT token validity"
+          },
+          "response": [
+            {
+              "name": "Valid Token",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"valid\": true,\n  \"student\": {\n    \"student_id\": \"STD-00001\",\n    \"name\": \"John Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"role\": \"student\",\n    \"stats\": {\n      \"overall_mastery_score\": 75,\n      \"total_materials_generated\": 25,\n      \"total_sessions\": 12\n    },\n    \"is_active\": true\n  }\n}"
+            },
+            {
+              "name": "Invalid Token",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"valid\": false,\n  \"error\": \"Token expired\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Internal-Key",
+                "value": "{{internal_service_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/internal/students/{{student_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["internal", "students", "{{student_id}}"]
+            },
+            "description": "Get student by student_id (e.g., STD-00001)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Student Stats",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Internal-Key",
+                "value": "{{internal_service_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"overall_mastery_score\": 80,\n  \"materials_generated_increment\": 3\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/internal/students/{{student_id}}/stats",
+              "host": ["{{base_url}}"],
+              "path": ["internal", "students", "{{student_id}}", "stats"]
+            },
+            "description": "Update student stats from other services"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set base_url if not defined",
+          "if (!pm.environment.get('base_url')) {",
+          "    pm.environment.set('base_url', 'http://localhost:3001');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-save tokens from responses",
+          "const jsonData = pm.response.json();",
+          "if (jsonData && jsonData.data) {",
+          "    if (jsonData.data.access_token) {",
+          "        pm.environment.set('access_token', jsonData.data.access_token);",
+          "    }",
+          "    if (jsonData.data.refresh_token) {",
+          "        pm.environment.set('refresh_token', jsonData.data.refresh_token);",
+          "    }",
+          "    if (jsonData.data.student) {",
+          "        pm.environment.set('student_id', jsonData.data.student.student_id);",
+          "        if (jsonData.data.student._id) {",
+          "            pm.environment.set('user_id', jsonData.data.student._id);",
+          "        }",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string",
+      "description": "Base URL for the API"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token (auto-populated after login)"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT refresh token (auto-populated after login)"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string",
+      "description": "Admin user JWT token"
+    },
+    {
+      "key": "student_id",
+      "value": "STD-00001",
+      "type": "string",
+      "description": "Student ID format: STD-XXXXX (auto-populated)"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "MongoDB ObjectId (auto-populated)"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string",
+      "description": "Session ID for revoke"
+    },
+    {
+      "key": "internal_service_key",
+      "value": "your-internal-service-key",
+      "type": "string",
+      "description": "Internal service API key from env"
+    }
+  ]
+}

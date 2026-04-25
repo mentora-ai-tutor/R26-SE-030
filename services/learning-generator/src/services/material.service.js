@@ -3,18 +3,21 @@ const AgentLog = require('../models/AgentLog');
 const logger = require('../utils/logger');
 
 const buildMaterialQuery = (studentId, queryParams) => {
-  const filter = { student_id: studentId, status: { $ne: 'deleted' } };
+  const filter = {
+    'structured_material.student_id': studentId,
+    'structured_material.quality_flags': { $ne: 'deleted' },
+  };
 
   if (queryParams.topic) {
-    filter.topic = queryParams.topic;
+    filter['structured_material.topic'] = queryParams.topic;
   }
 
   if (queryParams.gap_type) {
-    filter.gap_type = queryParams.gap_type;
+    filter['structured_material.gap_type'] = queryParams.gap_type;
   }
 
   if (queryParams.status) {
-    filter.status = queryParams.status;
+    filter['structured_material.status'] = queryParams.status;
   }
 
   return filter;
@@ -24,8 +27,7 @@ const getMaterialStats = async (studentId) => {
   logger.debug('Computing material stats', { student_id: studentId });
 
   const materials = await LearningMaterial.find({
-    student_id: studentId,
-    status: { $ne: 'deleted' },
+    'structured_material.student_id': studentId,
   });
 
   if (materials.length === 0) {
@@ -63,51 +65,58 @@ const getMaterialStats = async (studentId) => {
   let latestGeneratedAt = null;
 
   for (const material of materials) {
-    if (material.gap_type && gapTypeCounts[material.gap_type] !== undefined) {
-      gapTypeCounts[material.gap_type]++;
+    const sm = material.structured_material || {};
+
+    if (sm.gap_type && gapTypeCounts[sm.gap_type] !== undefined) {
+      gapTypeCounts[sm.gap_type]++;
     }
 
-    if (material.topic) {
-      if (!topicStats[material.topic]) {
-        topicStats[material.topic] = {
-          topic: material.topic,
+    if (sm.topic) {
+      if (!topicStats[sm.topic]) {
+        topicStats[sm.topic] = {
+          topic: sm.topic,
           count: 0,
           totalScore: 0,
           scoreCount: 0,
         };
       }
-      topicStats[material.topic].count++;
+      topicStats[sm.topic].count++;
     }
 
-    if (material.agentic_metadata?.quality_score) {
-      totalQualityScore += material.agentic_metadata.quality_score;
+    const agentic = sm.agentic_metadata || {};
+    const qualityReview = agentic.quality_review_agent || {};
+    const contentValidation = agentic.content_validation_agent || {};
+    const qualityFlags = sm.quality_flags || {};
+
+    if (qualityReview.quality_score !== undefined && qualityReview.quality_score !== null) {
+      totalQualityScore += qualityReview.quality_score;
       qualityScoreCount++;
 
-      if (material.topic && topicStats[material.topic]) {
-        topicStats[material.topic].totalScore += material.agentic_metadata.quality_score;
-        topicStats[material.topic].scoreCount++;
+      if (sm.topic && topicStats[sm.topic]) {
+        topicStats[sm.topic].totalScore += qualityReview.quality_score;
+        topicStats[sm.topic].scoreCount++;
       }
     }
 
-    if (material.agentic_metadata?.validation_score) {
-      totalValidationScore += material.agentic_metadata.validation_score;
+    if (contentValidation.validation_score !== undefined && contentValidation.validation_score !== null) {
+      totalValidationScore += contentValidation.validation_score;
       validationScoreCount++;
     }
 
-    if (material.quality_flags?.needs_review) {
+    if (qualityFlags.needs_review) {
       needsReviewCount++;
     }
 
-    if (material.agentic_metadata?.patched) {
+    if (qualityFlags.agent_patched_llm || qualityFlags.agent_patched_slm) {
       agentPatchedCount++;
     }
 
-    if (material.agentic_metadata?.retry_count) {
-      totalRetries += material.agentic_metadata.retry_count;
+    if (qualityReview.retry_count !== undefined && qualityReview.retry_count !== null) {
+      totalRetries += qualityReview.retry_count;
     }
 
-    if (material.generated_at) {
-      const generatedAt = new Date(material.generated_at);
+    if (sm.generated_at) {
+      const generatedAt = new Date(sm.generated_at);
       if (!latestGeneratedAt || generatedAt > latestGeneratedAt) {
         latestGeneratedAt = generatedAt;
       }
@@ -177,11 +186,11 @@ const getGlobalAgentStats = async () => {
       totalRetries += log.agent_retry_count;
     }
 
-    if (log.agent_quality_score !== undefined && log.agent_quality_score >= 0.7) {
+    if (log.agent_quality_score !== undefined && log.agent_quality_score >= 70) {
       acceptedCount++;
     }
 
-    if (log.agent_quality_score !== undefined && log.agent_quality_score < 0.5) {
+    if (log.agent_quality_score !== undefined && log.agent_quality_score < 50) {
       patchedCount++;
     }
   }
@@ -215,19 +224,20 @@ const getDistinctTopics = async (studentId) => {
   const topics = await LearningMaterial.aggregate([
     {
       $match: {
-        student_id: studentId,
-        status: { $ne: 'deleted' },
+        'structured_material.student_id': studentId,
       },
     },
     {
       $group: {
         _id: {
-          topic: '$topic',
-          topic_id: '$topic_id',
+          topic: '$structured_material.topic',
+          topic_id: '$structured_material.topic_id',
         },
         count: { $sum: 1 },
-        latest_generated_at: { $max: '$generated_at' },
-        avg_quality_score: { $avg: '$agentic_metadata.quality_score' },
+        latest_generated_at: { $max: '$structured_material.generated_at' },
+        avg_quality_score: {
+          $avg: '$structured_material.agentic_metadata.quality_review_agent.quality_score',
+        },
       },
     },
     {

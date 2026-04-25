@@ -4,7 +4,6 @@ const LearningMaterial = require('../models/LearningMaterial');
 const MasteryProfile = require('../models/MasteryProfile');
 const materialService = require('../services/material.service');
 const n8nService = require('../services/n8n.service');
-const userServiceClient = require('../services/userService.client');
 const ServiceError = require('../utils/ServiceError');
 const apiResponse = require('../utils/apiResponse');
 const db = require('../config/db');
@@ -114,8 +113,8 @@ const checkHealth = async (req, res, next) => {
     const mongoStatus = db.isConnected() ? 'connected' : 'disconnected';
 
     const [userServiceHealth, n8nHealth, ollamaHealth] = await Promise.all([
-      userServiceClient.checkHealth(),
-      n8nService.checkHealth(),
+      require('../services/userService.client').checkHealth(),
+      require('../services/n8n.service').checkHealth(),
       checkOllamaHealth(),
     ]);
 
@@ -183,7 +182,7 @@ const retryMaterialGeneration = async (req, res, next) => {
     const tokenStudentId = req.student.id;
 
     const material = await LearningMaterial.findOne({
-      material_id: materialId,
+      'structured_material.material_id': materialId,
     });
 
     if (!material) {
@@ -194,7 +193,7 @@ const retryMaterialGeneration = async (req, res, next) => {
       });
     }
 
-    if (material.student_id !== tokenStudentId) {
+    if (material.structured_material.student_id !== tokenStudentId) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden: You can only retry your own materials',
@@ -203,7 +202,7 @@ const retryMaterialGeneration = async (req, res, next) => {
     }
 
     const latestProfile = await MasteryProfile.findOne({
-      student_id: material.student_id,
+      student_id: material.structured_material.student_id,
     }).sort({ submitted_at: -1 });
 
     if (!latestProfile) {
@@ -214,14 +213,15 @@ const retryMaterialGeneration = async (req, res, next) => {
       });
     }
 
+    const sm = material.structured_material;
     const gapData = {
-      topic: material.topic,
-      topic_id: material.topic_id,
-      gap_type: material.gap_type,
+      topic: sm.topic,
+      topic_id: sm.topic_id,
+      gap_type: sm.gap_type,
     };
 
     const retryPayload = {
-      student_id: material.student_id,
+      student_id: sm.student_id,
       analysis_timestamp: latestProfile.analysis_timestamp?.toISOString() || new Date().toISOString(),
       mastery_profile: {
         overall_mastery_score: latestProfile.overall_mastery_score,
@@ -236,7 +236,7 @@ const retryMaterialGeneration = async (req, res, next) => {
 
     const generationJob = new GenerationJob({
       job_id: newJobId,
-      student_id: material.student_id,
+      student_id: sm.student_id,
       mastery_profile_id: latestProfile._id,
       status: 'processing',
       gaps_total: 1,
@@ -257,7 +257,7 @@ const retryMaterialGeneration = async (req, res, next) => {
       return apiResponse.accepted(res, {
         job_id: newJobId,
         original_material_id: materialId,
-        topic: material.topic,
+        topic: sm.topic,
         check_status_at: '/api/agent/jobs/' + newJobId,
       }, 'Material regeneration queued');
     } catch (n8nError) {

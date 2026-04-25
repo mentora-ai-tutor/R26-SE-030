@@ -19,7 +19,7 @@ const getMaterialsByStudent = async (req, res, next) => {
     const limit = parseInt(req.query.limit, 10) || 10;
     const page = parseInt(req.query.page, 10) || 1;
     const skip = (page - 1) * limit;
-    const sortField = req.query.sort || 'generated_at';
+    const sortField = req.query.sort || 'structured_material.generated_at';
     const sortOrder = req.query.order === 'asc' ? 1 : -1;
 
     const filter = materialService.buildMaterialQuery(studentId, {
@@ -53,7 +53,7 @@ const getMaterialById = async (req, res, next) => {
     const tokenStudentId = req.student.id;
 
     const material = await LearningMaterial.findOne({
-      material_id: materialId,
+      'structured_material.material_id': materialId,
     });
 
     if (!material) {
@@ -64,7 +64,7 @@ const getMaterialById = async (req, res, next) => {
       });
     }
 
-    if (material.student_id !== tokenStudentId) {
+    if (material.structured_material.student_id !== tokenStudentId) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden: You can only access your own materials',
@@ -134,10 +134,9 @@ const getMaterialsByTopic = async (req, res, next) => {
     }
 
     const materials = await LearningMaterial.find({
-      student_id: studentId,
-      topic_id: topicId,
-      status: { $ne: 'deleted' },
-    }).sort({ generated_at: -1 });
+      'structured_material.student_id': studentId,
+      'structured_material.topic_id': topicId,
+    }).sort({ 'structured_material.generated_at': -1 });
 
     return apiResponse.success(res, materials);
   } catch (error) {
@@ -151,7 +150,7 @@ const deleteMaterial = async (req, res, next) => {
     const tokenStudentId = req.student.id;
 
     const material = await LearningMaterial.findOne({
-      material_id: materialId,
+      'structured_material.material_id': materialId,
     });
 
     if (!material) {
@@ -162,7 +161,7 @@ const deleteMaterial = async (req, res, next) => {
       });
     }
 
-    if (material.student_id !== tokenStudentId) {
+    if (material.structured_material.student_id !== tokenStudentId) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden: You can only delete your own materials',
@@ -170,7 +169,10 @@ const deleteMaterial = async (req, res, next) => {
       });
     }
 
-    material.status = 'deleted';
+    if (!material.structured_material.quality_flags) {
+      material.structured_material.quality_flags = {};
+    }
+    material.structured_material.quality_flags.deleted = true;
     await material.save();
 
     logger.info('Material soft deleted', {

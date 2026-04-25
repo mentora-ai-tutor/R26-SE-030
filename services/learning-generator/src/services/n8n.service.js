@@ -20,12 +20,13 @@ class N8nService {
         knowledge_gaps: masteryProfile.mastery_profile?.knowledge_gaps || [],
         strengths: masteryProfile.mastery_profile?.strengths || [],
       },
-      recommendations: masteryProfile.recommendations,
-      data_sources: masteryProfile.data_sources,
+      recommendations: masteryProfile.recommendations || {},
+      data_sources: masteryProfile.data_sources || {},
     };
 
     logger.info('Triggering n8n material generation', {
       student_id: masteryProfile.student_id,
+      topics: payload.mastery_profile.knowledge_gaps.map((g) => g.topic),
       gaps_count: payload.mastery_profile.knowledge_gaps.length,
     });
 
@@ -37,12 +38,25 @@ class N8nService {
         },
       });
 
+      const responseData = response.data;
+
       logger.info('n8n webhook triggered successfully', {
         student_id: masteryProfile.student_id,
         status: response.status,
+        material_id: responseData.material_id,
+        agentic_summary: responseData.agentic_summary,
       });
 
-      return response.data;
+      return {
+        success: responseData.status === 'success',
+        material_id: responseData.material_id,
+        student_id: responseData.student_id,
+        topic: responseData.topic,
+        agentic_summary: responseData.agentic_summary,
+        generated_at: responseData.generated_at,
+        needs_review: responseData.needs_review,
+        message: responseData.message,
+      };
     } catch (error) {
       if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
         logger.error('n8n service is offline', { error: error.message });
@@ -67,11 +81,22 @@ class N8nService {
       if (error.response) {
         const status = error.response.status;
         const data = error.response.data;
+
         logger.error('n8n webhook error', {
           status,
           data,
           student_id: masteryProfile.student_id,
         });
+
+        if (status === 500) {
+          throw new ServiceError(
+            'N8N_GENERATION_FAILED',
+            500,
+            'n8n failed to generate materials. Check n8n logs.',
+            'Review n8n workflow execution logs for error details.'
+          );
+        }
+
         throw new ServiceError(
           'N8N_ERROR',
           status,
@@ -94,7 +119,8 @@ class N8nService {
     logger.debug('Fetching materials from n8n', { student_id: studentId });
 
     try {
-      const response = await axios.get(`${this.webhookGetMaterials}/${studentId}`, {
+      const url = this.webhookGetMaterials.replace(':studentId', studentId);
+      const response = await axios.get(url, {
         timeout: 30000,
         headers: {
           'Content-Type': 'application/json',
@@ -130,6 +156,18 @@ class N8nService {
     } catch (error) {
       logger.warn('n8n health check failed', { error: error.message });
       return { reachable: false };
+    }
+  }
+
+  async getWorkflowStatus() {
+    try {
+      const response = await axios.get(`${this.baseUrl}/api/v1/workflows`, {
+        timeout: 10000,
+      });
+      return { success: true, workflows: response.data.data };
+    } catch (error) {
+      logger.warn('Failed to get n8n workflow status', { error: error.message });
+      return { success: false, error: error.message };
     }
   }
 }

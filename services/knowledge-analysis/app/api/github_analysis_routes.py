@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import logging
 
+from app.core.github_analysis_config import OLLAMA_MODEL, OLLAMA_URL
 from app.services import BehaviorAnalysisService
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,8 @@ router = APIRouter(prefix="/api/v1/github-analysis", tags=["github-analysis"])
 
 # Initialize service (can inject into dependency or create once)
 analysis_service = BehaviorAnalysisService(
-    ollama_url="http://localhost:11434",
-    model="llama3",
+    ollama_url=OLLAMA_URL,
+    model=OLLAMA_MODEL,
 )
 
 

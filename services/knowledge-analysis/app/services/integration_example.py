@@ -8,6 +8,7 @@ import json
 import logging
 from typing import Dict, Any, List
 
+from app.core.github_analysis_config import OLLAMA_MODEL, OLLAMA_URL
 from app.services.github_analyzer import GitHubAnalyzer
 from app.services.ollama_client import OllamaClient
 from app.services.prompt_builder import PromptBuilder
@@ -24,8 +25,8 @@ class BehaviorAnalysisService:
 
     def __init__(
         self,
-        ollama_url: str = "http://localhost:11434",
-        model: str = "llama3",
+        ollama_url: str = OLLAMA_URL,
+        model: str = OLLAMA_MODEL,
     ):
         """
         Initialize the behavior analysis service.

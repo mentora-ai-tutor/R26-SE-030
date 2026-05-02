@@ -58,11 +58,11 @@ async def run_with_feedback(req: CodeExecuteRequest):
 
 @router.post("/explain-simpler", response_model=AIInsightResponse)
 async def explain_code_simpler(req: AIInsightRequest):
-    insight = await explain_simpler(code=req.code, topic=req.topic)
+    insight = await explain_simpler(content=req.content, topic=req.topic, step_type=req.stepType)
     return AIInsightResponse(insight=insight, model=OLLAMA_MODEL, type="explain_simpler")
 
 
 @router.post("/analogy", response_model=AIInsightResponse)
 async def get_real_life_analogy(req: AIInsightRequest):
-    insight = await real_life_analogy(code=req.code, topic=req.topic)
+    insight = await real_life_analogy(content=req.content, topic=req.topic, step_type=req.stepType)
     return AIInsightResponse(insight=insight, model=OLLAMA_MODEL, type="analogy")

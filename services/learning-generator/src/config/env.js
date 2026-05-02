@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 module.exports = {
-  port: process.env.PORT || 3002,
+  port: process.env.PORT || 5012,
   nodeEnv: process.env.NODE_ENV || 'development',
   serviceName: process.env.SERVICE_NAME || 'lmg-service',
 

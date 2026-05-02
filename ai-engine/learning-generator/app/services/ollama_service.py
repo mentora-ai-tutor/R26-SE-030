@@ -82,14 +82,28 @@ async def generate_feedback(code: str, output: str = None, error: str = None, co
     return result
 
 
-async def explain_simpler(code: str, topic: str = None) -> str:
+async def explain_simpler(content: str, topic: str = None, step_type: str = None) -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT_SIMPLE}]
 
-    user_prompt = "Here is some Java code I'm trying to understand:\n\n"
-    user_prompt += f"```java\n{code}\n```\n\n"
+    step_labels = {
+        "intro": "introduction section",
+        "concepts": "concept explanation",
+        "guide": "step-by-step guide",
+        "example": "code example",
+        "mistakes": "common mistakes section",
+        "practice": "practice challenge",
+        "debug": "debugging exercise",
+    }
+    step_label = step_labels.get(step_type, "section") if step_type else "section"
+
+    if step_type in ["example", "practice", "debug"]:
+        user_prompt = f"Here is some Java code from the {step_label}:\n\n```java\n{content}\n```\n\n"
+    else:
+        user_prompt = f"Here is a {step_label} from a Java tutorial about {topic}:\n\n{content}\n\n"
+
     if topic:
         user_prompt += f"This is about: {topic}\n\n"
-    user_prompt += "Explain what this code does in the simplest way possible."
+    user_prompt += "Explain what this does in the simplest way possible."
 
     messages.append({"role": "user", "content": user_prompt})
 
@@ -98,14 +112,28 @@ async def explain_simpler(code: str, topic: str = None) -> str:
     return result
 
 
-async def real_life_analogy(code: str, topic: str = None) -> str:
+async def real_life_analogy(content: str, topic: str = None, step_type: str = None) -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT_ANALOGY}]
 
-    user_prompt = "Here is some Java code:\n\n"
-    user_prompt += f"```java\n{code}\n```\n\n"
+    step_labels = {
+        "intro": "introduction section",
+        "concepts": "concept explanation",
+        "guide": "step-by-step guide",
+        "example": "code example",
+        "mistakes": "common mistakes section",
+        "practice": "practice challenge",
+        "debug": "debugging exercise",
+    }
+    step_label = step_labels.get(step_type, "section") if step_type else "section"
+
+    if step_type in ["example", "practice", "debug"]:
+        user_prompt = f"Here is some Java code from the {step_label}:\n\n```java\n{content}\n```\n\n"
+    else:
+        user_prompt = f"Here is a {step_label} from a Java tutorial about {topic}:\n\n{content}\n\n"
+
     if topic:
         user_prompt += f"This concept is about: {topic}\n\n"
-    user_prompt += "Give me a creative real-world analogy that helps me understand how this code works."
+    user_prompt += "Give me a creative real-world analogy that helps me understand how this works."
 
     messages.append({"role": "user", "content": user_prompt})
 

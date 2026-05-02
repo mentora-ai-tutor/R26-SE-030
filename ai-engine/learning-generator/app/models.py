@@ -34,8 +34,9 @@ class CombinedResponse(BaseModel):
 
 
 class AIInsightRequest(BaseModel):
-    code: str = Field(..., min_length=1, max_length=50000)
+    content: str = Field(..., min_length=1, max_length=50000)
     topic: Optional[str] = None
+    stepType: Optional[str] = None
 
 
 class AIInsightResponse(BaseModel):

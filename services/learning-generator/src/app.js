@@ -7,9 +7,10 @@ const config = require('./config/env');
 const logger = require('./utils/logger').stream;
 const { protect } = require('./middleware/auth.middleware');
 const { errorMiddleware, notFoundMiddleware } = require('./middleware/error.middleware');
-const masteryRoutes = require('./routes/mastery.routes');
+const profileRoutes = require('./routes/profile.routes');
 const materialRoutes = require('./routes/material.routes');
 const agentRoutes = require('./routes/agent.routes');
+const webhookRoutes = require('./routes/webhook.routes');
 const apiResponse = require('./utils/apiResponse');
 
 const app = express();
@@ -58,9 +59,10 @@ app.get('/health', publicLimiter, (req, res) => {
   });
 });
 
-app.use('/api/mastery', protect, masteryRoutes);
+app.use('/api/mastery', protect, profileRoutes);
 app.use('/api/materials', protect, materialRoutes);
 app.use('/api/agent', protect, agentRoutes);
+app.use('/api/webhooks/n8n', webhookRoutes);
 
 app.use(notFoundMiddleware);
 

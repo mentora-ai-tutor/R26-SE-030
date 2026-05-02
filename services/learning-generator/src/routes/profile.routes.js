@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const masteryController = require('../controllers/mastery.controller');
+const masteryController = require('../controllers/profile.controller');
 const { validateBody, validateQuery } = require('../middleware/validate.middleware');
 const { masterySubmitSchema, paginationQuerySchema } = require('../utils/validationSchemas');
 

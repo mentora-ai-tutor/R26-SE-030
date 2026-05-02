@@ -18,6 +18,7 @@ module.exports = {
     baseUrl: process.env.N8N_BASE_URL || 'http://localhost:5678',
     webhookLearnerProfile: process.env.N8N_WEBHOOK_LEARNER_PROFILE || 'http://localhost:5678/webhook/learner-profile',
     webhookGetMaterials: process.env.N8N_WEBHOOK_GET_MATERIALS || 'http://localhost:5678/webhook/materials',
+    webhookSecret: process.env.N8N_WEBHOOK_SECRET || 'your_n8n_webhook_secret_key',
     timeoutMs: parseInt(process.env.N8N_TIMEOUT_MS, 10) || 600000,
   },
 

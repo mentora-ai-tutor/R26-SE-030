@@ -48,7 +48,7 @@ const submitMasteryProfile = async (req, res, next) => {
     const generationJob = new GenerationJob({
       job_id: jobId,
       student_id,
-      mastery_profile_id: masteryProfile._id,
+      profile_id: masteryProfile._id,
       status: 'queued',
       gaps_total: mastery_profile.knowledge_gaps.length,
       gaps_queued: mastery_profile.knowledge_gaps.length,
@@ -65,6 +65,7 @@ const submitMasteryProfile = async (req, res, next) => {
         mastery_profile,
         recommendations,
         data_sources,
+        job_id: jobId,
       };
 
       await n8nService.triggerMaterialGeneration(n8nPayload);

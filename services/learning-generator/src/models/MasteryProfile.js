@@ -14,6 +14,7 @@ const knowledgeGapSchema = new mongoose.Schema({
     enum: ['FUNDAMENTAL_GAP', 'PARTIAL_GAP', 'SURFACE_GAP'],
     required: true,
   },
+  confidence: Number,
   misconceptions: [String],
   observed_error_patterns: mongoose.Schema.Types.Mixed,
   evidence_summary: String,
@@ -38,7 +39,7 @@ const masteryProfileSchema = new mongoose.Schema({
     max: 100,
   },
   knowledge_gaps: [knowledgeGapSchema],
-  strengths: [String],
+  strengths: mongoose.Schema.Types.Mixed,
   recommendations: mongoose.Schema.Types.Mixed,
   data_sources: mongoose.Schema.Types.Mixed,
   n8n_triggered: {

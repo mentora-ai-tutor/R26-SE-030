@@ -43,7 +43,21 @@ const protect = async (req, res, next) => {
       });
     }
 
-    req.student = verificationResult.student;
+    const studentData = verificationResult.student;
+
+    req.student = {
+      id: studentData.student_id || studentData.id,
+      dbId: studentData._id,
+      name: studentData.name,
+      email: studentData.email,
+      role: studentData.role || 'student',
+      profile: studentData.profile || {},
+      stats: studentData.stats || {},
+      preferences: studentData.preferences || {},
+      is_active: studentData.is_active,
+      is_verified: studentData.is_verified,
+      raw: studentData,
+    };
 
     logger.debug('Request authenticated', {
       student_id: req.student.id,

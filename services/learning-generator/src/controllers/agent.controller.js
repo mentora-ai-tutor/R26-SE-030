@@ -208,7 +208,7 @@ const retryMaterialGeneration = async (req, res, next) => {
     if (!latestProfile) {
       return res.status(404).json({
         success: false,
-        error: 'No mastery profile found to use for retry',
+        error: 'No learning profile found to use for retry',
         code: 'NOT_FOUND',
       });
     }
@@ -220,6 +220,8 @@ const retryMaterialGeneration = async (req, res, next) => {
       gap_type: sm.gap_type,
     };
 
+    const newJobId = 'JOB_' + Date.now();
+
     const retryPayload = {
       student_id: sm.student_id,
       analysis_timestamp: latestProfile.analysis_timestamp?.toISOString() || new Date().toISOString(),
@@ -230,18 +232,18 @@ const retryMaterialGeneration = async (req, res, next) => {
       },
       recommendations: latestProfile.recommendations,
       data_sources: latestProfile.data_sources,
+      job_id: newJobId,
     };
-
-    const newJobId = 'JOB_' + Date.now();
 
     const generationJob = new GenerationJob({
       job_id: newJobId,
       student_id: sm.student_id,
-      mastery_profile_id: latestProfile._id,
+      profile_id: latestProfile._id,
       status: 'processing',
       gaps_total: 1,
       gaps_queued: 1,
       n8n_triggered_at: new Date(),
+      n8n_workflow_id: 'retry_workflow',
     });
 
     await generationJob.save();

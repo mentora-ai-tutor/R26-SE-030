@@ -8,6 +8,7 @@ class N8nService {
     this.baseUrl = config.n8n.baseUrl;
     this.webhookLearnerProfile = config.n8n.webhookLearnerProfile;
     this.webhookGetMaterials = config.n8n.webhookGetMaterials;
+    this.webhookSecret = config.n8n.webhookSecret;
     this.timeoutMs = config.n8n.timeoutMs;
   }
 
@@ -35,6 +36,7 @@ class N8nService {
         timeout: this.timeoutMs,
         headers: {
           'Content-Type': 'application/json',
+          'X-Webhook-Secret': this.webhookSecret,
         },
       });
 

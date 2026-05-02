@@ -11,13 +11,13 @@ const generationJobSchema = new mongoose.Schema({
     index: true,
     required: true,
   },
-  mastery_profile_id: {
+  profile_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MasteryProfile',
   },
   status: {
     type: String,
-    enum: ['queued', 'processing', 'completed', 'failed'],
+    enum: ['queued', 'processing', 'completed', 'failed', 'partial'],
     default: 'queued',
   },
   gaps_total: {
@@ -26,11 +26,33 @@ const generationJobSchema = new mongoose.Schema({
   gaps_queued: {
     type: Number,
   },
+  gaps_completed: {
+    type: Number,
+    default: 0,
+  },
+  gaps_failed: {
+    type: Number,
+    default: 0,
+  },
   n8n_triggered_at: {
     type: Date,
   },
+  n8n_workflow_id: {
+    type: String,
+  },
+  n8n_execution_id: {
+    type: String,
+  },
   completed_at: {
     type: Date,
+  },
+  materials_generated: {
+    type: Number,
+    default: 0,
+  },
+  materials_failed: {
+    type: Number,
+    default: 0,
   },
   error: {
     type: String,

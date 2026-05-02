@@ -13,4 +13,6 @@ router.post('/job/status', validateWebhookSecret, webhookController.receiveJobSt
 
 router.post('/profile', validateWebhookSecret, webhookController.handleProfileCallback);
 
+router.post('/complete', validateWebhookSecret, webhookController.handleWorkflowComplete);
+
 module.exports = router;

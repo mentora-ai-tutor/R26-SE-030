@@ -352,6 +352,54 @@ const completeJob = async (req, res, next) => {
   }
 };
 
+const updateJobStatus = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+    const { status } = req.body;
+    const tokenStudentId = req.student.id;
+
+    const validStatuses = ['queued', 'processing', 'completed', 'failed', 'partial', 'closed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+        code: 'BAD_REQUEST',
+      });
+    }
+
+    const job = await GenerationJob.findOne({ job_id: jobId });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    if (job.student_id !== tokenStudentId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You can only update your own jobs',
+        code: 'FORBIDDEN',
+      });
+    }
+
+    job.status = status;
+    await job.save();
+
+    logger.info('Job status updated', {
+      job_id: jobId,
+      new_status: status,
+      student_id: job.student_id,
+    });
+
+    return apiResponse.success(res, job);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAgentLogs,
   getJobStatus,
@@ -360,4 +408,5 @@ module.exports = {
   checkHealth,
   retryMaterialGeneration,
   completeJob,
+  updateJobStatus,
 };

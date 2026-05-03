@@ -65,14 +65,20 @@ class JobTrackerService {
   async updateJobCounters(studentId) {
     const collection = mongoose.connection.collection('generation_jobs');
     const activeJobRaw = await collection.findOne({
-      $or: [
-        { status: { $in: ['processing', 'queued'] } },
-        { status: 'failed', error: { $regex: 'timed out|did not respond', $options: 'i' } },
-      ],
+      status: { $in: ['queued', 'processing'] },
       student_id: studentId,
     }, { sort: { created_at: -1 } });
 
-    if (!activeJobRaw) return;
+    if (!activeJobRaw) {
+      const failedJobRaw = await collection.findOne({
+        status: 'failed',
+        error: { $regex: 'timed out|did not respond', $options: 'i' },
+        student_id: studentId,
+      }, { sort: { created_at: -1 } });
+
+      if (!failedJobRaw) return;
+      return this.syncJobCounters(new GenerationJob(failedJobRaw));
+    }
 
     await this.syncJobCounters(new GenerationJob(activeJobRaw));
   }
@@ -139,17 +145,21 @@ class JobTrackerService {
   async resyncActiveJobs() {
     const collection = mongoose.connection.collection('generation_jobs');
     const activeJobsRaw = await collection.find({
-      $or: [
-        { status: { $in: ['processing', 'queued'] } },
-        { status: 'failed', error: { $regex: 'timed out|did not respond', $options: 'i' } },
-      ],
+      status: { $in: ['queued', 'processing'] },
     }).toArray();
 
-    logger.info('JobTrackerService: resyncActiveJobs found jobs', { count: activeJobsRaw.length });
+    const failedJobsWithMaterials = await collection.find({
+      status: 'failed',
+      error: { $regex: 'timed out|did not respond', $options: 'i' },
+    }).toArray();
 
-    if (activeJobsRaw.length === 0) return;
+    const allJobs = [...activeJobsRaw, ...failedJobsWithMaterials];
 
-    for (const jobRaw of activeJobsRaw) {
+    logger.info('JobTrackerService: resyncActiveJobs found jobs', { count: allJobs.length });
+
+    if (allJobs.length === 0) return;
+
+    for (const jobRaw of allJobs) {
       try {
         const jobDoc = new GenerationJob(jobRaw);
         await this.syncJobCounters(jobDoc);

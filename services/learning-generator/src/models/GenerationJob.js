@@ -17,7 +17,7 @@ const generationJobSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['queued', 'processing', 'completed', 'failed', 'partial'],
+    enum: ['queued', 'processing', 'completed', 'failed', 'partial', 'closed'],
     default: 'queued',
   },
   gaps_total: {

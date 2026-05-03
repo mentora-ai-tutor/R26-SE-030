@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+from app.core.auth import TokenPayload, get_current_user
 from app.services.performance_service import (
     get_student_performance,
     get_student_topic_performance,
@@ -18,7 +19,10 @@ router = APIRouter(tags=["Performance & Questions"])
 # ─── Performance Endpoints ────────────────────────────────────────────────────
 
 @router.get("/api/performance/{student_id}", summary="Get student overall performance")
-async def performance(student_id: str) -> Dict[str, Any]:
+async def performance(
+    student_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     result = await get_student_performance(student_id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
@@ -29,7 +33,11 @@ async def performance(student_id: str) -> Dict[str, Any]:
     "/api/performance/{student_id}/topic/{topic_id}",
     summary="Get student performance for a specific topic",
 )
-async def topic_performance(student_id: str, topic_id: str) -> Dict[str, Any]:
+async def topic_performance(
+    student_id: str,
+    topic_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     return await get_student_topic_performance(student_id, topic_id)
 
 
@@ -37,7 +45,10 @@ async def topic_performance(student_id: str, topic_id: str) -> Dict[str, Any]:
     "/api/performance/{student_id}/completion",
     summary="Get completion report for a fully mastered student",
 )
-async def completion_report(student_id: str) -> Dict[str, Any]:
+async def completion_report(
+    student_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     return await generate_completion_report(student_id)
 
 
@@ -59,7 +70,10 @@ class EvaluateAnswerBody(BaseModel):
 
 
 @router.post("/api/questions/generate", summary="Generate a new question via LLM")
-async def generate_question(body: GenerateQuestionBody) -> Dict[str, Any]:
+async def generate_question(
+    body: GenerateQuestionBody,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     question = await generate_and_save_question(
         topic_id=body.topic_id,
         topic_name=body.topic_name,
@@ -75,10 +89,16 @@ async def generate_question(body: GenerateQuestionBody) -> Dict[str, Any]:
 
 
 @router.post("/api/questions/evaluate", summary="Evaluate a student answer via LLM")
-async def evaluate(body: EvaluateAnswerBody) -> Dict[str, Any]:
+async def evaluate(
+    body: EvaluateAnswerBody,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     return await evaluate_answer(body.question_id, body.student_answer)
 
 
 @router.get("/api/questions/bank/{topic_id}", summary="Get question bank for a topic")
-async def question_bank(topic_id: str) -> List[Dict]:
+async def question_bank(
+    topic_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> List[Dict]:
     return await get_question_bank(topic_id)

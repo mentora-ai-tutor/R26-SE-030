@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List, Dict, Any
+from app.core.auth import TokenPayload, get_current_user
 from app.models.models import StudentImport
 from app.services.import_service import (
     import_students,
@@ -13,7 +14,10 @@ router = APIRouter(prefix="/api/students", tags=["Students"])
 
 
 @router.post("/import", summary="Import students from JSON")
-async def import_students_endpoint(request: Request) -> Dict[str, Any]:
+async def import_students_endpoint(
+    request: Request,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     """
     Phase 1: Import student data from JSON.
 
@@ -71,12 +75,15 @@ async def import_students_endpoint(request: Request) -> Dict[str, Any]:
 
 
 @router.get("", summary="Get all students")
-async def list_students() -> List[Dict]:
+async def list_students(current_user: TokenPayload = Depends(get_current_user)) -> List[Dict]:
     return await get_all_students()
 
 
 @router.get("/{student_id}", summary="Get student by ID")
-async def get_student_endpoint(student_id: str) -> Dict:
+async def get_student_endpoint(
+    student_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict:
     student = await get_student(student_id)
     if not student:
         raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
@@ -84,7 +91,10 @@ async def get_student_endpoint(student_id: str) -> Dict:
 
 
 @router.get("/{student_id}/history", summary="Get student pairing history")
-async def get_history(student_id: str) -> Dict:
+async def get_history(
+    student_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict:
     student = await get_student(student_id)
     if not student:
         raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
@@ -92,7 +102,10 @@ async def get_history(student_id: str) -> Dict:
 
 
 @router.get("/{student_id}/weaknesses", summary="Get student knowledge gaps")
-async def get_weaknesses(student_id: str) -> List[Dict]:
+async def get_weaknesses(
+    student_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> List[Dict]:
     student = await get_student(student_id)
     if not student:
         raise HTTPException(status_code=404, detail=f"Student {student_id} not found")

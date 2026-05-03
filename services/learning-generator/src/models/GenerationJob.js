@@ -57,6 +57,10 @@ const generationJobSchema = new mongoose.Schema({
   error: {
     type: String,
   },
+  gap_topic_ids: {
+    type: [String],
+    default: [],
+  },
   created_at: {
     type: Date,
     default: Date.now,

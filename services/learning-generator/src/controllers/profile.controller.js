@@ -52,6 +52,7 @@ const submitMasteryProfile = async (req, res, next) => {
       status: 'queued',
       gaps_total: mastery_profile.knowledge_gaps.length,
       gaps_queued: mastery_profile.knowledge_gaps.length,
+      gap_topic_ids: mastery_profile.knowledge_gaps.map((g) => g.topic_id),
     });
 
     await generationJob.save();
@@ -89,11 +90,11 @@ const submitMasteryProfile = async (req, res, next) => {
         student_id,
       });
 
-      generationJob.status = 'failed';
-      generationJob.error = n8nError.message;
-      await generationJob.save();
-
       if (n8nError instanceof ServiceError && n8nError.code === 'N8N_OFFLINE') {
+        generationJob.status = 'failed';
+        generationJob.error = n8nError.message;
+        await generationJob.save();
+
         return res.status(503).json({
           success: false,
           error: n8nError.message,
@@ -101,6 +102,35 @@ const submitMasteryProfile = async (req, res, next) => {
           fix: n8nError.fix,
         });
       }
+
+      if (n8nError instanceof ServiceError && n8nError.code === 'N8N_TIMEOUT') {
+        generationJob.status = 'processing';
+        generationJob.error = 'n8n response timed out, but processing continues in background';
+        generationJob.n8n_triggered_at = new Date();
+        await generationJob.save();
+
+        masteryProfile.n8n_triggered = true;
+        masteryProfile.n8n_triggered_at = new Date();
+        await masteryProfile.save();
+
+        logger.warn('n8n timed out but job remains active for background processing', {
+          job_id: jobId,
+          student_id,
+        });
+
+        return apiResponse.accepted(res, {
+          job_id: jobId,
+          student_id,
+          gaps_queued: mastery_profile.knowledge_gaps.length,
+          topics: mastery_profile.knowledge_gaps.map((g) => g.topic),
+          check_status_at: '/api/agent/jobs/' + jobId,
+          materials_available_at: '/api/materials/' + student_id,
+        }, 'n8n response timed out, but LLM processing continues in background. Check status periodically.');
+      }
+
+      generationJob.status = 'failed';
+      generationJob.error = n8nError.message;
+      await generationJob.save();
 
       return res.status(503).json({
         success: false,

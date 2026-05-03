@@ -348,14 +348,32 @@ async def code_review(code: str, focus: str = None) -> dict:
     messages.append({"role": "user", "content": user_prompt})
 
     result = await _call_ollama_json(messages, num_predict=800)
-    if not result or "annotations" not in result:
-        result = {
-            "annotations": [],
-            "summary": "Unable to complete code review.",
-            "overall_score": 0,
-        }
-    logger.info("Code review generated")
-    return result
+    if isinstance(result, dict) and "annotations" in result:
+        logger.info("Code review generated (1st attempt)")
+        return result
+
+    # Retry with code model (better at structured output)
+    logger.warning("Code review failed with llama3, retrying with code model")
+    retry_result = await _call_ollama_json(messages, num_predict=800, model=OLLAMA_CODE_MODEL)
+    if isinstance(retry_result, dict) and "annotations" in retry_result:
+        logger.info("Code review generated (2nd attempt, code model)")
+        return retry_result
+
+    # Final retry with ultra-strict prompt
+    strict_system = "You are a JSON API. Return ONLY a JSON object with code review annotations. Nothing else."
+    strict_messages = [{"role": "system", "content": strict_system}]
+    strict_messages.append({"role": "user", "content": f'Review this Java code. Return JSON: {{"annotations":[{{"line_start":N,"line_end":N,"category":"style/performance/error","severity":"low/medium/high","message":"issue","suggestion":"fix"}}],"summary":"review","overall_score":7}}\n\n```java\n{code}\n```'})
+    final_result = await _call_ollama_json(strict_messages, temperature=0.1, num_predict=600, model=OLLAMA_CODE_MODEL)
+    if isinstance(final_result, dict) and "annotations" in final_result:
+        logger.info("Code review generated (3rd attempt, strict)")
+        return final_result
+
+    logger.warning("All code review attempts failed")
+    return {
+        "annotations": [],
+        "summary": "Unable to complete code review. Please try again with different code.",
+        "overall_score": 0,
+    }
 
 
 async def generate_flashcards(code: str) -> list:

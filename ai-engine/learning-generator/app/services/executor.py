@@ -19,7 +19,7 @@ def extract_class_name(code: str) -> str:
     return "Main"
 
 
-def execute_java_code(code: str) -> dict:
+def execute_java_code(code: str, stdin_input: str = None) -> dict:
     tmp_dir = tempfile.mkdtemp(prefix="java-sandbox-")
 
     try:
@@ -52,13 +52,18 @@ def execute_java_code(code: str) -> dict:
 
         logger.info("Compilation successful, running code...")
 
-        run_result = subprocess.run(
-            ["java", "-cp", tmp_dir, class_name],
-            capture_output=True,
-            text=True,
-            timeout=RUN_TIMEOUT,
-            cwd=tmp_dir,
-        )
+        run_kwargs = {
+            "args": ["java", "-cp", tmp_dir, class_name],
+            "capture_output": True,
+            "text": True,
+            "timeout": RUN_TIMEOUT,
+            "cwd": tmp_dir,
+        }
+
+        if stdin_input is not None:
+            run_kwargs["input"] = stdin_input
+
+        run_result = subprocess.run(**run_kwargs)
 
         stdout = run_result.stdout.strip()
         stderr = run_result.stderr.strip()

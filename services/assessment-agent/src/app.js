@@ -3,7 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const assessmentRoutes = require('./routes/assessment');
-const adminRoutes = require('./routes/admin');
+//const adminRoutes = require('./routes/admin');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -27,7 +27,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/ame', assessmentRoutes);
-app.use('/api/admin', adminRoutes);
+//app.use('/api/admin', adminRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

@@ -212,9 +212,11 @@ async def run_full_pairing() -> Dict[str, Any]:
                 continue
             learner = learners[r]
             teacher = teachers[c]
-            if learner["student_id"] in reserved_as_learner or learner["student_id"] in reserved_as_teacher:
+            
+            # Check specific roles (A student can be a learner for one topic and a teacher for another)
+            if learner["student_id"] in reserved_as_learner:
                 continue
-            if teacher["student_id"] in reserved_as_teacher or teacher["student_id"] in reserved_as_learner:
+            if teacher["student_id"] in reserved_as_teacher:
                 continue
 
             compatibility = round(-cost_matrix[r][c], 2)
@@ -263,7 +265,7 @@ async def run_full_pairing() -> Dict[str, Any]:
 
     for new_stu in all_students:
         new_sid = new_stu["student_id"]
-        if new_sid in reserved_as_learner or new_sid in reserved_as_teacher:
+        if new_sid in reserved_as_teacher:
             continue
             
         # 2a. New students who can teach -> queue learners
@@ -300,6 +302,11 @@ async def run_full_pairing() -> Dict[str, Any]:
                 reserved_as_teacher.add(new_sid)
                 new_students_matched_with_queue.add(new_sid)
                 queue_matched_students.append(q_sid)
+
+                # IMMEDIATE Queue Removal to prevent stale entries
+                await db.waiting_queue.delete_many({"student_id": q_sid, "status": "waiting"})
+                logger.info(f"Immediately removed {q_sid} from queue after match")
+
                 await _reserve_student(q_sid, s["session_id"])
                 await _reserve_student(new_sid, s["session_id"])
                 all_sessions_created.append(s)
@@ -321,7 +328,7 @@ async def run_full_pairing() -> Dict[str, Any]:
 
     for new_stu in all_students:
         new_sid = new_stu["student_id"]
-        if new_sid in reserved_as_learner or new_sid in reserved_as_teacher:
+        if new_sid in reserved_as_learner:
             continue
             
         # 2b. New students who need a topic -> queue students who can teach
@@ -332,7 +339,7 @@ async def run_full_pairing() -> Dict[str, Any]:
                 break
 
             for q_sid, q_info in queue_students.items():
-                if q_sid in queue_matched_students or new_sid in reserved_as_learner:
+                if q_sid in queue_matched_students or q_sid in reserved_as_teacher or new_sid in reserved_as_learner:
                     continue
                 queue_student = q_info["student"]
                 if not _student_can_teach_topic(queue_student, topic_id, topic_name):
@@ -353,6 +360,11 @@ async def run_full_pairing() -> Dict[str, Any]:
                 reserved_as_teacher.add(q_sid)
                 new_students_matched_with_queue.add(new_sid)
                 queue_matched_students.append(q_sid)
+
+                # IMMEDIATE Queue Removal to prevent stale entries
+                await db.waiting_queue.delete_many({"student_id": q_sid, "status": "waiting"})
+                logger.info(f"Immediately removed {q_sid} from queue after match")
+
                 await _reserve_student(new_sid, s["session_id"])
                 await _reserve_student(q_sid, s["session_id"])
                 all_sessions_created.append(s)
@@ -372,12 +384,7 @@ async def run_full_pairing() -> Dict[str, Any]:
                 )
                 break
 
-    # Remove matched queue entries from DB
-    for q_sid in queue_matched_students:
-        result = await db.waiting_queue.delete_many(
-            {"student_id": q_sid, "status": "waiting"},
-        )
-        logger.info(f"Removed {result.deleted_count} queue entries for {q_sid}")
+    # Log matched queue entries
     if queue_matched_students:
         logger.info(f"Matched {len(queue_matched_students)} queue students: {queue_matched_students}")
 

@@ -91,3 +91,11 @@ async def send_queue_notification(
     except Exception as e:
         logger.error(f"Failed to send queue notification for {student_id}: {e}")
         return ""
+
+async def get_student_notifications(student_id: str) -> List[Dict]:
+    """Retrieve notifications for a student, sorted by newest first."""
+    db = get_db()
+    return await db.notifications.find(
+        {"student_id": student_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(length=None)

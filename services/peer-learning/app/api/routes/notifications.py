@@ -1,10 +1,11 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from app.core.auth import TokenPayload, get_current_user
 from app.services.notification_service import (
     # add_to_waiting_queue,
-    # get_student_notifications,
+    get_student_notifications,
     # accept_notification,
     # cancel_notification,
     send_pairing_notification,
@@ -36,12 +37,12 @@ class WaitingQueueBody(BaseModel):
 #     )
 
 
-# @router.get("/notifications/{student_id}", summary="Get notifications for a student")
-# async def get_notifications(
-#     student_id: str,
-#     current_user: TokenPayload = Depends(get_current_user),
-# ) -> List[Dict]:
-#     return await get_student_notifications(student_id)
+@router.get("/notifications", summary="Get notifications for the logged-in student")
+async def get_my_notifications(
+    current_user: TokenPayload = Depends(get_current_user),
+) -> List[Dict]:
+    """Retrieve all notifications for the authenticated student."""
+    return await get_student_notifications(current_user.student_id)
 
 
 # @router.post("/notifications/{notification_id}/accept", summary="Accept teacher notification")

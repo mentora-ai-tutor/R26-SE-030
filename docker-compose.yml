@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  # ── User Service ──
+  user-service:
+    build:
+      context: ./services/user service
+      dockerfile: Dockerfile
+    container_name: mentora-user-service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./services/user service/.env
+    environment:
+      PORT: 3001
+      CORS_ORIGIN: http://localhost:3000
+
+  # ── Learning Material Generator Service ──
+  lmg-service:
+    build:
+      context: ./services/learning-generator
+      dockerfile: Dockerfile
+    container_name: mentora-lmg-service
+    restart: unless-stopped
+    ports:
+      - "5012:3002"
+    env_file:
+      - ./services/learning-generator/.env
+    environment:
+      PORT: 3002
+      CORS_ORIGIN: http://localhost:3000
+    depends_on:
+      - user-service
+
+  # ── AI Engine ──
+  ai-engine:
+    build:
+      context: ./ai-engine/learning-generator
+      dockerfile: Dockerfile
+    container_name: mentora-ai-engine
+    restart: unless-stopped
+    ports:
+      - "5010:5010"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3:8b}
+      OLLAMA_CODE_MODEL: ${OLLAMA_CODE_MODEL:-qwen2.5-coder:7b}

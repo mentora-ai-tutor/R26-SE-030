@@ -334,9 +334,76 @@ const handleProfileCallback = async (req, res, next) => {
   }
 };
 
+const handleWorkflowComplete = async (req, res, next) => {
+  try {
+    const { job_id, student_id, materials_count, materials_failed } = req.body;
+
+    logger.info('Received n8n workflow completion', {
+      job_id,
+      student_id,
+      materials_count,
+    });
+
+    if (!job_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'job_id is required',
+        code: 'BAD_REQUEST',
+      });
+    }
+
+    const job = await GenerationJob.findOne({ job_id });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    const actualCount = await LearningMaterial.countDocuments({
+      'structured_material.student_id': job.student_id,
+      'structured_material.generated_at': { $gte: job.created_at },
+    });
+
+    job.gaps_completed = actualCount;
+    job.gaps_failed = materials_failed || 0;
+    job.materials_generated = actualCount;
+    job.materials_failed = materials_failed || 0;
+
+    if (actualCount >= job.gaps_total) {
+      job.status = 'completed';
+    } else if (actualCount > 0) {
+      job.status = 'partial';
+    } else {
+      job.status = 'failed';
+      job.error = 'No materials saved by n8n workflow';
+    }
+
+    job.completed_at = new Date();
+    await job.save();
+
+    logger.info('Job marked as completed', {
+      job_id,
+      materials_found: actualCount,
+      status: job.status,
+    });
+
+    return apiResponse.success(res, {
+      job_id,
+      status: job.status,
+      materials_generated: actualCount,
+    }, 'Workflow completion processed');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   receiveMaterialCallback,
   receiveBatchCallback,
   receiveJobStatusUpdate,
   handleProfileCallback,
+  handleWorkflowComplete,
 };

@@ -8,6 +8,10 @@ router.get('/logs/:studentId', validateQuery(agentQuerySchema), agentController.
 
 router.get('/jobs/:jobId', agentController.getJobStatus);
 
+router.patch('/jobs/:jobId', agentController.updateJobStatus);
+
+router.post('/jobs/:jobId/complete', agentController.completeJob);
+
 router.get('/jobs/student/:studentId', agentController.getJobsByStudent);
 
 router.get('/stats/global', agentController.getGlobalStats);

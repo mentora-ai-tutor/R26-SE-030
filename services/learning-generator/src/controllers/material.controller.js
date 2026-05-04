@@ -52,9 +52,16 @@ const getMaterialById = async (req, res, next) => {
     const { materialId } = req.params;
     const tokenStudentId = req.student.id;
 
-    const material = await LearningMaterial.findOne({
-      'structured_material.material_id': materialId,
-    });
+    let material;
+    if (materialId.match(/^[0-9a-fA-F]{24}$/)) {
+      material = await LearningMaterial.findById(materialId);
+    }
+
+    if (!material) {
+      material = await LearningMaterial.findOne({
+        'structured_material.material_id': materialId,
+      });
+    }
 
     if (!material) {
       return res.status(404).json({

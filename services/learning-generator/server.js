@@ -2,12 +2,16 @@ require('dotenv').config();
 const app = require('./src/app');
 const config = require('./src/config/env');
 const db = require('./src/config/db');
+const jobTracker = require('./src/services/jobTracker.service');
 const logger = require('./src/utils/logger');
 
 const startServer = async () => {
   try {
     await db.connectDB();
     logger.info('Database connected successfully');
+
+    jobTracker.start();
+    await jobTracker.resyncActiveJobs();
 
     const server = app.listen(config.port, () => {
       logger.info(`
@@ -26,6 +30,8 @@ const startServer = async () => {
 
     const gracefulShutdown = async (signal) => {
       logger.info(`${signal} received. Starting graceful shutdown...`);
+
+      jobTracker.stop();
 
       server.close(async () => {
         logger.info('HTTP server closed');

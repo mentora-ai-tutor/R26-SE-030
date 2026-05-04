@@ -1,10 +1,19 @@
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from jose import JWTError, jwt
 from loguru import logger
 from app.core.websocket_manager import manager
 from app.core.database import get_db
+from app.core.config import settings
 
 router = APIRouter(tags=["WebSocket"])
+
+
+def decode_ws_token(token: str) -> dict | None:
+    try:
+        return jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
+    except JWTError:
+        return None
 
 
 @router.websocket("/ws/session/{session_id}")
@@ -13,15 +22,13 @@ async def session_websocket(
     session_id: str,
     student_id: str = Query(...),
     role: str = Query("learner"),
+    token: str = Query(None),
 ):
-    """
-    WebSocket endpoint for pair session real-time communication.
-    Handles:
-    - chat messages
-    - sandbox code sync
-    - WebRTC signaling (voice)
-    - typing indicators
-    """
+    if token:
+        payload = decode_ws_token(token)
+        if not payload:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
     await manager.connect(websocket, room_id=session_id, student_id=student_id, role=role)
     db = get_db()
 
@@ -119,11 +126,13 @@ async def group_session_websocket(
     session_id: str,
     student_id: str = Query(...),
     role: str = Query("member"),
+    token: str = Query(None),
 ):
-    """
-    WebSocket endpoint for group session (3-student) real-time communication.
-    Handles chat, sandbox sync, voice signaling, role-specific actions.
-    """
+    if token:
+        payload = decode_ws_token(token)
+        if not payload:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
     await manager.connect(websocket, room_id=f"group_{session_id}", student_id=student_id, role=role)
     db = get_db()
     room_id = f"group_{session_id}"
@@ -209,11 +218,16 @@ async def group_session_websocket(
 
 
 @router.websocket("/ws/notifications/{student_id}")
-async def notification_websocket(websocket: WebSocket, student_id: str):
-    """
-    WebSocket for real-time notifications.
-    Server can push teacher-available notifications to the student.
-    """
+async def notification_websocket(
+    websocket: WebSocket,
+    student_id: str,
+    token: str = Query(None),
+):
+    if token:
+        payload = decode_ws_token(token)
+        if not payload:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
     await manager.connect(
         websocket,
         room_id=f"notif_{student_id}",

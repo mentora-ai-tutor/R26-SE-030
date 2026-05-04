@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ollama_timeout: int = 120
     redis_url: str = "redis://localhost:6379"
     app_secret_key: str = "change-me-in-production"
+    jwt_secret_key: str = "change-me-in-production"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     app_debug: bool = False

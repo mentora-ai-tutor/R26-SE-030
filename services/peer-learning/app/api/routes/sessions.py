@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
+from app.core.auth import TokenPayload, get_current_user
 from app.services.pairing_service import (
     run_full_pairing,
     get_all_paired_sessions,
     get_waiting_queue_students,
     batch_match_all_topics,
+    get_student_pairing_status,
 )
 from app.services.session_service import (
     get_session,
@@ -36,8 +38,21 @@ class TeacherHelpBody(BaseModel):
 
 # ─── Pairing endpoints ────────────────────────────────────────────────────────
 
+@router.get("/pair/my-status", summary="Get current user's pairing status")
+async def my_pairing_status(current_user: TokenPayload = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Returns the pairing status of the authenticated user.
+    Possible statuses:
+    - 'in_pair_session': User is in an active pair session (as learner or teacher)
+    - 'in_group_session': User is in an active group session
+    - 'waiting': User is in the waiting queue for one or more topics
+    - 'idle': User is not in any session or queue
+    """
+    return await get_student_pairing_status(current_user.student_id)
+
+
 @router.post("/pair/run", summary="Auto-pair ALL students across ALL topics")
-async def run_pairing() -> Dict[str, Any]:
+async def run_pairing(current_user: TokenPayload = Depends(get_current_user)) -> Dict[str, Any]:
     """
     Runs the full system-wide pairing algorithm in one call.
 
@@ -69,7 +84,7 @@ async def run_pairing() -> Dict[str, Any]:
 
 
 @router.get("/pair/all", summary="Get all pair sessions (full details)")
-async def list_all_paired() -> List[Dict]:
+async def list_all_paired(current_user: TokenPayload = Depends(get_current_user)) -> List[Dict]:
     """
     Returns every pair session saved in the DB — active, completed, and abandoned —
     sorted newest first.
@@ -78,7 +93,7 @@ async def list_all_paired() -> List[Dict]:
 
 
 @router.get("/pair/waiting-queue", summary="Get all students in the waiting queue")
-async def list_waiting_queue() -> List[Dict]:
+async def list_waiting_queue(current_user: TokenPayload = Depends(get_current_user)) -> List[Dict]:
     """
     Returns all students currently waiting for a teacher, sorted by priority score
     (highest first). Priority = gap severity + waiting time + retry attempts.
@@ -89,12 +104,15 @@ async def list_waiting_queue() -> List[Dict]:
 # ─── Active / session detail endpoints ───────────────────────────────────────
 
 @router.get("/all/active", summary="Get all currently active sessions")
-async def list_active() -> List[Dict]:
+async def list_active(current_user: TokenPayload = Depends(get_current_user)) -> List[Dict]:
     return await get_all_active_sessions()
 
 
 @router.get("/{session_id}", summary="Get session details by ID")
-async def get_session_endpoint(session_id: str) -> Dict:
+async def get_session_endpoint(
+    session_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict:
     session = await get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -104,7 +122,10 @@ async def get_session_endpoint(session_id: str) -> Dict:
 # ─── In-session interaction endpoints ────────────────────────────────────────
 
 @router.post("/{session_id}/start-question", summary="Generate next Bloom question for session")
-async def start_question(session_id: str) -> Dict:
+async def start_question(
+    session_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict:
     question = await start_session_question(session_id)
     if not question:
         raise HTTPException(status_code=400, detail="Could not generate question")
@@ -112,7 +133,11 @@ async def start_question(session_id: str) -> Dict:
 
 
 @router.post("/{session_id}/answer", summary="Submit answer to current question")
-async def answer_question(session_id: str, body: AnswerBody) -> Dict[str, Any]:
+async def answer_question(
+    session_id: str,
+    body: AnswerBody,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     session = await get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -120,17 +145,28 @@ async def answer_question(session_id: str, body: AnswerBody) -> Dict[str, Any]:
 
 
 @router.post("/{session_id}/hint", summary="Request a hint for current question")
-async def get_hint_endpoint(session_id: str, body: HintBody) -> Dict[str, Any]:
+async def get_hint_endpoint(
+    session_id: str,
+    body: HintBody,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     return await request_hint(session_id, body.question_id)
 
 
 @router.post("/{session_id}/ask-teacher", summary="Ask teacher for help")
-async def ask_teacher_endpoint(session_id: str, body: TeacherHelpBody) -> Dict[str, Any]:
+async def ask_teacher_endpoint(
+    session_id: str,
+    body: TeacherHelpBody,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     return await ask_teacher(session_id, body.message, body.sandbox_code)
 
 
 @router.post("/{session_id}/complete", summary="Complete a session and calculate scores")
-async def complete_session_endpoint(session_id: str) -> Dict[str, Any]:
+async def complete_session_endpoint(
+    session_id: str,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
     session = await get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

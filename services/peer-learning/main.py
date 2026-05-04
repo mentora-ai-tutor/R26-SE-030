@@ -8,7 +8,7 @@ import sys
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db
 from app.api import api_router
-from app.services.notification_service import start_background_matching, stop_background_matching
+# from app.services.notification_service import start_background_matching, stop_background_matching
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logger.remove()
@@ -26,12 +26,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Peer Learning System...")
     await connect_db()
-    start_background_matching()
+    # start_background_matching()
     logger.info(f"Server running on {settings.app_host}:{settings.app_port}")
     yield
     # Shutdown
     logger.info("Shutting down...")
-    stop_background_matching()
+    # stop_background_matching()
     await disconnect_db()
 
 

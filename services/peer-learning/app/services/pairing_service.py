@@ -14,6 +14,7 @@ from app.utils.helpers import (
     generate_queue_id,
     sort_knowledge_gaps,
 )
+from app.services.notification_service import send_pairing_notification, send_queue_notification
 
 
 # ─── Low-level helpers ────────────────────────────────────────────────────────
@@ -248,11 +249,11 @@ async def run_full_pairing() -> Dict[str, Any]:
                 "session_id": s["session_id"],
                 "compatibility_score": compatibility,
             })
-            await _send_session_notification(
+            await send_pairing_notification(
                 student_id=learner["student_id"], session_id=s["session_id"],
                 topic_name=topic_name, role="learner", peer_id=teacher["student_id"]
             )
-            await _send_session_notification(
+            await send_pairing_notification(
                 student_id=teacher["student_id"], session_id=s["session_id"],
                 topic_name=topic_name, role="teacher", peer_id=learner["student_id"]
             )
@@ -316,11 +317,11 @@ async def run_full_pairing() -> Dict[str, Any]:
                     "topic_id": topic_id, "topic_name": topic_name,
                     "session_id": s["session_id"],
                 })
-                await _send_session_notification(
+                await send_pairing_notification(
                     student_id=q_sid, session_id=s["session_id"],
                     topic_name=topic_name, role="learner", peer_id=new_sid
                 )
-                await _send_session_notification(
+                await send_pairing_notification(
                     student_id=new_sid, session_id=s["session_id"],
                     topic_name=topic_name, role="teacher", peer_id=q_sid
                 )
@@ -374,11 +375,11 @@ async def run_full_pairing() -> Dict[str, Any]:
                     "topic_id": topic_id, "topic_name": topic_name,
                     "session_id": s["session_id"],
                 })
-                await _send_session_notification(
+                await send_pairing_notification(
                     student_id=new_sid, session_id=s["session_id"],
                     topic_name=topic_name, role="learner", peer_id=q_sid
                 )
-                await _send_session_notification(
+                await send_pairing_notification(
                     student_id=q_sid, session_id=s["session_id"],
                     topic_name=topic_name, role="teacher", peer_id=new_sid
                 )
@@ -697,43 +698,14 @@ async def _auto_add_to_waiting_queue(
     }
     await db.waiting_queue.insert_one(entry)
     logger.info(f"Student {student_id} queued for {topic_name}")
+    
+    # Notify student about being added to queue
+    await send_queue_notification(student_id, topic_name, queue_id)
+    
     entry.pop("_id", None)
     return {**entry, "priority_score": round(priority, 2), "already_queued": False}
 
 
-async def _send_session_notification(student_id: str, session_id: str, topic_name: str, role: str, peer_id: str):
-    """Create notification in DB and broadcast via WebSocket."""
-    db = get_db()
-    notification_id = f"N-{session_id}-{student_id}"
-    doc = {
-        "notification_id": notification_id,
-        "student_id": student_id,
-        "teacher_id": peer_id if role == "learner" else student_id,
-        "topic_id": "",
-        "topic_name": topic_name,
-        "message": f"Your peer learning session for {topic_name} is starting! You are paired as {role}.",
-        "session_id": session_id,
-        "role": role,
-        "created_at": datetime.utcnow(),
-        "status": "session_started",
-    }
-    try:
-        await db.notifications.insert_one(doc)
-    except Exception as e:
-        logger.warning(f"Failed to save notification: {e}")
-
-    try:
-        from app.core.websocket_manager import manager
-        payload = {
-            "type": "session_start",
-            "session_id": session_id,
-            "topic_name": topic_name,
-            "role": role,
-            "peer_id": peer_id,
-        }
-        await manager.broadcast(f"notif_{student_id}", payload)
-    except Exception as e:
-        logger.warning(f"WebSocket notification failed: {e}")
 
 
 # ─── Backward-compat alias ────────────────────────────────────────────────────

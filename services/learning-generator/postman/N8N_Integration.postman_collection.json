@@ -1,0 +1,422 @@
+{
+  "info": {
+    "name": "MENTORA LMG Service - n8n Workflow Integration",
+    "description": "Integration tests for n8n Agentic AI workflow connection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "n8nBaseUrl",
+      "value": "http://localhost:5678",
+      "type": "string"
+    },
+    {
+      "key": "lmgBaseUrl",
+      "value": "http://localhost:3002",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentId",
+      "value": "STU-2026-0428",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "n8n Workflow Tests",
+      "item": [
+        {
+          "name": "POST /webhook/learner-profile (Direct n8n)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response status is success', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('success');",
+                  "    pm.expect(jsonData).to.have.property('material_id');",
+                  "    pm.expect(jsonData).to.have.property('agentic_summary');",
+                  "});",
+                  "",
+                  "pm.test('Agentic summary present', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    var summary = jsonData.agentic_summary;",
+                  "    pm.expect(summary).to.have.property('quality_score');",
+                  "    pm.expect(summary).to.have.property('validation_score');",
+                  "    pm.expect(summary).to.have.property('overall_score');",
+                  "    pm.expect(summary).to.have.property('agent_decision');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"analysis_timestamp\": \"2026-04-28T10:00:00.000Z\",\n    \"mastery_profile\": {\n        \"overall_mastery_score\": 45,\n        \"knowledge_gaps\": [\n            {\n                \"topic\": \"Recursion\",\n                \"topic_id\": \"java-recursion-001\",\n                \"gap_type\": \"FUNDAMENTAL_GAP\",\n                \"misconceptions\": [\n                    \"Thinks the base case is optional\",\n                    \"Confuses stack frame with heap allocation\",\n                    \"Believes recursive calls run in parallel\"\n                ],\n                \"observed_error_patterns\": {\n                    \"missing_base_case\": 8,\n                    \"infinite_recursion\": 5,\n                    \"wrong_return_value\": 3\n                },\n                \"evidence_summary\": \"Student scored 18/60 on Recursion quiz. Submitted 8 solutions with missing base cases.\",\n                \"prerequisite_topics\": [\"Methods and return values\", \"Stack data structure basics\"],\n                \"related_topics\": [\"Binary search\", \"Tree traversal\", \"Dynamic programming\"],\n                \"suggested_intervention\": {\n                    \"primary\": \"interactive_tutorial\",\n                    \"learning_objectives\": [\n                        \"Define a correct base case for any recursive function\",\n                        \"Trace a recursive call stack manually\",\n                        \"Convert a simple loop to a recursive equivalent\"\n                    ]\n                }\n            }\n        ],\n        \"strengths\": [\n            \"Understands basic syntax\",\n            \"Can write simple loops\",\n            \"Knows variable types\"\n        ]\n    },\n    \"recommendations\": {\n        \"priority\": \"high\",\n        \"focus_areas\": [\"recursion\", \"stack memory\", \"base case identification\"]\n    },\n    \"data_sources\": {\n        \"quiz_results\": \"2026-04-28\",\n        \"code_submissions\": 15,\n        \"error_analysis\": \"Knowledge Analysis Agent\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{n8nBaseUrl}}/webhook/learner-profile",
+              "host": ["{{n8nBaseUrl}}"],
+              "path": ["webhook", "learner-profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /webhook/learner-profile - Multiple Gaps",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Multiple materials generated', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('success');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"mastery_profile\": {\n        \"overall_mastery_score\": 50,\n        \"knowledge_gaps\": [\n            {\n                \"topic\": \"Recursion\",\n                \"topic_id\": \"java-recursion-001\",\n                \"gap_type\": \"FUNDAMENTAL_GAP\",\n                \"misconceptions\": [\"Thinks the base case is optional\"]\n            },\n            {\n                \"topic\": \"Arrays\",\n                \"topic_id\": \"java-arrays-002\",\n                \"gap_type\": \"PARTIAL_GAP\",\n                \"misconceptions\": [\"Confuses array indexing\"]\n            },\n            {\n                \"topic\": \"Object-Oriented Programming\",\n                \"topic_id\": \"java-oop-003\",\n                \"gap_type\": \"SURFACE_GAP\",\n                \"misconceptions\": [\"Doesn't understand inheritance\"]\n            }\n        ],\n        \"strengths\": [\"Basic Java syntax\"]\n    }\n}"
+            },
+            "url": {
+              "raw": "{{n8nBaseUrl}}/webhook/learner-profile",
+              "host": ["{{n8nBaseUrl}}"],
+              "path": ["webhook", "learner-profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /webhook/materials/:studentId (Direct n8n)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns array of materials', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{n8nBaseUrl}}/webhook/materials/{{studentId}}",
+              "host": ["{{n8nBaseUrl}}"],
+              "path": ["webhook", "materials", "{{studentId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /webhook/learner-profile - Validation Error",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 500 or error response', function() {",
+                  "    pm.expect([500, 400]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"mastery_profile\": {\n        \"overall_mastery_score\": 50,\n        \"knowledge_gaps\": []\n    }\n}"
+            },
+            "url": {
+              "raw": "{{n8nBaseUrl}}/webhook/learner-profile",
+              "host": ["{{n8nBaseUrl}}"],
+              "path": ["webhook", "learner-profile"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "LMG Service → n8n Integration",
+      "item": [
+        {
+          "name": "POST /api/mastery/submit (via LMG Service)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 202 Accepted', function() {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "",
+                  "pm.test('Returns job_id for polling', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('job_id');",
+                  "    pm.expect(jsonData.data).to.have.property('check_status_at');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"mastery_profile\": {\n        \"overall_mastery_score\": 45,\n        \"knowledge_gaps\": [\n            {\n                \"topic\": \"Recursion\",\n                \"topic_id\": \"java-recursion-001\",\n                \"gap_type\": \"FUNDAMENTAL_GAP\",\n                \"misconceptions\": [\"Thinks the base case is optional\"]\n            }\n        ]\n    }\n}"
+            },
+            "url": {
+              "raw": "{{lmgBaseUrl}}/api/mastery/submit",
+              "host": ["{{lmgBaseUrl}}"],
+              "path": ["api", "mastery", "submit"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/:studentId (from MongoDB)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns materials with structured_material', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data.items && jsonData.data.items.length > 0) {",
+                  "        var item = jsonData.data.items[0];",
+                  "        pm.expect(item).to.have.property('structured_material');",
+                  "        var sm = item.structured_material;",
+                  "        pm.expect(sm).to.have.property('lesson');",
+                  "        pm.expect(sm).to.have.property('assessment');",
+                  "        pm.expect(sm).to.have.property('agentic_metadata');",
+                  "        pm.expect(sm).to.have.property('quality_flags');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{lmgBaseUrl}}/api/materials/{{studentId}}?limit=5",
+              "host": ["{{lmgBaseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/:studentId/stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns agentic stats', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('total_materials');",
+                  "    pm.expect(jsonData.data).to.have.property('avg_quality_score');",
+                  "    pm.expect(jsonData.data).to.have.property('avg_validation_score');",
+                  "    pm.expect(jsonData.data).to.have.property('needs_review_count');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{lmgBaseUrl}}/api/materials/{{studentId}}/stats",
+              "host": ["{{lmgBaseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}", "stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/agent/stats/global",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns model usage stats', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('model_usage');",
+                  "    pm.expect(jsonData.data.model_usage.llm).to.eql('qwen2.5-coder:7b');",
+                  "    pm.expect(jsonData.data.model_usage.slm).to.eql('qwen2.5-coder:7b');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{lmgBaseUrl}}/api/agent/stats/global",
+              "host": ["{{lmgBaseUrl}}"],
+              "path": ["api", "agent", "stats", "global"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health & Dependency Checks",
+      "item": [
+        {
+          "name": "GET /api/agent/health - Full Dependency Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 503', function() {",
+                  "    pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Returns all dependencies status', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.dependencies).to.have.property('mongodb');",
+                  "    pm.expect(jsonData.dependencies).to.have.property('user_service');",
+                  "    pm.expect(jsonData.dependencies).to.have.property('n8n');",
+                  "    pm.expect(jsonData.dependencies).to.have.property('ollama');",
+                  "});",
+                  "",
+                  "pm.test('Checks n8n status', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(['reachable', 'unreachable']).to.include(jsonData.dependencies.n8n.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{lmgBaseUrl}}/api/agent/health",
+              "host": ["{{lmgBaseUrl}}"],
+              "path": ["api", "agent", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  }
+}

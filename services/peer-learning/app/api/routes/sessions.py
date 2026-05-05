@@ -171,3 +171,54 @@ async def complete_session_endpoint(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return await complete_session(session_id)
+
+
+class MatchMeBody(BaseModel):
+    access_token: Optional[str] = None
+
+
+@router.post("/pair/match-me", summary="Find a peer match for the logged-in student")
+async def match_me_endpoint(
+    body: MatchMeBody = MatchMeBody(),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """
+    Student clicks "Find a Teacher/Student":
+    - Optionally refreshes their data from an access_token link.
+    - Runs the pairing algorithm specifically for this student.
+    - If matched: returns session + partner details.
+    - If queued:  returns a waiting-queue message.
+    """
+    from loguru import logger
+    from app.services.pairing_service import match_student_and_create_session
+
+    if body.access_token:
+        try:
+            from app.services.import_service import import_from_url
+            await import_from_url(body.access_token)
+        except Exception as e:
+            logger.warning(f"[match-me] Failed to import from link: {e} — continuing with existing data.")
+
+    result = await match_student_and_create_session(current_user.student_id)
+
+    if not result.get("matched"):
+        queued = result.get("queued", False)
+        return {
+            "status": "queued" if queued else "no_match",
+            "message": result["message"],
+        }
+
+    return {
+        "status": "matched",
+        "message": "A peer has been found! Your session is ready.",
+        "session_id": result["session_id"],
+        "session_details": result["session_details"],
+        "your_role": "learner",
+        "partner": {
+            "student_id": result["teacher_details"]["student_id"],
+            "role": "teacher",
+            "topic": result["session_details"]["topic_name"],
+        },
+        "learner_details": result["learner_details"],
+        "teacher_details": result["teacher_details"],
+    }

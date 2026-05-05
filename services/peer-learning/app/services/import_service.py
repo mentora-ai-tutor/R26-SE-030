@@ -1,3 +1,4 @@
+import httpx
 from datetime import datetime
 from typing import List, Dict, Any
 from loguru import logger
@@ -111,3 +112,30 @@ async def get_student_history(student_id: str) -> Dict:
         "current_weak_topic": student.get("current_weak_topic"),
         "status": student.get("status"),
     }
+
+
+async def import_from_url(url: str) -> Dict[str, Any]:
+    """
+    Fetch student data from a URL and import it.
+    The URL is usually from the Knowledge Analyzed Agent.
+    """
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Normalize: accept raw array OR {"students": [...]}
+            if isinstance(data, list):
+                raw_students = data
+            elif isinstance(data, dict) and "students" in data:
+                raw_students = data["students"]
+            else:
+                raise ValueError("Invalid format: expected array or object with 'students' key")
+                
+            parsed = [StudentImport.model_validate(s) for s in raw_students]
+            return await import_students(parsed)
+            
+        except Exception as e:
+            logger.error(f"Failed to import from URL {url}: {e}")
+            raise

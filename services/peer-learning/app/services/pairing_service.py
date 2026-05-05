@@ -712,3 +712,229 @@ async def _auto_add_to_waiting_queue(
 
 async def batch_match_all_topics() -> Dict[str, Any]:
     return await run_full_pairing()
+
+async def get_available_teachers_for_topic(
+    topic_id: str,
+    topic_name=None,
+    exclude_ids=None,
+):
+    """
+    Find all students in `studentsdb` who can teach topic_id.
+    Excludes:
+      - IDs in exclude_ids (e.g. the requesting student)
+      - Students whose status is 'in_session' (batch-paired)
+      - Students who appear in an ACTIVE pair_session (double-safety)
+      - Students already moved to auto_pair_sessions
+    """
+    from app.core.database import get_db
+    db = get_db()
+    exclude_ids = set(exclude_ids or [])
+
+    # Pull IDs already committed to an active pair session
+    active_sessions = await db.pair_sessions.find(
+        {"status": SessionStatus.ACTIVE.value},
+        {"learner_id": 1, "teacher_id": 1, "_id": 0},
+    ).to_list(length=None)
+    for s in active_sessions:
+        exclude_ids.add(s.get("learner_id"))
+        exclude_ids.add(s.get("teacher_id"))
+    exclude_ids.discard(None)
+
+    query = {
+        "student_id": {"$nin": list(exclude_ids)},
+        "status": {"$ne": "in_session"},
+    }
+    all_potential = await db.students.find(query, {"_id": 0}).to_list(length=None)
+    return [s for s in all_potential if _student_can_teach_topic(s, topic_id, topic_name)]
+
+
+async def match_student_and_create_session(student_id: str):
+    """
+    Student-initiated matching:
+    - Finds the student's weak topic and searches for the best teacher.
+    - Uses atomic reservation to prevent race-condition duplicate sessions.
+    - If found: creates a PairSession, moves both to auto_pair_sessions, deletes from studentsdb.
+    - If not found: adds student to waiting queue.
+    """
+    from app.core.database import get_db
+    db = get_db()
+
+    # ── Guard: student must exist in studentsdb (not already moved out) ───────
+    student = await db.students.find_one({"student_id": student_id}, {"_id": 0})
+    if not student:
+        # Check if already in an active pair session (moved to auto_pair_sessions)
+        existing = await db.pair_sessions.find_one(
+            {
+                "$or": [{"learner_id": student_id}, {"teacher_id": student_id}],
+                "status": SessionStatus.ACTIVE.value,
+            },
+            {"session_id": 1, "_id": 0},
+        )
+        if existing:
+            return {
+                "matched": False,
+                "message": f"You are already in an active session ({existing['session_id']}). No new match needed.",
+            }
+        return {"matched": False, "message": "Student not found in the imported records."}
+
+    # Check status flag (set by batch pairing)
+    if student.get("status") == "in_session":
+        return {"matched": False, "message": "Student is already in an active session."}
+
+    # Extra guard: cross-check pair_sessions directly
+    existing_session = await db.pair_sessions.find_one(
+        {
+            "$or": [{"learner_id": student_id}, {"teacher_id": student_id}],
+            "status": SessionStatus.ACTIVE.value,
+        },
+        {"session_id": 1, "_id": 0},
+    )
+    if existing_session:
+        return {
+            "matched": False,
+            "message": f"You are already in an active session ({existing_session['session_id']}).",
+        }
+
+    # ── Determine weak topic ──────────────────────────────────────────────────
+    topic_id = student.get("current_weak_topic")
+    if not topic_id:
+        gaps = student.get("mastery_profile", {}).get("knowledge_gaps", [])
+        if gaps:
+            sorted_gaps = sort_knowledge_gaps(list(gaps))
+            topic_id = sorted_gaps[0].get("topic_id")
+    if not topic_id:
+        return {"matched": False, "message": "No weak areas found for this student."}
+
+    gap = _get_gap_for_topic(student, topic_id)
+    topic_name = gap.get("topic", topic_id) if gap else topic_id
+    learner_mastery = gap.get("mastery_score") or 0.0
+
+    # ── Find & score available teachers ──────────────────────────────────────
+    teachers = await get_available_teachers_for_topic(topic_id, topic_name, exclude_ids=[student_id])
+    if not teachers:
+        await _auto_add_to_waiting_queue(student_id, topic_id, topic_name, gap)
+        return {
+            "matched": False,
+            "queued": True,
+            "message": f"No available teachers for '{topic_name}'. You have been added to the waiting queue.",
+        }
+
+    scored = []
+    for t in teachers:
+        strength = _get_strength_for_topic(t, topic_id, topic_name)
+        if not strength:
+            continue
+        score = calculate_compatibility_score(
+            teacher_confidence=strength.get("confidence", 0.5),
+            teacher_mastery_level=strength.get("mastery_level", "proficient"),
+            gap_type=gap.get("gap_type", "PARTIAL_GAP"),
+            learner_mastery_score=learner_mastery,
+            learner_confidence=gap.get("confidence", 0.5),
+        )
+        scored.append((score, t))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    # ── Atomic reservation: try each candidate until one succeeds ─────────────
+    # Use findOneAndDelete to atomically claim the teacher from studentsdb.
+    # This prevents two concurrent match-me calls from both picking the same teacher.
+    reserved_teacher = None
+    for _, candidate in scored:
+        claimed = await db.students.find_one_and_delete(
+            {
+                "student_id": candidate["student_id"],
+                "status": {"$ne": "in_session"},
+            }
+        )
+        if claimed:
+            claimed.pop("_id", None)
+            reserved_teacher = claimed
+            break
+
+    if not reserved_teacher:
+        # All candidates were claimed by concurrent requests
+        await _auto_add_to_waiting_queue(student_id, topic_id, topic_name, gap)
+        return {
+            "matched": False,
+            "queued": True,
+            "message": f"No suitable teacher available for '{topic_name}' at this moment. Added to waiting queue.",
+        }
+
+    # ── Also atomically remove the learner from studentsdb ────────────────────
+    await db.students.delete_one({"student_id": student_id})
+
+    # ── Create the pair session ───────────────────────────────────────────────
+    session_id = generate_session_id()
+    session_doc = {
+        "session_id": session_id,
+        "teacher_id": reserved_teacher["student_id"],
+        "learner_id": student_id,
+        "topic_id": topic_id,
+        "topic_name": topic_name,
+        "pairing_type": PairingType.ONE_WAY.value,
+        "status": SessionStatus.ACTIVE.value,
+        "created_at": datetime.utcnow(),
+        "completed_at": None,
+        "questions_asked": 0,
+        "correct_answers": 0,
+        "hints_used_by_learner": 0,
+        "hints_used_by_teacher": 0,
+        "help_requests": 0,
+        "question_log": [],
+        "performance_score": None,
+        "current_bloom_level": 1,
+        "consecutive_correct": 0,
+        "consecutive_incorrect": 0,
+        "current_question_id": None,
+        "learner_initial_mastery": learner_mastery,
+        "teacher_score": None,
+    }
+    await db.pair_sessions.insert_one(session_doc)
+    session_doc.pop("_id", None)
+
+    # ── Persist both profiles in auto_pair_sessions ───────────────────────────
+    # Use update_one with upsert to prevent duplicate auto_pair_session records
+    for record, role in [(student, "learner"), (reserved_teacher, "teacher")]:
+        await db.auto_pair_sessions.update_one(
+            {"student_id": record["student_id"], "session_id": session_id},
+            {"$setOnInsert": {**record, "session_id": session_id, "role": role}},
+            upsert=True,
+        )
+
+    # Clean up waiting queue for both
+    both_ids = [student_id, reserved_teacher["student_id"]]
+    await db.waiting_queue.delete_many({"student_id": {"$in": both_ids}})
+
+    logger.info(
+        f"[match-me] {student_id} paired with {reserved_teacher['student_id']} "
+        f"for '{topic_name}' -> session {session_id}"
+    )
+
+    # ── Send notifications (idempotent upsert to prevent duplicates) ──────────
+    for notif_student_id, role, peer_id in [
+        (student_id, "learner", reserved_teacher["student_id"]),
+        (reserved_teacher["student_id"], "teacher", student_id),
+    ]:
+        notif_doc = {
+            "student_id": notif_student_id,
+            "type": "pairing_success",
+            "session_id": session_id,
+            "topic_name": topic_name,
+            "role": role,
+            "peer_id": peer_id,
+            "message": f"Your peer learning session for {topic_name} is starting! You are paired as {role}.",
+            "created_at": datetime.utcnow(),
+            "status": "unread",
+        }
+        await db.notifications.update_one(
+            {"student_id": notif_student_id, "session_id": session_id},
+            {"$setOnInsert": notif_doc},
+            upsert=True,
+        )
+
+    return {
+        "matched": True,
+        "session_id": session_id,
+        "session_details": session_doc,
+        "learner_details": student,
+        "teacher_details": reserved_teacher,
+    }

@@ -51,3 +51,8 @@ docker-compose.override.yml
 
 # Local dev
 *.local
+
+# Secrets — never commit
+secrets/
+*.gcp-sa.json
+gcp-sa.json

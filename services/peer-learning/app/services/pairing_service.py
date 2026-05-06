@@ -32,11 +32,11 @@ def _get_strength_for_topic(student: Dict, topic_id: str, topic_name: Optional[s
 
 def _get_gap_for_topic(student: Dict, topic_id: str, topic_name: Optional[str] = None) -> Optional[Dict]:
     for g in student.get("mastery_profile", {}).get("knowledge_gaps", []):
-        if g.get("topic_id") == topic_id:
+        if g.get("topic_id") == topic_id and not g.get("completed", False):
             return g
     if topic_name:
         for g in student.get("mastery_profile", {}).get("knowledge_gaps", []):
-            if g.get("topic") == topic_name:
+            if g.get("topic") == topic_name and not g.get("completed", False):
                 return g
     return None
 
@@ -540,11 +540,19 @@ async def get_available_learners_for_topic(topic_id: str, topic_name: Optional[s
     db = get_db()
     query = {
         "$or": [
-            {"mastery_profile.knowledge_gaps.topic_id": topic_id},
-            {"mastery_profile.knowledge_gaps.topic": topic_name} if topic_name else {}
+            {
+                "mastery_profile.knowledge_gaps": {
+                    "$elemMatch": {"topic_id": topic_id, "completed": {"$ne": True}}
+                }
+            },
+            {
+                "mastery_profile.knowledge_gaps": {
+                    "$elemMatch": {"topic": topic_name, "completed": {"$ne": True}}
+                }
+            } if topic_name else {}
         ],
         "current_session_id": None,
-        "status": {"$ne": "complete"},
+        "status": "active",
     }
     if not topic_name:
         query.pop("$or")
@@ -571,7 +579,7 @@ async def get_available_teachers_for_topic(
             } if topic_name else {}
         ],
         "current_session_id": None,
-        "status": {"$ne": "complete"},
+        "status": "active",
     }
     if not topic_name:
         query.pop("$or")
@@ -835,23 +843,37 @@ async def match_student_and_create_session(student_id: str):
     scored.sort(key=lambda x: x[0], reverse=True)
 
     # ── Atomic reservation: try each candidate until one succeeds ─────────────
-    # Use findOneAndDelete to atomically claim the teacher from studentsdb.
+    # Use findOneAndUpdate to atomically claim the teacher from studentsdb.
     # This prevents two concurrent match-me calls from both picking the same teacher.
     reserved_teacher = None
+    session_id = generate_session_id()
+    
     for _, candidate in scored:
-        claimed = await db.students.find_one_and_delete(
+        claimed = await db.students.find_one_and_update(
             {
                 "student_id": candidate["student_id"],
-                "status": {"$ne": "in_session"},
+                "status": "active",
+            },
+            {
+                "$set": {
+                    "status": "in_session", 
+                    "current_session_id": session_id,
+                    "updated_at": datetime.utcnow()
+                },
+                "$push": {"session_history": session_id}
             }
         )
         if claimed:
+            # find_one_and_update returns the original document by default.
             claimed.pop("_id", None)
             reserved_teacher = claimed
             break
 
     if not reserved_teacher:
-        # All candidates were claimed by concurrent requests
+        # All candidates were claimed by concurrent requests or none available
+        from app.services.notification_service import send_no_teachers_notification
+        await send_no_teachers_notification(student_id, topic_name)
+        
         await _auto_add_to_waiting_queue(student_id, topic_id, topic_name, gap)
         return {
             "matched": False,
@@ -859,11 +881,20 @@ async def match_student_and_create_session(student_id: str):
             "message": f"No suitable teacher available for '{topic_name}' at this moment. Added to waiting queue.",
         }
 
-    # ── Also atomically remove the learner from studentsdb ────────────────────
-    await db.students.delete_one({"student_id": student_id})
+    # ── Also atomically update the learner in studentsdb ────────────────────
+    await db.students.update_one(
+        {"student_id": student_id},
+        {
+            "$set": {
+                "status": "in_session", 
+                "current_session_id": session_id,
+                "updated_at": datetime.utcnow()
+            },
+            "$push": {"session_history": session_id}
+        }
+    )
 
     # ── Create the pair session ───────────────────────────────────────────────
-    session_id = generate_session_id()
     session_doc = {
         "session_id": session_id,
         "teacher_id": reserved_teacher["student_id"],
@@ -890,15 +921,6 @@ async def match_student_and_create_session(student_id: str):
     }
     await db.pair_sessions.insert_one(session_doc)
     session_doc.pop("_id", None)
-
-    # ── Persist both profiles in auto_pair_sessions ───────────────────────────
-    # Use update_one with upsert to prevent duplicate auto_pair_session records
-    for record, role in [(student, "learner"), (reserved_teacher, "teacher")]:
-        await db.auto_pair_sessions.update_one(
-            {"student_id": record["student_id"], "session_id": session_id},
-            {"$setOnInsert": {**record, "session_id": session_id, "role": role}},
-            upsert=True,
-        )
 
     # Clean up waiting queue for both
     both_ids = [student_id, reserved_teacher["student_id"]]

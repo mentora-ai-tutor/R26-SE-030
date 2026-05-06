@@ -92,6 +92,84 @@ async def send_queue_notification(
         logger.error(f"Failed to send queue notification for {student_id}: {e}")
         return ""
 
+async def send_no_teachers_notification(student_id: str, topic_name: str) -> str:
+    """
+    Notify a student that no teachers are currently available for their topic.
+    Saves to DB and broadcasts via WebSocket.
+    """
+    db = get_db()
+    notification_id = generate_notification_id()
+
+    doc = {
+        "notification_id": notification_id,
+        "student_id": student_id,
+        "type": "no_teachers_available",
+        "message": (
+            f"No teachers are available for '{topic_name}' at this time. "
+            "You have been added to the waiting queue and will be notified as soon as a teacher becomes available."
+        ),
+        "topic_name": topic_name,
+        "created_at": datetime.utcnow(),
+        "status": "unread",
+    }
+
+    try:
+        await db.notifications.insert_one(doc)
+        logger.info(f"No-teachers notification {notification_id} sent to {student_id} for topic '{topic_name}'")
+
+        await manager.broadcast(f"notif_{student_id}", {
+            "type": "no_teachers_available",
+            "notification_id": notification_id,
+            "topic_name": topic_name,
+            "message": doc["message"],
+        })
+        return notification_id
+    except Exception as e:
+        logger.error(f"Failed to send no-teachers notification for {student_id}: {e}")
+        return ""
+
+
+async def send_knowledge_gap_completed_notification(
+    student_id: str, topic_name: str, session_id: str
+) -> str:
+    """
+    Notify a student that a knowledge gap session has been completed
+    and their status has been reset to active.
+    """
+    db = get_db()
+    notification_id = generate_notification_id()
+
+    doc = {
+        "notification_id": notification_id,
+        "student_id": student_id,
+        "type": "knowledge_gap_completed",
+        "message": (
+            f"All questions for the knowledge gap '{topic_name}' have been completed. "
+            "Your status has been updated to active — you can now be paired with new students."
+        ),
+        "topic_name": topic_name,
+        "session_id": session_id,
+        "created_at": datetime.utcnow(),
+        "status": "unread",
+    }
+
+    try:
+        await db.notifications.insert_one(doc)
+        logger.info(f"Gap-completed notification {notification_id} sent to {student_id}")
+
+        await manager.broadcast(f"notif_{student_id}", {
+            "type": "knowledge_gap_completed",
+            "notification_id": notification_id,
+            "topic_name": topic_name,
+            "session_id": session_id,
+            "message": doc["message"],
+        })
+        return notification_id
+    except Exception as e:
+        logger.error(f"Failed to send gap-completed notification for {student_id}: {e}")
+        return ""
+
+
 async def get_student_notifications(student_id: str) -> List[Dict]:
     """Retrieve notifications for a student, sorted by newest first."""
     db = get_db()

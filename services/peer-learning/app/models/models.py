@@ -62,6 +62,7 @@ class KnowledgeGap(BaseModel):
     gap_type: GapType
     confidence: float
     mastery_score: Optional[float] = 0.0
+    completed: bool = False
 
 
 class Strength(BaseModel):

@@ -287,9 +287,41 @@ async def complete_session(session_id: str, final_mastery: Optional[float] = Non
         },
     )
 
-    # Release both students
+    # Immediately release both students back to "active" status
     await _release_student(session["learner_id"])
     await _release_student(session["teacher_id"])
+
+    # Set can_teach_others = False for the teacher's topic
+    await db.students.update_one(
+        {
+            "student_id": session["teacher_id"],
+            "mastery_profile.strengths.topic_id": session["topic_id"]
+        },
+        {
+            "$set": {
+                "mastery_profile.strengths.$.can_teach_others": False,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+
+    # Mark the learner's knowledge gap as completed
+    await db.students.update_one(
+        {
+            "student_id": session["learner_id"],
+            "mastery_profile.knowledge_gaps.topic_id": session["topic_id"]
+        },
+        {
+            "$set": {
+                "mastery_profile.knowledge_gaps.$.completed": True,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+
+    # Notify gap completed
+    from app.services.notification_service import send_knowledge_gap_completed_notification
+    await send_knowledge_gap_completed_notification(session["learner_id"], session["topic_name"], session_id)
 
     initial_mastery = session.get("learner_initial_mastery", 0.0)
     score_improvement = learner_score - initial_mastery

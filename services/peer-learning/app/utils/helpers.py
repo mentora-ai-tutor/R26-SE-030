@@ -116,6 +116,43 @@ def calculate_teacher_score(initial_mastery: float, final_mastery: float) -> flo
     return max(0.0, min(100.0, improvement * 100))
 
 
+def calculate_updated_mastery_score(
+    previous_score: float,
+    is_correct: bool,
+    bloom_level: int,
+    consecutive_correct: int,
+    consecutive_incorrect: int,
+    time_taken_seconds: Optional[int] = None
+) -> float:
+    """Calculate updated mastery score dynamically after each question."""
+    # Base change based on correctness
+    base_change = 5.0 if is_correct else -3.0
+    
+    # Difficulty modifier
+    difficulty_multiplier = 1.0 + (bloom_level * 0.1)  # Higher bloom = more points or bigger penalty
+    
+    # Consistency modifier
+    consistency_multiplier = 1.0
+    if is_correct and consecutive_correct > 1:
+        consistency_multiplier += (consecutive_correct * 0.1)
+    elif not is_correct and consecutive_incorrect > 1:
+        consistency_multiplier += (consecutive_incorrect * 0.1)
+        
+    # Time penalty/bonus (assume expected time is ~60 seconds)
+    time_modifier = 1.0
+    if time_taken_seconds:
+        if is_correct and time_taken_seconds < 30:
+            time_modifier = 1.1 # Quick correct answer bonus
+        elif not is_correct and time_taken_seconds < 10:
+            time_modifier = 1.2 # Rushed incorrect answer penalty
+
+    change = base_change * difficulty_multiplier * consistency_multiplier * time_modifier
+    
+    new_score = previous_score + change
+    return min(100.0, max(0.0, new_score))
+
+
+
 def calculate_role_score(
     task_completion: float,
     collaboration: float,
@@ -149,14 +186,14 @@ def get_next_bloom_level(current: int, consecutive_correct: int, consecutive_inc
     """Determine next Bloom's taxonomy level."""
     if consecutive_correct >= 2 and current < 6:
         return current + 1
-    if consecutive_incorrect >= 2 and current > 1:
+    if consecutive_incorrect >= 1 and current > 1:
         return current - 1
     return current
 
 
-def is_mastery_achieved(bloom_level: int, consecutive_correct: int) -> bool:
-    """Check if mastery is achieved (2 consecutive correct at level 5+)."""
-    return bloom_level >= 5 and consecutive_correct >= 2
+def is_mastery_achieved(bloom_level: int, current_mastery_score: float) -> bool:
+    """Check if mastery is achieved (score >= 85 and reached at least level 5)."""
+    return current_mastery_score >= 85.0 and bloom_level >= 5
 
 
 def rotate_group_roles(members: list, session_number: int) -> list:

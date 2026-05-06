@@ -14,7 +14,17 @@ from app.utils.helpers import (
     is_mastery_achieved,
     calculate_learner_score,
     calculate_teacher_score,
+    calculate_updated_mastery_score,
 )
+
+
+async def get_active_session_for_learner(learner_id: str) -> Optional[Dict]:
+    """Return the active pair session where this student is the learner."""
+    db = get_db()
+    return await db.pair_sessions.find_one(
+        {"learner_id": learner_id, "status": SessionStatus.ACTIVE.value},
+        {"_id": 0},
+    )
 
 
 async def get_session(session_id: str) -> Optional[Dict]:
@@ -48,6 +58,18 @@ async def start_session_question(session_id: str) -> Optional[Dict]:
     misconception = gap.get("gap_type", "general gap") if gap else "general gap"
     current_mastery = gap.get("mastery_score", 0.0) if gap else 0.0
 
+    # Find the last asked question's text to avoid repeating it
+    previous_question_text = None
+    question_log = session.get("question_log", [])
+    if question_log:
+        last_entry = question_log[-1]
+        last_qid = last_entry.get("question_id")
+        if last_qid:
+            db2 = get_db()
+            last_q = await db2.questions_bank.find_one({"question_id": last_qid}, {"_id": 0})
+            if last_q:
+                previous_question_text = last_q.get("question_text")
+
     question = await generate_and_save_question(
         topic_id=session["topic_id"],
         topic_name=session["topic_name"],
@@ -56,6 +78,7 @@ async def start_session_question(session_id: str) -> Optional[Dict]:
         misconception=misconception,
         session_id=session_id,
         session_type="pair",
+        previous_question_text=previous_question_text,
     )
 
     if not question:
@@ -110,7 +133,31 @@ async def submit_answer(session_id: str, answer: str, time_taken: Optional[int])
 
     current_level = session["current_bloom_level"]
     new_level = get_next_bloom_level(current_level, consecutive_correct, consecutive_incorrect)
-    mastery_achieved = is_mastery_achieved(new_level, consecutive_correct)
+
+    # Calculate and update mastery score immediately
+    learner = await db.students.find_one({"student_id": session["learner_id"]}, {"_id": 0})
+    previous_score = 0.0
+    if learner:
+        for g in learner.get("mastery_profile", {}).get("knowledge_gaps", []):
+            if g.get("topic_id") == session["topic_id"]:
+                previous_score = g.get("mastery_score", 0.0)
+                break
+
+    new_score = calculate_updated_mastery_score(
+        previous_score=previous_score,
+        is_correct=is_correct,
+        bloom_level=current_level,
+        consecutive_correct=consecutive_correct,
+        consecutive_incorrect=consecutive_incorrect,
+        time_taken_seconds=time_taken
+    )
+
+    await db.students.update_one(
+        {"student_id": session["learner_id"], "mastery_profile.knowledge_gaps.topic_id": session["topic_id"]},
+        {"$set": {"mastery_profile.knowledge_gaps.$.mastery_score": round(new_score, 2)}}
+    )
+
+    mastery_achieved = is_mastery_achieved(new_level, new_score)
 
     log_entry = {
         "question_id": question_id,
@@ -137,6 +184,9 @@ async def submit_answer(session_id: str, answer: str, time_taken: Optional[int])
 
     await db.pair_sessions.update_one({"session_id": session_id}, update)
 
+    questions_asked = session.get("questions_asked", 1)
+    session_completed_flag = mastery_achieved or questions_asked >= 5
+
     response = {
         "session_id": session_id,
         "is_correct": is_correct,
@@ -145,16 +195,15 @@ async def submit_answer(session_id: str, answer: str, time_taken: Optional[int])
         "bloom_level_after": new_level,
         "consecutive_correct": consecutive_correct,
         "mastery_achieved": mastery_achieved,
+        "current_mastery_score": round(new_score, 2),
+        "questions_asked": questions_asked,
     }
 
-    if mastery_achieved:
+    if session_completed_flag:
         # Trigger session completion
-        result = await complete_session(session_id)
+        result = await complete_session(session_id, final_mastery=new_score)
         response["session_completed"] = True
         response["performance"] = result
-    elif not is_correct:
-        response["ask_teacher_available"] = True
-        response["next_action"] = "ask_teacher_or_retry"
     else:
         response["next_action"] = "next_question"
 
@@ -183,37 +232,10 @@ async def request_hint(session_id: str, question_id: str) -> Dict[str, Any]:
     return {"hint_index": hint_index + 1, "hint": hint, "hints_remaining": 2 - hint_index}
 
 
-async def ask_teacher(session_id: str, message: str, sandbox_code: Optional[str]) -> Dict[str, Any]:
-    """Record a help request from learner to teacher."""
-    db = get_db()
-    session = await db.pair_sessions.find_one({"session_id": session_id})
-    if not session:
-        return {"error": "Session not found"}
-
-    await db.pair_sessions.update_one(
-        {"session_id": session_id},
-        {
-            "$inc": {"help_requests": 1},
-            "$push": {
-                "question_log": {
-                    "type": "help_request",
-                    "message": message,
-                    "sandbox_code": sandbox_code,
-                    "timestamp": datetime.utcnow(),
-                }
-            },
-        },
-    )
-
-    return {
-        "session_id": session_id,
-        "status": "help_request_recorded",
-        "message": "Teacher has been notified. They can respond via chat, voice, or sandbox.",
-        "teacher_id": session["teacher_id"],
-    }
 
 
-async def complete_session(session_id: str) -> Dict[str, Any]:
+
+async def complete_session(session_id: str, final_mastery: Optional[float] = None) -> Dict[str, Any]:
     """
     Phase 4: Complete a session and calculate performance scores.
     Triggers Phase 5 (pool) and Phase 8 (teacher gaps) as needed.
@@ -223,17 +245,17 @@ async def complete_session(session_id: str) -> Dict[str, Any]:
     if not session:
         return {"error": "Session not found"}
 
-    # Calculate learner score
-    learner_score = calculate_learner_score(
-        correct_answers=session.get("correct_answers", 0),
-        total_questions=session.get("questions_asked", 0),
-        hints_used=session.get("hints_used_by_learner", 0),
-        help_requests=session.get("help_requests", 0),
-    )
-
     # Determine learner's final mastery for teacher score calculation
-    learner = await db.students.find_one({"student_id": session["learner_id"]}, {"_id": 0})
-    final_mastery = learner_score  # Use score as proxy for mastery gain
+    if final_mastery is None:
+        learner = await db.students.find_one({"student_id": session["learner_id"]}, {"_id": 0})
+        final_mastery = 0.0
+        if learner:
+            for g in learner.get("mastery_profile", {}).get("knowledge_gaps", []):
+                if g.get("topic_id") == session["topic_id"]:
+                    final_mastery = g.get("mastery_score", 0.0)
+                    break
+
+    learner_score = final_mastery
 
     teacher_score = calculate_teacher_score(
         initial_mastery=session.get("learner_initial_mastery", 0.0),
@@ -241,7 +263,7 @@ async def complete_session(session_id: str) -> Dict[str, Any]:
     )
 
     # Determine outcome
-    if learner_score >= 90:
+    if learner_score >= 85:
         learner_outcome = "MASTERED"
     elif learner_score >= 50:
         learner_outcome = "CONTINUE"
@@ -269,24 +291,38 @@ async def complete_session(session_id: str) -> Dict[str, Any]:
     await _release_student(session["learner_id"])
     await _release_student(session["teacher_id"])
 
+    initial_mastery = session.get("learner_initial_mastery", 0.0)
+    score_improvement = learner_score - initial_mastery
+
     result = {
         "session_id": session_id,
+        "previous_mastery_score": round(initial_mastery, 2),
+        "current_mastery_score": round(learner_score, 2),
+        "score_improvement": round(score_improvement, 2),
+        "bloom_level_before": session.get("initial_bloom_level", 1) if "initial_bloom_level" in session else 1,
+        "bloom_level_after": session.get("current_bloom_level", 1),
         "learner_score": round(learner_score, 2),
         "teacher_score": round(teacher_score, 2),
         "learner_outcome": learner_outcome,
         "teacher_outcome": teacher_outcome,
     }
 
-    # Phase 5: If mastered, add to improved pool
+    # Phase 5: If mastered, add to improved pool and transition to verified pool
     if learner_outcome == "MASTERED":
-        from app.services.pool_service import add_to_improved_pool
+        from app.services.pool_service import add_to_improved_pool, add_to_verified_pool
         await add_to_improved_pool(
             student_id=session["learner_id"],
             topic_id=session["topic_id"],
             topic_name=session["topic_name"],
             mastery_score=learner_score,
         )
-        result["next_action"] = "added_to_improved_pool"
+        await add_to_verified_pool(
+            student_id=session["learner_id"],
+            topic_id=session["topic_id"],
+            topic_name=session["topic_name"],
+            final_mastery_score=learner_score,
+        )
+        result["next_action"] = "added_to_verified_pool"
 
     # Phase 8: Handle teacher gaps
     if teacher_outcome == "NEEDS_IMPROVEMENT":

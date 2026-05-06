@@ -12,10 +12,10 @@ from app.services.pairing_service import (
 from app.services.session_service import (
     get_session,
     get_all_active_sessions,
+    get_active_session_for_learner,
     start_session_question,
     submit_answer,
     request_hint,
-    ask_teacher,
     complete_session,
 )
 
@@ -31,9 +31,7 @@ class HintBody(BaseModel):
     question_id: str
 
 
-class TeacherHelpBody(BaseModel):
-    message: str
-    sandbox_code: Optional[str] = None
+
 
 
 # ─── Pairing endpoints ────────────────────────────────────────────────────────
@@ -121,6 +119,39 @@ async def get_session_endpoint(
 
 # ─── In-session interaction endpoints ────────────────────────────────────────
 
+@router.post("/my/start-question", summary="Generate next question for the authenticated learner")
+async def my_start_question(
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict:
+    """
+    Automatically resolves the active session for the authenticated learner
+    and generates the next Bloom's question — no session_id needed.
+    """
+    session = await get_active_session_for_learner(current_user.student_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active session found for this learner")
+    question = await start_session_question(session["session_id"])
+    if not question:
+        raise HTTPException(status_code=400, detail="Could not generate question")
+    return question
+
+
+@router.post("/my/answer", summary="Submit an answer for the authenticated learner")
+async def my_answer_question(
+    body: AnswerBody,
+    current_user: TokenPayload = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Automatically resolves the active session for the authenticated learner
+    and submits the answer — no session_id needed.
+    """
+    session = await get_active_session_for_learner(current_user.student_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="No active session found for this learner")
+    return await submit_answer(session["session_id"], body.answer, body.time_taken_seconds)
+
+
+
 @router.post("/{session_id}/start-question", summary="Generate next Bloom question for session")
 async def start_question(
     session_id: str,
@@ -153,13 +184,7 @@ async def get_hint_endpoint(
     return await request_hint(session_id, body.question_id)
 
 
-@router.post("/{session_id}/ask-teacher", summary="Ask teacher for help")
-async def ask_teacher_endpoint(
-    session_id: str,
-    body: TeacherHelpBody,
-    current_user: TokenPayload = Depends(get_current_user),
-) -> Dict[str, Any]:
-    return await ask_teacher(session_id, body.message, body.sandbox_code)
+
 
 
 @router.post("/{session_id}/complete", summary="Complete a session and calculate scores")

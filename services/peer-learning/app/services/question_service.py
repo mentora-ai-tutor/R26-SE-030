@@ -14,6 +14,7 @@ async def generate_and_save_question(
     misconception: str,
     session_id: str,
     session_type: str = "pair",
+    previous_question_text: Optional[str] = None,
 ) -> Optional[Dict]:
     """Generate a question via LLM and save to questions_bank."""
     db = get_db()
@@ -24,6 +25,7 @@ async def generate_and_save_question(
         current_mastery=current_mastery,
         misconception=misconception,
         topic_id=topic_id,
+        previous_question_text=previous_question_text,
     )
 
     if not raw:

@@ -26,7 +26,8 @@ class OllamaClient:
         if system:
             payload["system"] = system
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        timeout_config = httpx.Timeout(self.timeout, read=None)
+        async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/api/generate",
@@ -79,6 +80,7 @@ class OllamaClient:
         current_mastery: float,
         misconception: str,
         topic_id: str,
+        previous_question_text: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Generate a Bloom's taxonomy question for a topic."""
         bloom_descriptions = {
@@ -90,12 +92,16 @@ class OllamaClient:
             6: "Create - Design, build, teach others",
         }
 
+        avoid_clause = ""
+        if previous_question_text:
+            avoid_clause = f"\nIMPORTANT: Do NOT generate the same or similar question as this previously asked question:\n\"{previous_question_text}\"\nGenerate a completely different question on a different aspect of the topic.\n"
+
         prompt = f"""You are a question generator for programming education using Bloom's Taxonomy.
 Topic: {topic}
 Bloom's Taxonomy Level: {bloom_level} - {bloom_descriptions.get(bloom_level, 'Apply')}
 Student's current mastery: {current_mastery}%
 Specific misconception: {misconception}
-
+{avoid_clause}
 Generate a JSON response with exactly this structure (no extra text, pure JSON):
 {{
   "question_text": "the question",

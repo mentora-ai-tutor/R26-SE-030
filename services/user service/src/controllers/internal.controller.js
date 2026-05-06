@@ -64,6 +64,7 @@ const verifyToken = async (req, res, _next) => {
     return res.status(200).json({
       valid: true,
       student: {
+        id: student._id.toString(),
         student_id: student.student_id,
         name: student.name,
         email: student.email,
@@ -168,7 +169,16 @@ const getGithubCredential = async (req, res, next) => {
   try {
     const { studentId } = req.params;
 
-    const cred = await GithubCredential.findOne({ student_id: studentId });
+    let studentObjectId = studentId;
+    if (!studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      const student = await Student.findOne({ student_id: studentId, is_deleted: false }).select('_id');
+      if (!student) {
+        return sendError(res, 'Student not found', 404, 'STUDENT_NOT_FOUND');
+      }
+      studentObjectId = student._id.toString();
+    }
+
+    const cred = await GithubCredential.findOne({ student_id: studentObjectId });
     if (!cred) {
       return sendError(res, 'GitHub credential not found', 404, 'CREDENTIAL_NOT_FOUND');
     }
@@ -177,7 +187,7 @@ const getGithubCredential = async (req, res, next) => {
     try {
       accessToken = ghCrypto.decrypt(
         { ciphertext: cred.ciphertext, iv: cred.iv, tag: cred.tag },
-        studentId,
+        studentObjectId,
       );
     } catch (e) {
       logger.error('github credential decrypt failed:', e.message);

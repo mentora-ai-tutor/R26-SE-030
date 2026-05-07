@@ -7,5 +7,6 @@ router.post('/start-session', auth, assessmentController.startSession);
 router.post('/submit-answer', auth, assessmentController.submitAnswer);
 router.get('/session/:sessionId', auth, assessmentController.getSession);
 router.get('/sessions', auth, assessmentController.getSessions);
+router.get('/questions', auth, assessmentController.getQuestionsByTopic);
 
 module.exports = router;

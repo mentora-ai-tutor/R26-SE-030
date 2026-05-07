@@ -119,6 +119,82 @@ const getSession = async (req, res, next) => {
   }
 };
 
+const getQuestionsByTopic = async (req, res, next) => {
+  try {
+    const db = mongoose.connection.db;
+    const learnerId = req.user.student_id;
+    const { topic } = req.query;
+
+    const collection = db.collection('ame_questions');
+
+    let query = { learner_id: learnerId };
+    if (topic) {
+      query['current_question.topic'] = topic;
+    }
+
+    let questions = await collection.find(query).sort({ question_generated_at: 1 }).toArray();
+
+    if (questions.length === 0) {
+      questions = await collection.find().sort({ question_generated_at: 1 }).toArray();
+    }
+
+    const sessionUpdates = await db.collection('ame_session_updates')
+      .find({ learner_id: learnerId })
+      .sort({ update_timestamp: -1 })
+      .toArray();
+
+    const sessionHistoryMap = {};
+    for (const update of sessionUpdates) {
+      if (update.updated_session && update.updated_session.session_history) {
+        for (const entry of update.updated_session.session_history) {
+          sessionHistoryMap[entry.question_id] = entry;
+        }
+      }
+    }
+
+    const formattedQuestions = [];
+    let number = 1;
+    for (const q of questions) {
+      const currentQ = q.current_question;
+      if (!currentQ) continue;
+
+      const historyEntry = sessionHistoryMap[currentQ.question_id];
+      const options = currentQ.options ? Object.entries(currentQ.options).map(([key, value]) => value) : [];
+      const difficultyMap = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+
+      formattedQuestions.push({
+        id: currentQ.question_id || `q-${number}`,
+        number: number,
+        question: currentQ.question_text,
+        type: currentQ.question_type || 'mcq',
+        code_snippet: currentQ.code_snippet,
+        options: options,
+        learner_answer: historyEntry ? historyEntry.submitted_answer : 'Not answered',
+        correct_answer: historyEntry ? (historyEntry.correct_answer || currentQ.correct_answer) : currentQ.correct_answer,
+        is_correct: historyEntry ? historyEntry.is_correct : false,
+        explanation: currentQ.evaluation_criteria || '',
+        topic: currentQ.topic,
+        difficulty: difficultyMap[currentQ.difficulty] || 'Medium',
+        bloom_level: currentQ.blooms_level || 1,
+        time_spent: 0,
+        timestamp: new Date(q.question_generated_at || Date.now()).getTime(),
+      });
+      number++;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: formattedQuestions,
+    });
+  } catch (error) {
+    next({
+      statusCode: 500,
+      message: 'Failed to retrieve questions by topic',
+      error: error.message,
+    });
+  }
+};
+
 const getSessions = async (req, res, next) => {
   try {
     const db = mongoose.connection.db;
@@ -147,4 +223,5 @@ module.exports = {
   submitAnswer,
   getSession,
   getSessions,
+  getQuestionsByTopic,
 };

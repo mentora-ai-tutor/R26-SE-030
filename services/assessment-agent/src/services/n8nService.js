@@ -6,7 +6,7 @@ const startSession = async (payload) => {
     console.log('[n8n] POST', url);
     console.log('[n8n] Payload:', JSON.stringify(payload, null, 2));
     const response = await axios.post(url, payload, {
-      timeout: 900000,
+      timeout: 1200000,
       headers: { 'Content-Type': 'application/json' },
     });
     console.log('[n8n] Response status:', response.status);
@@ -16,6 +16,9 @@ const startSession = async (payload) => {
   } catch (error) {
     console.error('[n8n] Error:', error.message);
     console.error('[n8n] Error code:', error.code);
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('n8n workflow timed out - the workflow may be stuck or taking too long to process');
+    }
     if (error.response) {
       console.error('[n8n] Response status:', error.response.status);
       console.error('[n8n] Response data:', error.response.data);
@@ -33,7 +36,7 @@ const submitAnswer = async (payload) => {
     console.log('[n8n] POST', url);
     console.log('[n8n] Payload:', JSON.stringify(payload, null, 2));
     const response = await axios.post(url, payload, {
-      timeout: 900000,
+      timeout: 1200000,
       headers: { 'Content-Type': 'application/json' },
     });
     console.log('[n8n] Response status:', response.status);
@@ -42,6 +45,9 @@ const submitAnswer = async (payload) => {
     return response.data;
   } catch (error) {
     console.error('[n8n] Error:', error.message);
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('n8n workflow timed out - the workflow may be stuck or taking too long to process');
+    }
     if (error.response) {
       console.error('[n8n] Response status:', error.response.status);
       console.error('[n8n] Response data:', JSON.stringify(error.response.data, null, 2));

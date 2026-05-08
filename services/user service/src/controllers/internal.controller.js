@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/env');
-const { Student } = require('../models');
+const { Student, GithubCredential } = require('../models');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const logger = require('../utils/logger');
 const { logAuth } = require('../utils/auditLogger');
+const ghCrypto = require('../utils/ghCrypto');
 
 const verifyToken = async (req, res, _next) => {
   try {
@@ -63,6 +64,7 @@ const verifyToken = async (req, res, _next) => {
     return res.status(200).json({
       valid: true,
       student: {
+        id: student._id.toString(),
         student_id: student.student_id,
         name: student.name,
         email: student.email,
@@ -163,8 +165,55 @@ const updateStudentStats = async (req, res, next) => {
   }
 };
 
+const getGithubCredential = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+
+    let studentObjectId = studentId;
+    if (!studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      const student = await Student.findOne({ student_id: studentId, is_deleted: false }).select('_id');
+      if (!student) {
+        return sendError(res, 'Student not found', 404, 'STUDENT_NOT_FOUND');
+      }
+      studentObjectId = student._id.toString();
+    }
+
+    const cred = await GithubCredential.findOne({ student_id: studentObjectId });
+    if (!cred) {
+      return sendError(res, 'GitHub credential not found', 404, 'CREDENTIAL_NOT_FOUND');
+    }
+
+    let accessToken;
+    try {
+      accessToken = ghCrypto.decrypt(
+        { ciphertext: cred.ciphertext, iv: cred.iv, tag: cred.tag },
+        studentObjectId,
+      );
+    } catch (e) {
+      logger.error('github credential decrypt failed:', e.message);
+      return sendError(res, 'Failed to decrypt credential', 500, 'DECRYPTION_FAILED');
+    }
+
+    GithubCredential.findByIdAndUpdate(cred._id, { last_used_at: new Date() })
+      .catch((err) => logger.warn('Failed to bump last_used_at:', err.message));
+
+    logger.info(`internal: served github credential for student ${studentId}`);
+
+    return sendSuccess(res, {
+      access_token: accessToken,
+      scopes: cred.scopes,
+      gh_login: cred.gh_login,
+      gh_user_id: cred.gh_user_id,
+      linked_at: cred.linked_at,
+    }, 'Credential retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   verifyToken,
   getStudentById,
   updateStudentStats,
+  getGithubCredential,
 };

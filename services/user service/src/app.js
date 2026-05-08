@@ -17,6 +17,7 @@ const authRoutes = require('./routes/auth.routes');
 const studentRoutes = require('./routes/student.routes');
 const internalRoutes = require('./routes/internal.routes');
 const adminRoutes = require('./routes/admin.routes');
+const githubRoutes = require('./routes/githubOAuth.routes');
 
 const app = express();
 
@@ -96,6 +97,9 @@ app.use('/api/auth', authRoutes);
 // Protected routes
 app.use('/api/students', protect, apiLimiter, studentRoutes);
 
+// GitHub OAuth — protect is applied per-route so /oauth/callback stays public.
+app.use('/api/github', apiLimiter, githubRoutes);
+
 // Admin routes
 app.use('/api/admin', protect, apiLimiter, adminRoutes);
 
@@ -105,6 +109,7 @@ app.use('/internal', internalOnly, internalRoutes);
 // API v1 prefix (for versioning)
 app.use('/v1/auth', authLimiter, authRoutes);
 app.use('/v1/students', protect, apiLimiter, studentRoutes);
+app.use('/v1/github', apiLimiter, githubRoutes);
 app.use('/v1/admin', protect, apiLimiter, adminRoutes);
 
 // 404 handler

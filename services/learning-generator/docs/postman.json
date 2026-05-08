@@ -1,0 +1,1109 @@
+{
+  "info": {
+    "name": "MENTORA LMG Service - Complete API",
+    "description": "Complete Postman collection for the Learning Material Generator Service including n8n webhook callbacks. Covers health checks, mastery profiles, learning materials, agent monitoring, and n8n webhook integration.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3002",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string",
+      "description": "Paste the access_token from login response here. Do not add 'Bearer ' prefix."
+    },
+    {
+      "key": "studentId",
+      "value": "STU_1776801204298_3262",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "materialId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webhookSecret",
+      "value": "7a9c3e1d5b8f2c6e4a0d9b7c3e1f5a8d",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is success', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data.service).to.eql('lmg-service');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/agent/health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 503', function() {",
+                  "    pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Response has service name', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.service).to.eql('lmg-service');",
+                  "    pm.expect(jsonData).to.have.property('dependencies');",
+                  "    pm.expect(jsonData).to.have.property('timestamp');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+    "name": "Mastery Profiles",
+    "item": [
+      {
+        "name": "POST /api/mastery/submit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 202 Accepted', function() {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "",
+                  "pm.test('Returns job_id and data', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('job_id');",
+                  "    pm.expect(jsonData.data).to.have.property('student_id');",
+                  "    pm.expect(jsonData.data).to.have.property('gaps_queued');",
+                  "    pm.expect(jsonData.data).to.have.property('topics');",
+                  "    pm.expect(jsonData.data).to.have.property('check_status_at');",
+                  "    pm.expect(jsonData.data).to.have.property('materials_available_at');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('jobId', pm.response.json().data.job_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"analysis_timestamp\": \"2026-03-18T14:30:00Z\",\n    \"data_sources\": {\n        \"github\": \"available\",\n        \"sandbox\": \"available\",\n        \"quizzes\": \"available\"\n    },\n    \"mastery_profile\": {\n        \"overall_mastery_score\": 58,\n        \"knowledge_gaps\": [\n            {\n                \"topic\": \"Recursion\",\n                \"topic_id\": \"CS101-REC\",\n                \"gap_type\": \"FUNDAMENTAL_GAP\",\n                \"confidence\": 0.95,\n                \"misconceptions\": [\n                    \"base case identification\",\n                    \"stack frame management\",\n                    \"recursive vs iterative thinking\"\n                ],\n                \"observed_error_patterns\": {\n                    \"sandbox\": [\n                        \"stack overflow errors\",\n                        \"infinite recursion\",\n                        \"incorrect return values\"\n                    ],\n                    \"quizzes\": [\n                        \"cannot identify base case in multiple choice\",\n                        \"fails to trace recursive calls\"\n                    ],\n                    \"github\": [\n                        \"Big Bang commit with perfect recursive functions (no intermediate attempts)\",\n                        \"no debugging history or incremental improvements\"\n                    ]\n                },\n                \"evidence_summary\": \"GitHub shows a single massive commit introducing perfect recursive functions (AI probability 87%). Sandbox tasks on recursion had 0% success rate with extremely fast completion times (45s), suggesting copy-paste without understanding. Quiz scores on recursion topics are 20%, with specific misconceptions on base cases and stack frames.\",\n                \"prerequisite_topics\": [\"Loops\", \"Functions\", \"Call Stack\"],\n                \"related_topics\": [\"Tree Traversal\", \"Divide and Conquer\"],\n                \"suggested_intervention\": {\n                    \"primary\": \"interactive_tutorial\",\n                    \"secondary\": [\"practice_exercises\", \"peer_tutoring\"],\n                    \"difficulty_level\": \"beginner\",\n                    \"estimated_time_minutes\": 90,\n                    \"learning_objectives\": [\n                        \"Define recursion and identify its components\",\n                        \"Write recursive functions with proper base cases\",\n                        \"Trace recursive calls and understand stack frames\",\n                        \"Convert between recursive and iterative solutions\"\n                    ]\n                }\n            },\n            {\n                \"topic\": \"Binary Search Trees\",\n                \"topic_id\": \"CS201-BST\",\n                \"gap_type\": \"FUNDAMENTAL_GAP\",\n                \"confidence\": 0.98,\n                \"misconceptions\": [\n                    \"BST deletion algorithm (all cases)\",\n                    \"tree traversal order (inorder, preorder, postorder)\",\n                    \"balancing concepts\"\n                ],\n                \"observed_error_patterns\": {\n                    \"sandbox\": [\n                        \"deletion implementation fails for nodes with two children\",\n                        \"incorrect traversal output\",\n                        \"no attempt at balancing\"\n                    ],\n                    \"quizzes\": [\n                        \"cannot explain deletion steps\",\n                        \"confuses traversal orders\"\n                    ],\n                    \"github\": [\n                        \"Big Bang commit (+350 lines) with complete BST implementation (AI probability 94%)\",\n                        \"no prior commits or incremental development\",\n                        \"code is perfectly formatted with no errors\"\n                    ]\n                },\n                \"evidence_summary\": \"GitHub analysis reveals a single massive commit containing a fully functional BST (AI probability 94%). Sandbox attempts show 100% success but with suspiciously fast completion (30s) – likely copy-paste. Quiz scores are 15%, with major misconceptions on deletion and traversals. Student clearly does not understand BSTs despite submitting correct code.\",\n                \"prerequisite_topics\": [\"Recursion\", \"Trees\", \"Pointers/References\"],\n                \"related_topics\": [\"AVL Trees\", \"Hash Tables\"],\n                \"suggested_intervention\": {\n                    \"primary\": \"step_by_step_practice\",\n                    \"secondary\": [\"video_tutorial\", \"code_review_with_peer\"],\n                    \"difficulty_level\": \"intermediate\",\n                    \"estimated_time_minutes\": 120,\n                    \"learning_objectives\": [\n                        \"Understand BST properties and structure\",\n                        \"Implement BST insertion and search\",\n                        \"Master BST deletion for all three cases\",\n                        \"Perform inorder, preorder, and postorder traversals\"\n                    ]\n                }\n            },\n            {\n                \"topic\": \"Exception Handling\",\n                \"topic_id\": \"CS102-EXC\",\n                \"gap_type\": \"PARTIAL_GAP\",\n                \"confidence\": 0.70,\n                \"misconceptions\": [\n                    \"checked vs unchecked exceptions\",\n                    \"try-catch-finally flow\",\n                    \"when to use custom exceptions\"\n                ],\n                \"observed_error_patterns\": {\n                    \"sandbox\": [\n                        \"incorrect exception type caught\",\n                        \"finally block not used appropriately\"\n                    ],\n                    \"quizzes\": [\n                        \"confuses checked and unchecked exceptions\"\n                    ],\n                    \"github\": [\n                        \"exception handling appears fully formed in commits (medium risk)\",\n                        \"some refactoring exists, but no evolution from basic to advanced\"\n                    ]\n                },\n                \"evidence_summary\": \"GitHub shows exception handling code appearing relatively complete without clear evolution (medium risk). Sandbox success rate 67% with errors on exception types. Quiz score 60% with specific misconceptions on checked/unchecked. This is a partial gap that can be closed with targeted practice.\",\n                \"prerequisite_topics\": [\"Control Flow\", \"Methods\"],\n                \"related_topics\": [\"File I/O\", \"Logging\"],\n                \"suggested_intervention\": {\n                    \"primary\": \"targeted_quiz\",\n                    \"secondary\": [\"code_examples\", \"debugging_exercise\"],\n                    \"difficulty_level\": \"beginner\",\n                    \"estimated_time_minutes\": 45,\n                    \"learning_objectives\": [\n                        \"Differentiate checked and unchecked exceptions\",\n                        \"Use try-catch-finally blocks correctly\",\n                        \"Create and throw custom exceptions\"\n                    ]\n                }\n            }\n        ],\n        \"strengths\": [\n            {\n                \"topic\": \"Loops\",\n                \"topic_id\": \"CS101-LOOP\",\n                \"confidence\": 0.96,\n                \"mastery_level\": \"advanced\",\n                \"evidence_summary\": \"GitHub shows incremental commits with messages like 'fixed off-by-one error' (low risk). Sandbox 100% success with reasonable times and error patterns indicating learning. Quiz score 95% with no misconceptions.\",\n                \"can_teach_others\": true\n            },\n            {\n                \"topic\": \"File I/O\",\n                \"topic_id\": \"CS102-FILE\",\n                \"confidence\": 0.94,\n                \"mastery_level\": \"proficient\",\n                \"evidence_summary\": \"GitHub low risk, incremental commits adding error handling over time. Sandbox consistent performance. Quiz not tested but GitHub evidence strong.\",\n                \"can_teach_others\": false\n            }\n        ]\n    },\n    \"recommendations\": {\n        \"priority_order\": [\"Binary Search Trees\", \"Recursion\", \"Exception Handling\"],\n        \"general_advice\": \"Focus on fundamental gaps first (BST and Recursion) as they are prerequisites for many advanced topics. Use interactive tutorials and peer tutoring. For Exception Handling, targeted quizzes and examples should suffice.\",\n        \"for_instructor\": \"Student may be using AI for difficult topics. Verify understanding with proctored tasks. Encourage incremental commits and better commit messages.\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mastery/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mastery", "submit"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/mastery/submit - Validation Error (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is VALIDATION_ERROR', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.eql('VALIDATION_ERROR');",
+                  "    pm.expect(jsonData).to.have.property('details');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"mastery_profile\": {\n        \"overall_mastery_score\": 150,\n        \"knowledge_gaps\": []\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mastery/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mastery", "submit"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/mastery/:studentId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns mastery profile data', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('student_id');",
+                  "    pm.expect(jsonData.data).to.have.property('overall_mastery_score');",
+                  "    pm.expect(jsonData.data).to.have.property('knowledge_gaps');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mastery/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mastery", "{{studentId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/mastery/:studentId/history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns paginated results', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('items');",
+                  "    pm.expect(jsonData.data).to.have.property('meta');",
+                  "    pm.expect(jsonData.data.meta).to.have.property('page');",
+                  "    pm.expect(jsonData.data.meta).to.have.property('limit');",
+                  "    pm.expect(jsonData.data.meta).to.have.property('total');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/mastery/{{studentId}}/history?limit=5&page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mastery", "{{studentId}}", "history"],
+              "query": [
+                { "key": "limit", "value": "5" },
+                { "key": "page", "value": "1" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Learning Materials",
+      "item": [
+        {
+          "name": "GET /api/materials/:studentId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns paginated materials', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('items');",
+                  "    pm.expect(jsonData.data).to.have.property('meta');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/{{studentId}}?limit=10&page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}"],
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "page", "value": "1" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/:studentId - Filter by Topic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/{{studentId}}?topic=Recursion&gap_type=FUNDAMENTAL_GAP",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}"],
+              "query": [
+                { "key": "topic", "value": "Recursion" },
+                { "key": "gap_type", "value": "FUNDAMENTAL_GAP" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/:studentId/topics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns distinct topics', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    if (jsonData.data.length > 0) {",
+                  "        pm.expect(jsonData.data[0]).to.have.property('topic');",
+                  "        pm.expect(jsonData.data[0]).to.have.property('count');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/{{studentId}}/topics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}", "topics"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/:studentId/stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns material statistics', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('total_materials');",
+                  "    pm.expect(jsonData.data).to.have.property('by_gap_type');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/{{studentId}}/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}", "stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/:studentId/topic/:topicId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/{{studentId}}/topic/java-recursion-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "{{studentId}}", "topic", "java-recursion-001"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/materials/item/:materialId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function() {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/item/{{materialId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "item", "{{materialId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/materials/item/:materialId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function() {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/item/{{materialId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "item", "{{materialId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agent & Jobs",
+      "item": [
+        {
+          "name": "GET /api/agent/jobs/:jobId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function() {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Returns job status', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (pm.response.code === 200) {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.data).to.have.property('job_id');",
+                  "        pm.expect(jsonData.data).to.have.property('status');",
+                  "        pm.expect(['queued', 'processing', 'completed', 'failed', 'partial']).to.include(jsonData.data.status);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/jobs/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent", "jobs", "{{jobId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/agent/jobs/student/:studentId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns jobs for student', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/jobs/student/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent", "jobs", "student", "{{studentId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/agent/logs/:studentId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns paginated logs', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('items');",
+                  "    pm.expect(jsonData.data).to.have.property('meta');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/logs/{{studentId}}?limit=20&page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent", "logs", "{{studentId}}"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "page", "value": "1" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/agent/stats/global",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns global agent stats', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('total_generations');",
+                  "    pm.expect(jsonData.data).to.have.property('model_usage');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/stats/global",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent", "stats", "global"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/agent/retry/:materialId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 202, 404, or 503', function() {",
+                  "    pm.expect([202, 404, 503]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Returns new job_id on retry', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (pm.response.code === 202) {",
+                  "        pm.expect(jsonData.data).to.have.property('job_id');",
+                  "        pm.expect(jsonData.data.job_id).to.match(/^JOB_\\d+$/);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/retry/{{materialId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent", "retry", "{{materialId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "n8n Webhooks",
+      "description": "Webhook endpoints for n8n to call back with generated materials and job updates. Requires X-Webhook-Secret header.",
+      "item": [
+        {
+          "name": "POST /api/webhooks/n8n/material",
+          "description": "Receive a single generated material from n8n workflow. Saves to MongoDB and updates job tracking.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns material_id and action', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('material_id');",
+                  "    pm.expect(jsonData.data).to.have.property('student_id');",
+                  "    pm.expect(jsonData.data).to.have.property('topic');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('materialId', pm.response.json().data.material_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"job_id\": \"JOB_1746183600000\",\n    \"material_id\": \"MAT_REC_001\",\n    \"topic\": \"Recursion\",\n    \"topic_id\": \"java-recursion-001\",\n    \"gap_type\": \"FUNDAMENTAL_GAP\",\n    \"difficulty_level\": \"beginner\",\n    \"generated_at\": \"2026-05-02T10:00:00.000Z\",\n    \"generation_models\": {\n        \"llm\": \"llama3\",\n        \"slm\": \"qwen2.5-coder:7b\"\n    },\n    \"lesson\": {\n        \"page_title\": \"Understanding JavaScript Recursion\",\n        \"introduction\": { \"text\": \"Recursion is a technique where a function calls itself to solve smaller sub-problems.\" },\n        \"concept_explained\": { \"text\": \"Every recursive function needs a base case to stop infinite calls.\" },\n        \"syntax_reference\": { \"text\": \"function recurse(n) { if (n <= 0) return; recurse(n - 1); }\" },\n        \"examples\": [\n            { \"code\": \"function factorial(n) { return n <= 1 ? 1 : n * factorial(n - 1); }\", \"explanation\": \"Factorial using recursion\" }\n        ],\n        \"step_by_step_guide\": { \"steps\": [\"Identify the base case\", \"Define the recursive case\", \"Combine results\"] },\n        \"common_mistakes\": [\n            { \"mistake\": \"Missing base case\", \"fix\": \"Always define when recursion should stop\" }\n        ],\n        \"debugging_exercise\": { \"description\": \"Find the bug in this recursive function\", \"code\": \"function sum(n) { return n + sum(n - 1); }\" },\n        \"quick_reference\": { \"key_points\": [\"Base case stops recursion\", \"Each call creates a stack frame\"] },\n        \"connections\": { \"related_topics\": [\"Stack data structure\", \"Divide and conquer\"] }\n    },\n    \"assessment\": {\n        \"quiz\": [\n            {\n                \"question\": \"What is the purpose of a base case?\",\n                \"options\": [\"To stop recursion\", \"To speed up execution\", \"To allocate memory\"],\n                \"correct_answer\": 0\n            }\n        ],\n        \"concept_summary\": \"Recursion breaks problems into smaller sub-problems until reaching a base case.\",\n        \"practice_challenge\": { \"title\": \"Write a recursive Fibonacci function\", \"hints\": [\"fib(n) = fib(n-1) + fib(n-2)\"] },\n        \"self_check\": { \"checklist\": [\"I can identify the base case\", \"I can trace recursive calls\"] }\n    },\n    \"agentic_metadata\": {\n        \"quality_review_agent\": {\n            \"quality_score\": 85,\n            \"retry_count\": 0,\n            \"feedback\": \"Well structured with clear examples\"\n        },\n        \"content_validation_agent\": {\n            \"validation_score\": 90,\n            \"accuracy_check\": \"passed\"\n        }\n    },\n    \"quality_flags\": {\n        \"needs_review\": false,\n        \"agent_patched_llm\": false,\n        \"agent_patched_slm\": false,\n        \"deleted\": false\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/material",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "material"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/material - Missing Secret (401)",
+          "description": "Test that requests without X-Webhook-Secret are rejected.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', function() {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Error code is WEBHOOK_SECRET_MISSING', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.eql('WEBHOOK_SECRET_MISSING');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"material_id\": \"MAT_TEST_001\",\n    \"topic\": \"Test Topic\",\n    \"topic_id\": \"test-001\",\n    \"gap_type\": \"FUNDAMENTAL_GAP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/material",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "material"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/material - Wrong Secret (403)",
+          "description": "Test that requests with invalid X-Webhook-Secret are rejected.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden', function() {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Error code is WEBHOOK_SECRET_INVALID', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.eql('WEBHOOK_SECRET_INVALID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "wrong_secret_value"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"material_id\": \"MAT_TEST_002\",\n    \"topic\": \"Test Topic\",\n    \"topic_id\": \"test-001\",\n    \"gap_type\": \"FUNDAMENTAL_GAP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/material",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "material"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/material/batch",
+          "description": "Receive multiple generated materials from n8n in a single callback.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns batch results', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('student_id');",
+                  "    pm.expect(jsonData.data).to.have.property('results');",
+                  "    pm.expect(jsonData.data.results).to.have.property('success');",
+                  "    pm.expect(jsonData.data.results).to.have.property('failed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"job_id\": \"JOB_1746183600000\",\n    \"workflow_id\": \"wf_abc123\",\n    \"execution_id\": \"exec_xyz789\",\n    \"materials\": [\n        {\n            \"material_id\": \"MAT_ARRAY_001\",\n            \"topic\": \"Arrays\",\n            \"topic_id\": \"java-arrays-002\",\n            \"gap_type\": \"PARTIAL_GAP\",\n            \"difficulty_level\": \"intermediate\",\n            \"generated_at\": \"2026-05-02T10:05:00.000Z\",\n            \"generation_models\": { \"llm\": \"llama3\", \"slm\": \"qwen2.5-coder:7b\" },\n            \"lesson\": { \"page_title\": \"Mastering Java Arrays\" },\n            \"assessment\": { \"concept_summary\": \"Arrays store fixed-size sequential elements\" },\n            \"agentic_metadata\": {\n                \"quality_review_agent\": { \"quality_score\": 78, \"retry_count\": 0 },\n                \"content_validation_agent\": { \"validation_score\": 82 }\n            },\n            \"quality_flags\": { \"needs_review\": false, \"deleted\": false }\n        },\n        {\n            \"material_id\": \"MAT_OOP_001\",\n            \"topic\": \"OOP\",\n            \"topic_id\": \"java-oop-003\",\n            \"gap_type\": \"SURFACE_GAP\",\n            \"difficulty_level\": \"advanced\",\n            \"generated_at\": \"2026-05-02T10:06:00.000Z\",\n            \"generation_models\": { \"llm\": \"llama3\", \"slm\": \"qwen2.5-coder:7b\" },\n            \"lesson\": { \"page_title\": \"Object-Oriented Programming in Java\" },\n            \"assessment\": { \"concept_summary\": \"OOP organizes code around objects\" },\n            \"agentic_metadata\": {\n                \"quality_review_agent\": { \"quality_score\": 92, \"retry_count\": 0 },\n                \"content_validation_agent\": { \"validation_score\": 95 }\n            },\n            \"quality_flags\": { \"needs_review\": false, \"deleted\": false }\n        }\n    ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/material/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "material", "batch"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/job/status",
+          "description": "Update job status from n8n workflow (progress, completion, or failure).",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function() {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Returns job status update', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (pm.response.code === 200) {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.data).to.have.property('job_id');",
+                  "        pm.expect(jsonData.data).to.have.property('status');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"job_id\": \"JOB_1746183600000\",\n    \"status\": \"completed\",\n    \"workflow_id\": \"wf_abc123\",\n    \"execution_id\": \"exec_xyz789\",\n    \"progress\": {\n        \"completed\": 3,\n        \"failed\": 0\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/job/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "job", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/job/status - Processing",
+          "description": "Send a processing/in-progress status update from n8n.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"job_id\": \"JOB_1746183600000\",\n    \"status\": \"processing\",\n    \"workflow_id\": \"wf_abc123\",\n    \"execution_id\": \"exec_xyz789\",\n    \"progress\": {\n        \"completed\": 1,\n        \"failed\": 0\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/job/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "job", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/job/status - Failed",
+          "description": "Send a failed status update from n8n with error details.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"job_id\": \"JOB_1746183600000\",\n    \"status\": \"failed\",\n    \"error\": \"LLM model failed to respond - timeout after 300s\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/job/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "job", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/webhooks/n8n/mastery",
+          "description": "Callback from n8n confirming mastery profile processing has started.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns callback confirmation', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.data).to.have.property('student_id');",
+                  "    pm.expect(jsonData.data).to.have.property('job_id');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"student_id\": \"{{studentId}}\",\n    \"job_id\": \"JOB_1746183600000\",\n    \"mastery_profile_id\": \"6630abc123def456789\",\n    \"status\": \"processing\",\n    \"n8n_response\": {\n        \"workflow_activated\": true,\n        \"execution_id\": \"exec_abc123\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/n8n/mastery",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "n8n", "mastery"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  }
+}

@@ -1,0 +1,808 @@
+{
+  "name": "LMG_sequential_v4",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "learner-profile",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1d887cfc-d61a-4ef6-a57c-8218dd3fe360",
+      "name": "Webhook \u2014 Receive Learner Profile",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -3712,
+        528
+      ],
+      "webhookId": "dc5d1f26-b678-449a-b758-1969f9991977",
+      "notes": "Receives JSON learner profile from Knowledge Analysis Agent (Component 01)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\n\nlet data = raw.body ?? raw;\nif (typeof data === 'string') {\n  try { data = JSON.parse(data); } catch(e) { throw new Error('Invalid JSON body: ' + e.message); }\n}\n\nlet body = data.test_cases ? data.test_cases[0].body : data;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch(e) {}\n}\n\nif (!body.student_id)       throw new Error('Missing: student_id');\nif (!body.mastery_profile)  throw new Error('Missing: mastery_profile');\nif (!Array.isArray(body.mastery_profile.knowledge_gaps)) throw new Error('knowledge_gaps must be an array');\nif (body.mastery_profile.knowledge_gaps.length === 0)    throw new Error('No knowledge gaps found');\n\nreturn [{\n  json: {\n    student_id:            String(body.student_id),\n    analysis_timestamp:    body.analysis_timestamp || new Date().toISOString(),\n    overall_mastery_score: body.mastery_profile.overall_mastery_score ?? null,\n    knowledge_gaps:        body.mastery_profile.knowledge_gaps,\n    strengths:             body.mastery_profile.strengths    || [],\n    recommendations:       body.recommendations              || {},\n    data_sources:          body.data_sources                 || {}\n  }\n}];"
+      },
+      "id": "f39e5c3b-f2c5-4d4f-89ab-ca3081fe9749",
+      "name": "Schema Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3488,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst DIFFICULTY_MAP = {\n  'FUNDAMENTAL_GAP': 'beginner',\n  'PARTIAL_GAP':     'intermediate',\n  'SURFACE_GAP':     'intermediate'\n};\nconst CONTENT_TYPE_MAP = {\n  'interactive_tutorial':  ['concept_explanation','step_by_step_tutorial','coding_examples'],\n  'step_by_step_practice': ['step_by_step_tutorial','debugging_task','practice_exercises'],\n  'targeted_quiz':         ['concept_summary','quiz','practice_exercises'],\n  'practice_exercises':    ['practice_exercises','coding_examples','quiz']\n};\n\nconst studentId    = String(data.student_id);\nconst masteryScore = data.overall_mastery_score ?? null;\n\nconst processedGaps = data.knowledge_gaps.map((gap, index) => {\n  const intervention        = gap.suggested_intervention || {};\n  const primaryIntervention = intervention.primary || 'interactive_tutorial';\n  const contentTypes        = CONTENT_TYPE_MAP[primaryIntervention] || ['concept_explanation','practice_exercises'];\n  return {\n    student_id:            studentId,\n    overall_mastery_score: masteryScore,\n    priority:              index + 1,\n    topic:                 gap.topic,\n    topic_id:              gap.topic_id,\n    gap_type:              gap.gap_type,\n    difficulty_level:      DIFFICULTY_MAP[gap.gap_type] || intervention.difficulty_level || 'beginner',\n    misconceptions:        gap.misconceptions           || [],\n    error_patterns:        gap.observed_error_patterns  || {},\n    evidence_summary:      gap.evidence_summary         || '',\n    prerequisite_topics:   gap.prerequisite_topics      || [],\n    related_topics:        gap.related_topics           || [],\n    learning_objectives:   intervention.learning_objectives || [],\n    content_types_to_generate: contentTypes,\n    estimated_time_minutes: intervention.estimated_time_minutes || 60,\n    primary_intervention:  primaryIntervention\n  };\n});\n\nreturn [{\n  json: {\n    student_id:            studentId,\n    analysis_timestamp:    data.analysis_timestamp,\n    overall_mastery_score: masteryScore,\n    strengths:             data.strengths,\n    processed_gaps:        processedGaps,\n    recommendations:       data.recommendations,\n    processing_timestamp:  new Date().toISOString()\n  }\n}];"
+      },
+      "id": "e04765d6-79f7-447e-b268-691400f124d7",
+      "name": "Profile Processing Module",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3264,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $json;\nconst gap  = item.gap || item;\n\nconst studentId    = gap.student_id    || item.student_id    || 'UNKNOWN';\nconst masteryScore = gap.overall_mastery_score ?? item.overall_mastery_score ?? 'N/A';\nconst topic        = gap.topic        || 'Unknown Topic';\nconst level        = gap.difficulty_level || 'beginner';\nconst gapType      = gap.gap_type     || 'FUNDAMENTAL_GAP';\n\nconst misconceptions = (gap.misconceptions || []).map((m,i) => `${i+1}. ${m}`).join('\\n');\nconst prereqs        = (gap.prerequisite_topics || []).join(', ') || 'None listed';\nconst relatedTopics  = (gap.related_topics || []).join(', ')       || 'advanced topics';\nconst relTopic0      = (gap.related_topics || [])[0] || 'advanced topics';\nconst objectives     = (gap.learning_objectives || []).map((o,i) => `${i+1}. ${o}`).join('\\n');\nconst evidence       = gap.evidence_summary || 'No evidence provided';\nconst errLines = Object.entries(gap.error_patterns || {}).map(([k,v]) =>\n  `  ${k}: ${Array.isArray(v) ? v.join(' | ') : JSON.stringify(v)}`\n).join('\\n');\n\nconst llmPrompt = `You are MENTORA, an expert Java educator. Generate a personalised Java lesson as ONE raw JSON object. No markdown. No backticks. Start with { end with }.\n\nSTUDENT: ${studentId} | Score: ${masteryScore}/100 | Level: ${level} | Topic: ${topic} (${gapType})\nKnows: ${prereqs} | Unlocks: ${relatedTopics}\nMISCONCEPTIONS:\\n${misconceptions}\nERROR PATTERNS:\\n${errLines}\nEVIDENCE: ${evidence}\nOBJECTIVES:\\n${objectives}\n\nJSON OUTPUT (all line breaks in strings must use \\\\n, all quotes inside strings must use \\\\\"):\n{\n  \"page_title\": \"Java ${topic} - MENTORA Tutorial\",\n  \"introduction\": {\"what_is_it\": \"2-3 sentences.\",\"why_learn_it\": \"2-3 sentences.\",\"prerequisite_note\": \"1 sentence about ${prereqs}.\"},\n  \"concept_explained\": {\"core_definition\": \"1 sentence.\",\"analogy\": \"3-4 sentence analogy.\",\"how_java_handles_it\": \"3-4 sentences.\",\"misconceptions_corrected\": \"For each: MISCONCEPTION [n]: ...\\\\nTHE TRUTH: ...\\\\nJAVA PROOF: 1-line example\\\\n\\\\n\"},\n  \"syntax_reference\": {\"basic_syntax\": \"Fundamental pattern using \\\\n.\",\"syntax_breakdown\": \"4+ numbered elements.\",\"important_rules\": \"3-5 numbered rules.\"},\n  \"examples\": {\n    \"example_1\": {\"title\": \"Basic ${topic}\",\"description\": \"1 sentence.\",\"code\": \"Complete runnable Java class 15-20 lines.\",\"output\": \"Exact console output.\",\"explanation\": \"3-5 sentences.\"},\n    \"example_2\": {\"title\": \"Real-World Use\",\"description\": \"1 sentence.\",\"code\": \"Complete Java class 20-25 lines.\",\"output\": \"Exact output.\",\"explanation\": \"Why this uses ${topic}.\"},\n    \"example_3_misconception_fix\": {\"title\": \"Mistake vs Fix\",\"description\": \"The mistake.\",\"wrong_code\": \"Broken snippet with // BUG.\",\"wrong_output\": \"Error or wrong output.\",\"correct_code\": \"Fixed version.\",\"correct_output\": \"Correct output.\",\"explanation\": \"What was wrong and why fix works.\"}\n  },\n  \"step_by_step_guide\": {\"overview\": \"1 paragraph.\",\"steps\": [\n    {\"step_number\": 1,\"title\": \"Understand the problem\",\"instruction\": \"2-3 sentences.\",\"java_tip\": \"1 tip.\"},\n    {\"step_number\": 2,\"title\": \"Identify the base case\",\"instruction\": \"2-3 sentences.\",\"java_tip\": \"1 tip.\"},\n    {\"step_number\": 3,\"title\": \"Define the recursive step\",\"instruction\": \"2-3 sentences.\",\"java_tip\": \"1 tip.\"},\n    {\"step_number\": 4,\"title\": \"Write and test the code\",\"instruction\": \"2-3 sentences.\",\"java_tip\": \"1 tip.\"},\n    {\"step_number\": 5,\"title\": \"Trace the execution manually\",\"instruction\": \"2-3 sentences.\",\"java_tip\": \"1 tip.\"}\n  ]},\n  \"common_mistakes\": [\n    {\"mistake_number\": 1,\"title\": \"Mistake 1\",\"description\": \"1-2 sentences.\",\"bad_code\": \"Snippet with // BUG.\",\"good_code\": \"Fixed.\",\"explanation\": \"Why.\"},\n    {\"mistake_number\": 2,\"title\": \"Mistake 2\",\"description\": \"1-2 sentences.\",\"bad_code\": \"Snippet with // BUG.\",\"good_code\": \"Fixed.\",\"explanation\": \"Why.\"},\n    {\"mistake_number\": 3,\"title\": \"Mistake 3\",\"description\": \"1-2 sentences.\",\"bad_code\": \"Snippet with // BUG.\",\"good_code\": \"Fixed.\",\"explanation\": \"Why.\"}\n  ],\n  \"debugging_exercise\": {\"title\": \"Debug This\",\"scenario\": \"2 sentences.\",\"broken_code\": \"Java class 15-18 lines with // BUG.\",\"error_output\": \"Exact error.\",\"hint\": \"Socratic question.\",\"solution_code\": \"Fixed class.\",\"solution_explanation\": \"WHAT WAS WRONG: ...\\\\nWHY IT BROKE: ...\\\\nWHY THE FIX WORKS: ...\\\\nHOW TO AVOID: ...\"},\n  \"quick_reference\": {\"cheat_sheet\": \"Key syntax + 3 rules + when to use.\",\"key_terms\": \"4-5 terms as TERM: definition separated by \\\\n.\"},\n  \"connections\": {\"builds_on\": \"1-2 sentences.\",\"unlocks\": \"1-2 sentences.\",\"real_world\": \"2-3 sentences.\"}\n}`;\n\nconst slmPrompt = `You are a Java assessor. Generate quiz and practice content as ONE raw JSON object. No markdown. No backticks. Start with { end with }.\n\nSTUDENT: ${studentId} | Topic: ${topic} | Level: ${level}\nMISCONCEPTIONS:\\n${misconceptions}\nEVIDENCE: ${evidence}\n\n{\n  \"quiz\": [\n    {\"question_number\": 1,\"type\": \"code_output\",\"question\": \"What is the output?\",\"code_snippet\": \"Java snippet.\",\"options\": [\"A) out\",\"B) wrong\",\"C) wrong\",\"D) wrong\"],\"correct\": \"A\",\"explanation\": \"Why A.\",\"misconception_targeted\": \"misconception 1\",\"difficulty\": \"${level}\"},\n    {\"question_number\": 2,\"type\": \"conceptual\",\"question\": \"Scenario question.\",\"options\": [\"A)\",\"B)\",\"C)\",\"D)\"],\"correct\": \"B\",\"explanation\": \"3-4 sentences.\",\"misconception_targeted\": \"misconception 2\",\"difficulty\": \"${level}\"},\n    {\"question_number\": 3,\"type\": \"complete_the_code\",\"question\": \"Complete this code.\",\"code_snippet\": \"Partial Java with ___BLANK___.\",\"options\": [\"A)\",\"B)\",\"C)\",\"D)\"],\"correct\": \"C\",\"explanation\": \"Why C.\",\"misconception_targeted\": \"misconception 3\",\"difficulty\": \"${level}\"}\n  ],\n  \"concept_summary\": \"WHAT IS ${topic.toUpperCase()}?\\\\n[definition]\\\\n\\\\nKEY RULE:\\\\n[rule]\\\\n\\\\nREMEMBER:\\\\n\u2022 [point 1]\\\\n\u2022 [point 2]\\\\n\u2022 [point 3]\",\n  \"practice_challenge\": {\"title\": \"Practice: ${topic}\",\"difficulty\": \"${level}\",\"time_estimate\": \"15-20 minutes\",\"problem_statement\": \"2-3 sentences.\",\"requirements\": [\"Core functionality\",\"Edge case\",\"Input validation\"],\"starter_code\": \"Java skeleton with TODOs.\",\"example_input\": \"Sample input\",\"expected_output\": \"Expected output\",\"bonus\": \"Optional extension.\"},\n  \"self_check\": {\"can_you\": [\"Can you explain ${topic}?\",\"Can you write a solution?\",\"Can you trace execution?\",\"Can you find the bug?\",\"Can you explain when to use ${topic}?\"],\"if_stuck\": \"2-3 sentences of advice.\"}\n}`;\n\nreturn [{\n  json: {\n    ...item,\n    student_id:            studentId,\n    overall_mastery_score: masteryScore,\n    gap:                   gap,\n    llm_prompt:            llmPrompt,\n    slm_prompt:            slmPrompt,\n    prompt_generated_at:   new Date().toISOString(),\n    agent_retry_count:     0,\n    agent_state:           'initial'\n  }\n}];\n"
+      },
+      "id": "c88aa50f-80ef-4493-ab79-6d288e0a6951",
+      "name": "Prompt Construction Module",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2320,
+        528
+      ],
+      "notes": "V17 Agentic: Adds agent_retry_count and agent_state tracking fields for agentic loop control."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.102:11434/api/chat",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', messages: [{ role: 'system', content: 'You are MENTORA, an expert Java programming educator. Generate a complete W3Schools-quality Java lesson personalised to this student. CRITICAL: respond with ONE raw JSON object ONLY. Start with { end with }. No markdown. No code fences. No backticks. No text before or after the JSON.' }, { role: 'user', content: $json.llm_prompt }], stream: false }) }}",
+        "options": {
+          "timeout": 240000
+        }
+      },
+      "id": "27c29cfc-ec50-4fa8-9609-0e505ea19fd9",
+      "name": "LLM \u2014 Qwen2.5-Coder via Ollama (Explanation + Tutorial)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -2384,
+        336
+      ],
+      "notes": "Timeout: 240s. onError=continueRegularOutput so a timeout skips to Parse (which handles empty gracefully).",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item     = $input.first().json;\nconst upstream = $('Prompt Construction Module').first().json;\n\nconst raw = (item.message?.content || item.response || '').trim();\n\nfunction stripFences(s) {\n  return s.replace(/^```json\\s*/gi, '').replace(/^```\\s*/gi, '').replace(/\\s*```$/gi, '').replace(/^`+/g, '').replace(/`+$/g, '').trim();\n}\n\nfunction findOutermostObject(s) {\n  const start = s.indexOf('{');\n  if (start === -1) return null;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === '{') depth++;\n    else if (s[i] === '}') { depth--; if (depth === 0) return s.substring(start, i + 1); }\n  }\n  const lastClose = s.lastIndexOf('}');\n  if (lastClose > start) return s.substring(start, lastClose + 1);\n  return null;\n}\n\nfunction extractField(s, fieldName, type) {\n  if (type === 'string') {\n    const re = new RegExp('\"' + fieldName + '\"\\\\s*:\\\\s*\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"', 's');\n    const m = s.match(re);\n    return m ? m[1].replace(/\\\\n/g,'\\n').replace(/\\\\\"/g,'\"') : null;\n  }\n  const bracket = type === 'array' ? '[' : '{';\n  const closeBracket = type === 'array' ? ']' : '}';\n  const re = new RegExp('\"' + fieldName + '\"\\\\s*:\\\\s*(\\\\' + bracket + ')');\n  const m = re.exec(s);\n  if (!m) return null;\n  let start = m.index + m[0].length - 1;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === bracket) depth++;\n    else if (s[i] === closeBracket) { depth--; if (depth === 0) { try { return JSON.parse(s.substring(start, i+1)); } catch(e) { return null; } } }\n  }\n  return null;\n}\n\nlet llmContent = null;\nlet parseError  = null;\nconst cleaned   = stripFences(raw);\nconst candidate = findOutermostObject(cleaned);\n\nif (candidate) {\n  try {\n    llmContent = JSON.parse(candidate);\n  } catch(e) {\n    parseError = 'JSON.parse failed: ' + e.message;\n    const partial = {};\n    ['page_title'].forEach(f => { partial[f] = extractField(candidate, f, 'string'); });\n    ['introduction','concept_explained','syntax_reference','examples','step_by_step_guide','debugging_exercise','quick_reference','connections'].forEach(f => { partial[f] = extractField(candidate, f, 'object'); });\n    ['common_mistakes'].forEach(f => { partial[f] = extractField(candidate, f, 'array'); });\n    const filledCount = Object.values(partial).filter(v => v !== null).length;\n    if (filledCount > 0) {\n      partial._extraction_method = 'field_by_field_fallback';\n      partial._fields_recovered  = filledCount;\n      llmContent = partial;\n      parseError += ` | fallback recovered ${filledCount} fields`;\n    } else {\n      llmContent = { parse_failed: true, raw_response: raw.substring(0, 3000), error: parseError };\n    }\n  }\n} else {\n  parseError = 'No JSON object found';\n  llmContent  = { parse_failed: true, raw_response: raw.substring(0, 3000), error: parseError };\n}\n\nreturn [{\n  json: {\n    student_id:            upstream.student_id,\n    gap:                   upstream.gap,\n    overall_mastery_score: upstream.overall_mastery_score,\n    llm_output:            llmContent,\n    llm_parse_error:       parseError,\n    llm_model:             'qwen2.5-coder:7b',\n    llm_responded_at:      new Date().toISOString(),\n    agent_retry_count:     upstream.agent_retry_count || 0,\n    agent_state:           upstream.agent_state || 'initial',\n    llm_prompt:            upstream.llm_prompt,\n    slm_prompt:            upstream.slm_prompt\n  }\n}];\n"
+      },
+      "id": "ec1d79e7-4e01-4738-a3d4-45ae56dedb18",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2160,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// \u2500\u2500 QUALITY REVIEW AGENT V17 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// This is the core agentic component: it evaluates LLM output quality,\n// decides autonomously whether to ACCEPT, RETRY with refined prompt,\n// or PATCH missing fields \u2014 without human intervention.\n\nconst item = $input.first().json;\nconst llm  = item.llm_output || {};\nconst gap  = item.gap || {};\nconst retryCount = item.agent_retry_count || 0;\nconst MAX_RETRIES = 2;\n\n// \u2500\u2500 Quality scoring criteria \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst checks = {\n  has_title:          !!llm.page_title,\n  has_introduction:   !!(llm.introduction?.what_is_it),\n  has_concept:        !!(llm.concept_explained?.core_definition),\n  has_syntax:         !!(llm.syntax_reference?.basic_syntax),\n  has_examples:       !!(llm.examples?.example_1?.code),\n  has_steps:          Array.isArray(llm.step_by_step_guide?.steps) && llm.step_by_step_guide.steps.length >= 3,\n  has_debug_exercise: !!(llm.debugging_exercise?.broken_code),\n  has_mistakes:       Array.isArray(llm.common_mistakes) && llm.common_mistakes.length >= 2,\n  no_parse_fail:      !llm.parse_failed,\n  no_empty_codes:     !!(llm.examples?.example_1?.code?.length > 50)\n};\n\nconst passedChecks = Object.values(checks).filter(Boolean).length;\nconst totalChecks  = Object.keys(checks).length;\nconst qualityScore = Math.round((passedChecks / totalChecks) * 100);\n\n// \u2500\u2500 Agent Decision Logic \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nlet agentDecision;\nlet refinedPromptAddition = '';\n\nif (qualityScore >= 80) {\n  // High quality \u2014 accept and proceed\n  agentDecision = 'ACCEPT';\n} else if (retryCount < MAX_RETRIES) {\n  // Subpar quality \u2014 agent decides to retry with targeted refinement\n  agentDecision = 'RETRY';\n\n  // Agent intelligently identifies WHICH fields are missing and refines the prompt\n  const missing = Object.entries(checks).filter(([k,v]) => !v).map(([k]) => k);\n  refinedPromptAddition = `\n\n\u26a0\ufe0f QUALITY AGENT FEEDBACK (Retry ${retryCount + 1}/${MAX_RETRIES}):\nThe previous response was incomplete. You MUST include these missing sections:\n${missing.map(m => `- ${m.replace(/_/g,' ')}`).join('\\n')}\n\nFor debugging_exercise: include broken_code (15+ lines with // BUG) and solution_code.\nFor common_mistakes: include at least 3 objects with bad_code and good_code.\nFor examples.example_1.code: write a FULL runnable Java class, minimum 15 lines.\nQuality score was ${qualityScore}/100. Target is 80+. Be thorough and complete.`;\n} else {\n  // Max retries exhausted \u2014 accept whatever we have with patch flag\n  agentDecision = 'ACCEPT_WITH_PATCH';\n}\n\n// \u2500\u2500 Patch missing fields with intelligent defaults \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nif (agentDecision === 'ACCEPT_WITH_PATCH') {\n  const topic = gap.topic || 'Java Concept';\n  if (!llm.page_title) llm.page_title = `Java ${topic} - MENTORA Tutorial`;\n  if (!llm.introduction) llm.introduction = { what_is_it: `${topic} is an important Java concept.`, why_learn_it: 'Understanding this concept is essential for Java development.', prerequisite_note: 'Basic Java knowledge required.' };\n  if (!llm.quick_reference) llm.quick_reference = { cheat_sheet: `Quick reference for ${topic}: review the examples above.`, key_terms: `${topic}: The main concept covered in this lesson.` };\n  if (!llm.connections) llm.connections = { builds_on: 'Prerequisites apply here.', unlocks: 'This enables advanced Java topics.', real_world: `${topic} is used extensively in Java applications.` };\n}\n\nconsole.log(`[Quality Agent] Student: ${item.student_id} | Topic: ${gap.topic} | Score: ${qualityScore}/100 | Decision: ${agentDecision} | Retry: ${retryCount}`);\n\nreturn [{\n  json: {\n    ...item,\n    llm_output:              agentDecision === 'RETRY' ? item.llm_output : llm,\n    agent_decision:          agentDecision,\n    agent_quality_score:     qualityScore,\n    agent_quality_checks:    checks,\n    agent_retry_count:       retryCount,\n    agent_refined_prompt:    agentDecision === 'RETRY' ? (item.llm_prompt + refinedPromptAddition) : item.llm_prompt,\n    agent_decision_reason:   `Quality score ${qualityScore}/100 (${passedChecks}/${totalChecks} checks passed)`,\n    agent_evaluated_at:      new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "3faa720a-b8fd-477f-8491-68a0ae41ecdb",
+      "name": "\ud83e\udd16 Quality Review Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        336
+      ],
+      "notes": "V17 AGENTIC: Autonomously evaluates LLM output quality (10 checks), scores it 0-100, and decides: ACCEPT (\u226580), RETRY with targeted prompt refinement (<80, retries\u22642), or ACCEPT_WITH_PATCH (max retries hit). Core agentic loop controller."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent_decision }}",
+              "value2": "RETRY"
+            }
+          ]
+        }
+      },
+      "id": "963e1346-cb8d-4b02-877a-9fca2839cb53",
+      "name": "Agent Decision Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        336
+      ],
+      "notes": "V17 AGENTIC: Routes based on Quality Review Agent decision. TRUE=RETRY loop, FALSE=proceed to merge."
+    },
+    {
+      "parameters": {
+        "jsCode": "// \u2500\u2500 ADAPTIVE RETRY AGENT V17 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Prepares the refined prompt for the retry LLM call.\n// Increments retry counter and updates state for traceability.\n\nconst item = $input.first().json;\n\nconsole.log(`[Retry Agent] Preparing retry ${(item.agent_retry_count||0)+1} for student ${item.student_id}, topic: ${item.gap?.topic}`);\n\nreturn [{\n  json: {\n    ...item,\n    llm_prompt:        item.agent_refined_prompt,\n    agent_retry_count: (item.agent_retry_count || 0) + 1,\n    agent_state:       'retry_' + ((item.agent_retry_count || 0) + 1),\n    retry_initiated_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "b3e3fb1a-9e18-4608-9d9b-8b705115c1db",
+      "name": "\ud83d\udd04 Adaptive Retry Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        144
+      ],
+      "notes": "V17 AGENTIC: Increments retry counter, injects refined prompt, updates agent_state. Feeds back into LLM node for another generation attempt."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.102:11434/api/chat",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', messages: [{ role: 'system', content: 'You are MENTORA, an expert Java programming educator. A quality agent found your previous response incomplete. Generate a COMPLETE response this time. ONE raw JSON object ONLY.' }, { role: 'user', content: $json.llm_prompt }], stream: false }) }}",
+        "options": {
+          "timeout": 200000
+        }
+      },
+      "id": "b3ccd170-b7c0-47ae-801c-f86cd0e08fde",
+      "name": "LLM \u2014 Retry Call (Qwen2.5-Coder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -1200,
+        144
+      ],
+      "notes": "Retry timeout: 200s. onError=continueRegularOutput.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the retry LLM response \u2014 same robust logic as the primary parser\nconst item     = $input.first().json;\nconst upstream = $('Adaptive Retry Agent').first().json;\n\nconst raw = (item.message?.content || item.response || '').trim();\n\nfunction stripFences(s) { return s.replace(/^```json\\s*/gi,'').replace(/^```\\s*/gi,'').replace(/\\s*```$/gi,'').trim(); }\nfunction findOutermostObject(s) {\n  const start = s.indexOf('{'); if (start === -1) return null;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === '{') depth++;\n    else if (s[i] === '}') { depth--; if (depth === 0) return s.substring(start, i+1); }\n  }\n  const last = s.lastIndexOf('}');\n  return last > start ? s.substring(start, last+1) : null;\n}\n\nlet llmContent = null, parseError = null;\nconst candidate = findOutermostObject(stripFences(raw));\nif (candidate) {\n  try { llmContent = JSON.parse(candidate); }\n  catch(e) { parseError = e.message; llmContent = { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError }; }\n} else {\n  parseError = 'No JSON object found in retry response';\n  llmContent  = { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError };\n}\n\nreturn [{\n  json: {\n    ...upstream,\n    llm_output:       llmContent,\n    llm_parse_error:  parseError,\n    llm_model:        'qwen2.5-coder:7b',\n    llm_responded_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "aa3832cc-462a-422e-99cf-adb3ff38d962",
+      "name": "Parse Retry LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        144
+      ],
+      "notes": "V17 AGENTIC: Parses the retry response and feeds BACK into the Quality Review Agent for re-evaluation."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.102:11434/api/chat",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', messages: [{ role: 'system', content: 'You are a Java programming assessor. Generate quiz and practice assessment content. CRITICAL: respond with ONE raw JSON object ONLY. Start with { end with }. No markdown. No code fences. No backticks.' }, { role: 'user', content: $json.slm_prompt }], stream: false }) }}",
+        "options": {
+          "timeout": 150000
+        }
+      },
+      "id": "469c383f-8c9b-4daa-b52a-41c2551d9714",
+      "name": "LLM \u2014 Qwen2.5-Coder (Assessment + Quiz)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -2384,
+        688
+      ],
+      "notes": "Timeout: 150s. onError=continueRegularOutput.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item     = $input.first().json;\nconst upstream = $('Prompt Construction Module').first().json;\n\nconst raw = (item.message?.content || item.response || '').trim();\n\nfunction stripFences(s) { return s.replace(/^```json\\s*/gi,'').replace(/^```\\s*/gi,'').replace(/\\s*```$/gi,'').trim(); }\nfunction findOutermostObject(s) {\n  const start = s.indexOf('{'); if (start === -1) return null;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === '{') depth++; else if (s[i] === '}') { depth--; if (depth === 0) return s.substring(start, i+1); }\n  }\n  const last = s.lastIndexOf('}');\n  return last > start ? s.substring(start, last+1) : null;\n}\n\nfunction extractField(s, fieldName, type) {\n  if (type === 'string') {\n    const re = new RegExp('\"' + fieldName + '\"\\\\s*:\\\\s*\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"', 's');\n    const m = s.match(re);\n    return m ? m[1].replace(/\\\\n/g,'\\n').replace(/\\\\\"/g,'\"') : null;\n  }\n  const b = type==='array'?'[':'{';\n  const cb = type==='array'?']':'}';\n  const re = new RegExp('\"'+fieldName+'\"\\\\s*:\\\\s*(\\\\'+b+')');\n  const m = re.exec(s); if (!m) return null;\n  let start = m.index+m[0].length-1, depth=0;\n  for (let i=start;i<s.length;i++) {\n    if (s[i]===b) depth++; else if (s[i]===cb) { depth--; if (depth===0) { try { return JSON.parse(s.substring(start,i+1)); } catch(e) { return null; } } }\n  }\n  return null;\n}\n\nlet slmContent = null, parseError = null;\nconst candidate = findOutermostObject(stripFences(raw));\nif (candidate) {\n  try { slmContent = JSON.parse(candidate); }\n  catch(e) {\n    parseError = 'JSON.parse failed: ' + e.message;\n    const partial = {};\n    partial.quiz               = extractField(candidate, 'quiz', 'array');\n    partial.concept_summary    = extractField(candidate, 'concept_summary', 'string');\n    partial.practice_challenge = extractField(candidate, 'practice_challenge', 'object');\n    partial.self_check         = extractField(candidate, 'self_check', 'object');\n    const count = Object.values(partial).filter(v=>v!==null).length;\n    slmContent = count > 0 ? { ...partial, _extraction_method: 'fallback' } : { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError };\n  }\n} else {\n  parseError = 'No JSON found';\n  slmContent  = { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError };\n}\n\nreturn [{ json: { student_id: upstream.student_id, gap: upstream.gap, slm_output: slmContent, slm_parse_error: parseError, slm_model: 'qwen2.5-coder:7b', slm_responded_at: new Date().toISOString() } }];\n"
+      },
+      "id": "19eb9fed-1ac6-443f-ae61-9b23e148c68e",
+      "name": "Parse SLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2160,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// \u2500\u2500 CONTENT VALIDATION AGENT V17 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Agentic validator that checks SLM (assessment) output quality.\n// Autonomously patches missing quiz/practice fields with sensible defaults\n// rather than failing silently.\n\nconst item = $input.first().json;\nconst slm  = item.slm_output || {};\nconst gap  = item.gap || {};\nconst topic = gap.topic || 'Java Concept';\nconst level = gap.difficulty_level || 'beginner';\n\nconst validationChecks = {\n  has_quiz:              Array.isArray(slm.quiz) && slm.quiz.length >= 3,\n  has_quiz_explanations: Array.isArray(slm.quiz) && slm.quiz.every(q => !!q.explanation),\n  has_concept_summary:   !!(slm.concept_summary && slm.concept_summary.length > 50),\n  has_practice:          !!(slm.practice_challenge?.problem_statement),\n  has_starter_code:      !!(slm.practice_challenge?.starter_code),\n  has_self_check:        Array.isArray(slm.self_check?.can_you) && slm.self_check.can_you.length >= 3,\n  no_parse_fail:         !slm.parse_failed\n};\n\nconst validScore = Math.round((Object.values(validationChecks).filter(Boolean).length / Object.keys(validationChecks).length) * 100);\n\n// Agent auto-patches missing assessment content\nconst patched = { ...slm };\n\nif (!validationChecks.has_quiz || !Array.isArray(patched.quiz)) {\n  patched.quiz = [\n    { question_number: 1, type: 'conceptual', question: `What is the primary purpose of ${topic} in Java?`, options: ['A) Memory management', 'B) Code organization and reusability', 'C) Exception handling', 'D) Thread synchronization'], correct: 'B', explanation: `${topic} is primarily used for code organization and reusability in Java.`, misconception_targeted: 'general concept', difficulty: level },\n    { question_number: 2, type: 'conceptual', question: `When should you use ${topic} in Java?`, options: ['A) Always', 'B) Never', 'C) When solving problems that have self-similar sub-problems', 'D) Only in legacy code'], correct: 'C', explanation: `Use ${topic} when the problem can be broken down into smaller, similar sub-problems.`, misconception_targeted: 'use case', difficulty: level },\n    { question_number: 3, type: 'conceptual', question: `Which of the following is most important when implementing ${topic}?`, options: ['A) Performance only', 'B) A proper base/termination case', 'C) Using global variables', 'D) Avoiding return values'], correct: 'B', explanation: `A proper termination condition is critical to prevent infinite loops in ${topic}.`, misconception_targeted: 'base case', difficulty: level }\n  ];\n  patched._quiz_patched = true;\n}\n\nif (!validationChecks.has_concept_summary) {\n  patched.concept_summary = `WHAT IS ${topic.toUpperCase()}?\\nA fundamental Java programming concept that enables modular, reusable code.\\n\\nKEY RULE:\\nAlways define a clear termination condition.\\n\\nREMEMBER:\\n\u2022 Break the problem into smaller sub-problems\\n\u2022 Ensure every path has a return value\\n\u2022 Test with small inputs first`;\n  patched._summary_patched = true;\n}\n\nif (!validationChecks.has_practice) {\n  patched.practice_challenge = { title: `Practice: ${topic}`, difficulty: level, time_estimate: '20 minutes', problem_statement: `Implement a ${topic} solution in Java. Your solution should correctly handle edge cases and produce the expected output.`, requirements: ['Correct base case handling', 'Proper recursive structure', 'Input validation'], starter_code: `public class Practice${topic.replace(/\\s/g,'')} {\\n    public static void main(String[] args) {\\n        // TODO: Test your implementation\\n    }\\n    // TODO: Implement your solution\\n}`, example_input: '5', expected_output: 'Solution output for input 5', bonus: `Extend your solution to handle ${gap.related_topics?.[0] || 'additional edge cases'}.` };\n  patched._practice_patched = true;\n}\n\nif (!validationChecks.has_self_check) {\n  patched.self_check = { can_you: [`Can you explain ${topic} to someone new?`, `Can you write a ${topic} solution without help?`, `Can you trace execution step by step?`, `Can you spot a bug in a broken implementation?`, `Can you explain when to use ${topic} vs alternatives?`], if_stuck: `Review the concept_explanation and examples again. Try tracing through a simple example by hand before coding.` };\n  patched._self_check_patched = true;\n}\n\nconsole.log(`[Content Validation Agent] Student: ${item.student_id} | Topic: ${topic} | Score: ${validScore}/100 | Patches: ${JSON.stringify(Object.keys(patched).filter(k=>k.includes('_patched')))}`);\n\nreturn [{\n  json: {\n    ...item,\n    slm_output:                      patched,\n    content_validation_score:        validScore,\n    content_validation_checks:       validationChecks,\n    content_validation_agent_ran_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "f9a03860-1aec-4b91-9730-f485e2cab03a",
+      "name": "\ud83e\udd16 Content Validation Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        688
+      ],
+      "notes": "V17 AGENTIC: Validates SLM (assessment) output with 7 quality checks. Autonomously patches missing quiz questions, concept summaries, practice challenges, and self-check items \u2014 ensuring always-complete output."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "7197ba0b-7e46-4468-9b52-bb54ca698fd6",
+      "name": "Merge LLM + SLM Outputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        480
+      ],
+      "notes": "V17: Waits for BOTH the accepted LLM output and validated SLM output before continuing."
+    },
+    {
+      "parameters": {
+        "jsCode": "const all     = $input.all();\nconst llmItem = all.find(i => i.json.llm_output !== undefined)?.json ?? {};\nconst slmItem = all.find(i => i.json.slm_output !== undefined)?.json ?? {};\n\nconst studentId = llmItem.student_id || slmItem.student_id || 'unknown';\nconst gap       = llmItem.gap        || slmItem.gap        || {};\nconst llm       = llmItem.llm_output || {};\nconst slm       = slmItem.slm_output || {};\n\nconst materialId  = `${studentId}_${gap.topic_id || 'unknown'}_${Date.now()}`;\nconst generatedAt = new Date().toISOString();\n\nconst structuredMaterial = {\n  material_id:   materialId,\n  student_id:    studentId,\n  topic:         gap.topic,\n  topic_id:      gap.topic_id,\n  gap_type:      gap.gap_type,\n  difficulty_level: gap.difficulty_level,\n  generated_at:  generatedAt,\n\n  generation_models: {\n    llm: llmItem.llm_model || 'qwen2.5-coder:7b',\n    slm: slmItem.slm_model || 'qwen2.5-coder:7b'\n  },\n\n  // \u2500\u2500 Full W3Schools-style lesson (from LLM) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  lesson: {\n    page_title:            llm.page_title            || null,\n    introduction:          llm.introduction          || null,\n    concept_explained:     llm.concept_explained     || null,\n    syntax_reference:      llm.syntax_reference      || null,\n    examples:              llm.examples              || null,\n    step_by_step_guide:    llm.step_by_step_guide    || null,\n    common_mistakes:       llm.common_mistakes        || [],\n    debugging_exercise:    llm.debugging_exercise    || null,\n    quick_reference:       llm.quick_reference       || null,\n    connections:           llm.connections           || null\n  },\n\n  // \u2500\u2500 Assessment content (from SLM + Content Validation Agent) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  assessment: {\n    quiz:               slm.quiz             || [],\n    concept_summary:    slm.concept_summary  || null,\n    practice_challenge: slm.practice_challenge || null,\n    self_check:         slm.self_check       || null\n  },\n\n  // \u2500\u2500 Personalisation metadata \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  personalisation: {\n    misconceptions_targeted: gap.misconceptions      || [],\n    error_patterns:          gap.error_patterns      || {},\n    evidence_summary:        gap.evidence_summary    || null,\n    prerequisite_topics:     gap.prerequisite_topics || [],\n    related_topics:          gap.related_topics      || []\n  },\n\n  // \u2500\u2500 Study plan \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  study_plan: {\n    estimated_minutes:   gap.estimated_time_minutes || 60,\n    learning_objectives: gap.learning_objectives    || [],\n    suggested_sequence: [\n      { step: 1, activity: 'Read introduction and concept_explained', duration_min: 10, focus: 'Build intuition and correct misconceptions' },\n      { step: 2, activity: 'Follow step_by_step_guide', duration_min: 15, focus: 'Understand the design process' },\n      { step: 3, activity: 'Study examples (all 3)', duration_min: 10, focus: 'See correct and incorrect patterns' },\n      { step: 4, activity: 'Complete debugging_exercise', duration_min: 15, focus: 'Apply understanding to find bugs' },\n      { step: 5, activity: 'Answer quiz questions', duration_min: 10, focus: 'Verify conceptual understanding' },\n      { step: 6, activity: 'Attempt practice_challenge', duration_min: null, focus: 'Independent application' }\n    ],\n    prerequisite_review: gap.prerequisite_topics || []\n  },\n\n  // \u2500\u2500 Agentic AI metadata \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  agentic_metadata: {\n    quality_review_agent: {\n      decision:      llmItem.agent_decision          || 'ACCEPT',\n      quality_score: llmItem.agent_quality_score     || null,\n      checks:        llmItem.agent_quality_checks    || {},\n      retry_count:   llmItem.agent_retry_count       || 0,\n      final_state:   llmItem.agent_state             || 'initial',\n      evaluated_at:  llmItem.agent_evaluated_at      || null,\n      reason:        llmItem.agent_decision_reason   || null\n    },\n    content_validation_agent: {\n      validation_score:  slmItem.content_validation_score   || null,\n      checks:            slmItem.content_validation_checks  || {},\n      patches_applied:   Object.keys(slmItem.slm_output || {}).filter(k => k.includes('_patched')),\n      validated_at:      slmItem.content_validation_agent_ran_at || null\n    }\n  },\n\n  // \u2500\u2500 Quality metadata \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  quality_flags: {\n    llm_parse_failed:          !!llmItem.llm_parse_error,\n    slm_parse_failed:          !!slmItem.slm_parse_error,\n    agent_retried:             (llmItem.agent_retry_count || 0) > 0,\n    agent_patched_llm:         llmItem.agent_decision === 'ACCEPT_WITH_PATCH',\n    agent_patched_slm:         Object.keys(slmItem.slm_output || {}).some(k => k.includes('_patched')),\n    needs_review:              !!(llmItem.llm_parse_error || slmItem.slm_parse_error || llm.parse_failed || slm.parse_failed),\n    overall_quality_score:     Math.round(((llmItem.agent_quality_score || 0) + (slmItem.content_validation_score || 0)) / 2),\n    content_completeness: {\n      has_introduction:        !!(llm.introduction?.what_is_it),\n      has_concept_explained:   !!(llm.concept_explained?.core_definition),\n      has_syntax:              !!(llm.syntax_reference?.basic_syntax),\n      has_examples:            !!(llm.examples?.example_1?.code),\n      has_step_guide:          Array.isArray(llm.step_by_step_guide?.steps),\n      has_debug_exercise:      !!(llm.debugging_exercise?.broken_code),\n      has_quiz:                (slm.quiz || []).length >= 3,\n      has_practice:            !!(slm.practice_challenge?.problem_statement),\n      has_self_check:          Array.isArray(slm.self_check?.can_you)\n    }\n  }\n};\n\nconst comparisonLog = {\n  log_id:                     `comp_${materialId}`,\n  student_id:                 studentId,\n  topic:                      gap.topic,\n  llm_model:                  llmItem.llm_model,\n  slm_model:                  slmItem.slm_model,\n  llm_responded_at:           llmItem.llm_responded_at,\n  slm_responded_at:           slmItem.slm_responded_at,\n  llm_parse_error:            llmItem.llm_parse_error  || null,\n  slm_parse_error:            slmItem.slm_parse_error  || null,\n  agent_quality_score:        llmItem.agent_quality_score,\n  content_validation_score:   slmItem.content_validation_score,\n  agent_retry_count:          llmItem.agent_retry_count,\n  timestamp:                  generatedAt\n};\n\nreturn [{ json: { structured_material: structuredMaterial, comparison_log: comparisonLog } }];"
+      },
+      "id": "a7a58027-ab50-4cf4-aeaf-dce71d315791",
+      "name": "Content Structuring Module",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        480
+      ],
+      "notes": "V17: Extended to include agentic_metadata block \u2014 tracks Quality Review Agent decisions, Content Validation Agent patches, retry counts, and overall quality scores."
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "learning_materials",
+        "fields": "=structured_material",
+        "options": {}
+      },
+      "id": "32e37fb0-3ca6-4ab6-8dd5-0cc0c3ce2780",
+      "name": "MongoDB \u2014 Store Learning Material",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        368
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "ALsYtxgQmJStr4TR",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "model_comparison_logs",
+        "fields": "=comparison_log",
+        "options": {}
+      },
+      "id": "81fe9b30-66d3-49ba-9ad1-3220d37a723a",
+      "name": "MongoDB \u2014 Log LLM vs SLM Comparison",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        592
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "ALsYtxgQmJStr4TR",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $input.first().json;\nconst errorLog = {\n  error_id:      `err_${Date.now()}`,\n  student_id:    errorData.student_id || 'unknown',\n  error_message: errorData.error?.message || 'Unknown error',\n  error_node:    errorData.execution?.lastNode || 'unknown',\n  timestamp:     new Date().toISOString(),\n  raw_payload:   JSON.stringify(errorData).substring(0, 500)\n};\nconsole.error('Pipeline error:', JSON.stringify(errorLog));\nreturn [{ json: errorLog }];"
+      },
+      "id": "bb1a9e0f-6a94-41ee-85bd-8b3d9f3c3112",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2624,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: 'Material generation failed', error_id: $json.error_id, details: $json.error_message }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "06104672-4541-4859-879f-f1263a7269bf",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "path": "materials/:studentId",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fb77ddf8-a923-4a29-9a2f-909e47f5f476",
+      "name": "Webhook \u2014 GET Materials by Student",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -3712,
+        880
+      ],
+      "webhookId": "452fd522-1145-41d0-b4e6-147f9323d11d"
+    },
+    {
+      "parameters": {
+        "collection": "learning_materials",
+        "options": {
+          "limit": 20,
+          "sort": "{ \"generated_at\": -1 }"
+        },
+        "query": "={ \"student_id\": \"{{ $json.params.studentId }}\" }"
+      },
+      "id": "6e5ac944-9316-4c56-b34a-46358f4950b1",
+      "name": "MongoDB \u2014 Fetch Materials",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -3488,
+        880
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "ALsYtxgQmJStr4TR",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e2030f0d-8a72-4ecf-832b-f42681377d13",
+      "name": "Return Materials List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -3264,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize the sequential loop state.\n// Attach current_index=0 so the first gap is processed first.\nconst item = $json;\n\nif (!Array.isArray(item.processed_gaps) || item.processed_gaps.length === 0) {\n  throw new Error('No processed_gaps found. Check Profile Processing Module.');\n}\n\nreturn [{\n  json: {\n    ...item,\n    current_index: 0,\n    total_gaps: item.processed_gaps.length\n  }\n}];\n"
+      },
+      "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
+      "name": "Initialize Loop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2950,
+        528
+      ],
+      "notes": "Sets current_index=0 and total_gaps. Starts the sequential gap loop."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the gap at current_index from processed_gaps.\n// This is the single gap that will go through the full pipeline.\nconst item = $json;\n\nconst idx  = item.current_index;\nconst gap  = item.processed_gaps[idx];\n\nif (!gap) throw new Error(`Get Current Gap: no gap at index ${idx}`);\n\nconsole.log(`[Loop] Processing gap ${idx + 1}/${item.total_gaps}: ${gap.topic}`);\n\nreturn [{\n  json: {\n    // Carry loop state forward so Increment Index can use it\n    processed_gaps:        item.processed_gaps,\n    current_index:         idx,\n    total_gaps:            item.total_gaps,\n    student_id:            gap.student_id,\n    overall_mastery_score: gap.overall_mastery_score,\n    gap:                   gap\n  }\n}];\n"
+      },
+      "id": "f6a7b8c9-d0e1-2345-fabc-456789012345",
+      "name": "Get Current Gap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2750,
+        528
+      ],
+      "notes": "Reads processed_gaps[current_index]. Passes ONE gap into the pipeline."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Called after MongoDB stores the current gap's material.\n// Increments current_index and carries processed_gaps forward.\n// The Check If Done node decides whether to loop or stop.\n\n// Get the loop state from Get Current Gap (carried through the whole pipeline)\nconst loopState = $('Get Current Gap').first().json;\n\nconst nextIndex = (loopState.current_index || 0) + 1;\n\nconsole.log(`[Loop] Gap ${loopState.current_index + 1}/${loopState.total_gaps} done. Next index: ${nextIndex}`);\n\nreturn [{\n  json: {\n    processed_gaps: loopState.processed_gaps,\n    current_index:  nextIndex,\n    total_gaps:     loopState.total_gaps,\n    student_id:     loopState.student_id\n  }\n}];\n"
+      },
+      "id": "a7b8c9d0-e1f2-3456-abcd-567890123456",
+      "name": "Increment Index",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        368
+      ],
+      "notes": "Increments current_index after each gap is stored. Feeds into Check If Done."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.current_index }}",
+              "operation": "smaller",
+              "value2": "={{ $json.total_gaps }}"
+            }
+          ]
+        }
+      },
+      "id": "b8c9d0e1-f2a3-4567-bcde-678901234567",
+      "name": "Check If Done",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        368
+      ],
+      "notes": "TRUE = more gaps remain \u2192 loop back to Get Current Gap. FALSE = all done \u2192 send final HTTP response."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'success',\n  message: 'All knowledge gaps processed sequentially (Agentic AI V17)',\n  student_id: $json.student_id,\n  gaps_processed: $json.total_gaps,\n  completed_at: new Date().toISOString()\n}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "c9d0e1f2-a3b4-5678-cdef-789012345678",
+      "name": "Final Response \u2014 All Gaps Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        528
+      ],
+      "notes": "Fires ONCE when current_index >= total_gaps. All gaps processed and stored."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'accepted',\n  message: 'Learning material generation started. Materials will be stored in MongoDB as each gap is processed.',\n  student_id: $json.student_id,\n  total_gaps: $json.knowledge_gaps.length,\n  job_started_at: new Date().toISOString()\n}) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "d0e1f2a3-b4c5-6789-defa-890123456789",
+      "name": "Immediate ACK Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -3264,
+        720
+      ],
+      "notes": "Returns HTTP 202 Accepted immediately after validation. Prevents webhook timeout. Processing continues async."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook \u2014 GET Materials by Student": {
+      "main": [
+        [
+          {
+            "node": "MongoDB \u2014 Fetch Materials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB \u2014 Fetch Materials": {
+      "main": [
+        [
+          {
+            "node": "Return Materials List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook \u2014 Receive Learner Profile": {
+      "main": [
+        [
+          {
+            "node": "Schema Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schema Validator": {
+      "main": [
+        [
+          {
+            "node": "Profile Processing Module",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Immediate ACK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Processing Module": {
+      "main": [
+        [
+          {
+            "node": "Initialize Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Loop": {
+      "main": [
+        [
+          {
+            "node": "Get Current Gap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Gap": {
+      "main": [
+        [
+          {
+            "node": "Prompt Construction Module",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Construction Module": {
+      "main": [
+        [
+          {
+            "node": "LLM \u2014 Qwen2.5-Coder via Ollama (Explanation + Tutorial)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LLM \u2014 Qwen2.5-Coder (Assessment + Quiz)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM \u2014 Qwen2.5-Coder via Ollama (Explanation + Tutorial)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [
+          {
+            "node": "\ud83e\udd16 Quality Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\ud83e\udd16 Quality Review Agent": {
+      "main": [
+        [
+          {
+            "node": "Agent Decision Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Decision Router": {
+      "main": [
+        [
+          {
+            "node": "\ud83d\udd04 Adaptive Retry Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge LLM + SLM Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\ud83d\udd04 Adaptive Retry Agent": {
+      "main": [
+        [
+          {
+            "node": "LLM \u2014 Retry Call (Qwen2.5-Coder)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM \u2014 Retry Call (Qwen2.5-Coder)": {
+      "main": [
+        [
+          {
+            "node": "Parse Retry LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Retry LLM Response": {
+      "main": [
+        [
+          {
+            "node": "\ud83e\udd16 Quality Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM \u2014 Qwen2.5-Coder (Assessment + Quiz)": {
+      "main": [
+        [
+          {
+            "node": "Parse SLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SLM Response": {
+      "main": [
+        [
+          {
+            "node": "\ud83e\udd16 Content Validation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\ud83e\udd16 Content Validation Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge LLM + SLM Outputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge LLM + SLM Outputs": {
+      "main": [
+        [
+          {
+            "node": "Content Structuring Module",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Structuring Module": {
+      "main": [
+        [
+          {
+            "node": "MongoDB \u2014 Store Learning Material",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MongoDB \u2014 Log LLM vs SLM Comparison",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB \u2014 Store Learning Material": {
+      "main": [
+        [
+          {
+            "node": "Increment Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB \u2014 Log LLM vs SLM Comparison": {
+      "main": []
+    },
+    "Increment Index": {
+      "main": [
+        [
+          {
+            "node": "Check If Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Done": {
+      "main": [
+        [
+          {
+            "node": "Get Current Gap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Response \u2014 All Gaps Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "25bf9aaa-f404-4c04-a061-c0403ef96eac",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d897270d1c5a9e19bcdbe95e7e8ff4fb931a4542eea5d4948e9530d0b7cb76d3"
+  },
+  "id": "lCOhnF6Lf1pgC9tdSmvpS",
+  "tags": []
+}

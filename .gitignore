@@ -56,3 +56,8 @@ docker-compose.override.yml
 secrets/
 *.gcp-sa.json
 gcp-sa.json
+
+
+#docs
+docs/FULL_SYSTEM_SETUP.md
+docs/PHASE_2_SANDBOX_QUIZ_POPUP_PLAN.md

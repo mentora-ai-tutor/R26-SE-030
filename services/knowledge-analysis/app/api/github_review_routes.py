@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db.database import get_database
@@ -11,9 +11,10 @@ from app.services.github_review_service import (
     MAX_REPOS,
     build_repo_selection,
     get_student_github_credential,
-    run_review_job,
+    process_review_job,
     run_single_repo_rereview,
     serialize_job,
+    start_review_job,
     verify_student_from_authorization,
 )
 
@@ -55,20 +56,26 @@ async def select_repos(authorization: str | None = Header(default=None)) -> dict
 
 @router.post("/review-top-5")
 async def review_top_five(
+    background_tasks: BackgroundTasks,
     payload: ReviewTopFiveRequest | None = None,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """
-    Review up to five repositories and persist one RepoReviewJob document.
-
-    This first production slice is request/response rather than SSE. The job is
-    still persisted so the frontend can recover via /status/{job_id}.
+    Start a review for up to five repositories and persist one RepoReviewJob
+    document. The review continues in the background and can be recovered via
+    /status/{job_id}.
     """
     student, credential = await _auth_context(authorization)
-    job = await run_review_job(
+    job, selected = await start_review_job(
         student=student,
         credential=credential,
         selected_full_names=payload.repos if payload else None,
+    )
+    background_tasks.add_task(
+        process_review_job,
+        job_id=job["job_id"],
+        credential=credential,
+        selected_repos=selected,
     )
     return {"status": "success", "data": job}
 

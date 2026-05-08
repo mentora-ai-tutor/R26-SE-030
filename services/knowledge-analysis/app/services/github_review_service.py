@@ -13,6 +13,7 @@ from typing import Any, Literal
 from urllib.parse import quote
 
 import httpx
+from bson import ObjectId
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -537,12 +538,12 @@ async def build_repo_selection(student: StudentContext, credential: GithubCreden
     }
 
 
-async def run_review_job(
+async def start_review_job(
     *,
     student: StudentContext,
     credential: GithubCredential,
     selected_full_names: list[str] | None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], list[RepoSummary]]:
     await ensure_review_indexes()
     db = get_database()
     github = GithubApiClient(credential.access_token)
@@ -588,14 +589,30 @@ async def run_review_job(
             "updated_at": now,
         }
         insert = await db.repo_review_jobs.insert_one(job)
-        job_id = insert.inserted_id
+        created = await db.repo_review_jobs.find_one({"_id": insert.inserted_id})
+        return serialize_job(created) or {}, selected
+    finally:
+        await github.aclose()
 
+
+async def process_review_job(
+    *,
+    job_id: str | ObjectId,
+    credential: GithubCredential,
+    selected_repos: list[RepoSummary],
+) -> dict[str, Any]:
+    await ensure_review_indexes()
+    db = get_database()
+    job_object_id = ObjectId(job_id) if isinstance(job_id, str) else job_id
+    github = GithubApiClient(credential.access_token)
+
+    try:
         semaphore = asyncio.Semaphore(3)
 
         async def one(repo: RepoSummary) -> ReviewRepoResult:
             async with semaphore:
                 await db.repo_review_jobs.update_one(
-                    {"_id": job_id, "repos.full_name": repo.full_name},
+                    {"_id": job_object_id, "repos.full_name": repo.full_name},
                     {
                         "$set": {
                             "repos.$.status": "running",
@@ -604,22 +621,36 @@ async def run_review_job(
                     },
                 )
                 try:
-                    return await asyncio.wait_for(
+                    result = await asyncio.wait_for(
                         review_repo(github, repo),
                         timeout=PER_REPO_TIMEOUT_SECONDS,
                     )
                 except asyncio.TimeoutError:
-                    return ReviewRepoResult(
+                    result = ReviewRepoResult(
                         full_name=repo.full_name,
                         status="error",
                         error=f"Review timed out after {PER_REPO_TIMEOUT_SECONDS}s",
                     )
 
+                await db.repo_review_jobs.update_one(
+                    {"_id": job_object_id, "repos.full_name": repo.full_name},
+                    {
+                        "$set": {
+                            "repos.$.status": result.status,
+                            "repos.$.review": result.review.model_dump() if result.review else None,
+                            "repos.$.error": result.error,
+                            "repos.$.finished_at": _utcnow(),
+                            "updated_at": _utcnow(),
+                        }
+                    },
+                )
+                return result
+
         try:
-            results = await asyncio.gather(*(one(repo) for repo in selected))
+            results = await asyncio.gather(*(one(repo) for repo in selected_repos))
         except LLMAuthError as exc:
             await db.repo_review_jobs.update_one(
-                {"_id": job_id},
+                {"_id": job_object_id},
                 {
                     "$set": {
                         "status": "failed",
@@ -628,24 +659,24 @@ async def run_review_job(
                     }
                 },
             )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"LLM authentication failed: {exc}",
-            ) from exc
+            logger.exception("Repo review job failed because LLM auth failed: %s", exc)
+            return serialize_job(await db.repo_review_jobs.find_one({"_id": job_object_id})) or {}
+        except Exception as exc:  # noqa: BLE001 - background work must persist failure state
+            await db.repo_review_jobs.update_one(
+                {"_id": job_object_id},
+                {
+                    "$set": {
+                        "status": "failed",
+                        "error": str(exc),
+                        "updated_at": _utcnow(),
+                    }
+                },
+            )
+            logger.exception("Repo review background job failed: %s", exc)
+            return serialize_job(await db.repo_review_jobs.find_one({"_id": job_object_id})) or {}
 
         done_count = sum(1 for result in results if result.status == "done")
         final_status = "done" if done_count == len(results) else "partial" if done_count else "failed"
-
-        repo_docs = [
-            {
-                "full_name": result.full_name,
-                "status": result.status,
-                "review": result.review.model_dump() if result.review else None,
-                "error": result.error,
-                "finished_at": _utcnow(),
-            }
-            for result in results
-        ]
 
         java_level = None
         evidence = None
@@ -656,11 +687,10 @@ async def run_review_job(
                 break
 
         await db.repo_review_jobs.update_one(
-            {"_id": job_id},
+            {"_id": job_object_id},
             {
                 "$set": {
                     "status": final_status,
-                    "repos": repo_docs,
                     "java_level_inferred": java_level,
                     "signals_evidence": evidence,
                     "updated_at": _utcnow(),
@@ -668,9 +698,27 @@ async def run_review_job(
             },
         )
 
-        return serialize_job(await db.repo_review_jobs.find_one({"_id": job_id})) or {}
+        return serialize_job(await db.repo_review_jobs.find_one({"_id": job_object_id})) or {}
     finally:
         await github.aclose()
+
+
+async def run_review_job(
+    *,
+    student: StudentContext,
+    credential: GithubCredential,
+    selected_full_names: list[str] | None,
+) -> dict[str, Any]:
+    job, selected = await start_review_job(
+        student=student,
+        credential=credential,
+        selected_full_names=selected_full_names,
+    )
+    return await process_review_job(
+        job_id=job["job_id"],
+        credential=credential,
+        selected_repos=selected,
+    )
 
 
 async def run_single_repo_rereview(

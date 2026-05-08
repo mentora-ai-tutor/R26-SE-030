@@ -1,505 +1,636 @@
 # Mentora Full System Setup Guide
 
-This guide explains how to run the full Mentora system after pulling the relevant frontend and backend branches.
+Last updated: 2026-05-08
 
-## Repositories And Branches
+This guide documents the files, private configuration, setup commands, and pull request workflow needed to run this repository from the currently used backend branch.
 
-Pull or clone both repositories into the same parent folder.
-
-Expected branches:
+Current backend repository:
 
 ```text
-mentora-frontend  -> feature/kalana
-R26-SE-030        -> knowledge-analysis/kalana
+Repository: mentora-ai-tutor/R26-SE-030
+Branch:     knowledge-analysis/kalana
+Remote:     https://github.com/mentora-ai-tutor/R26-SE-030.git
 ```
 
-Recommended folder structure:
+Use the frontend repository only when running the full browser demo:
 
 ```text
-Mentora/
-  docker-compose.yml
-  mentora-frontend/
-  R26-SE-030/
+Repository folder: mentora-frontend
+Branch:            feature/kalana
 ```
 
-The `docker-compose.yml` file must be in the parent `Mentora/` folder, beside both repositories.
+## 1. Expected Folder Structure
 
-## Required Tools
-
-For the Docker setup:
+For the full demo stack, keep the backend and frontend repositories in the same parent folder:
 
 ```text
-Docker Desktop
+SLIIT Work/
+  docker-compose.yml              # parent full-stack compose file, local setup file
+  mentora-frontend/               # frontend repo on feature/kalana
+  R26-SE-030/                     # backend repo on knowledge-analysis/kalana
+```
+
+The parent `docker-compose.yml` is outside this backend repo. It is required for the full demo because it starts MongoDB, frontend, user service, knowledge-analysis, and ai-engine together.
+
+The repo-local `R26-SE-030/docker-compose.yml` is different: it starts only `user-service`, `lmg-service`, and `ai-engine`. It does not start MongoDB, frontend, or knowledge-analysis.
+
+## 2. Required Tools
+
+Install these before setup:
+
+```text
 Git
-MongoDB Compass, optional but useful for checking DB records
-```
-
-For the manual no-Docker setup:
-
-```text
-Node.js 20+
-npm
+Docker Desktop with Docker Compose v2
+Node.js 20+ and npm
 Python 3.11+
-MongoDB local or MongoDB Atlas
+MongoDB Compass or mongosh, optional but useful
+Ollama, required for local AI engine fallback
+Google Cloud service account JSON, required for Gemini/Vertex knowledge-analysis
+GitHub account with access to mentora-ai-tutor/R26-SE-030
 ```
 
-## Required Private Files
+Useful Ollama models for this branch:
 
-Do not commit these files to Git.
-
-```text
-R26-SE-030/services/user service/.env
-
-add these -
-
-# Server Configuration
-PORT=3001
-NODE_ENV=development
-SERVICE_NAME=user-service
-
-# Database
-MONGODB_URI=mongodb://localhost:27017/mentora_users
-
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters
-JWT_EXPIRES_IN=1h
-JWT_REFRESH_SECRET=your-super-secret-refresh-key-different-from-jwt
-JWT_REFRESH_EXPIRES_IN=7d
-
-# Security
-BCRYPT_SALT_ROUNDS=12
-INTERNAL_SERVICE_KEY=your-internal-service-api-key
-
-# CORS
-CORS_ORIGIN=http://localhost:3000,http://localhost:5173
-
-# Optional Features
-ENABLE_EMAIL_VERIFICATION=false
-ENABLE_ACCOUNT_LOCKOUT=true
-ENABLE_AUDIT_LOGGING=true
-
-# GitHub OAuth
-GH_CLIENT_ID=0v23liAAsRI9g14OHHcK
-
-GH_CLIENT_SECRET=56d3456956a516e2002aab53764ca0ad4da23a75
-GH_OAUTH_SCOPE=repo
-GH_OAUTH_CALLBACK_URL=http://localhost:3001/api/github/oauth/callback
-
-# Optional Redis (for caching & rate limiting)
-# REDIS_URL=redis://localhost:6379
-
-
-
-
-R26-SE-030/services/knowledge-analysis/secrets/gcp-sa.json
-
-
-GOOGLE_APPLICATION_CREDENTIALS=/Users/idea8/Documents/SLIIT Work/R26-SE-030/services/knowledge-analysis/secrets/gcp-sa.json
-GCP_PROJECT=chapmanvoice
-GCP_LOCATION=us-central1
-LLM_PROVIDER=gemini
-GEMINI_MODEL_PRIMARY=gemini-3.1-pro-preview
-GEMINI_MODEL_TOOLS=gemini-3.1-pro-preview-customtools
-GEMINI_MODEL_GA=gemini-2.5-pro
-GEMINI_MODEL_FAST=gemini-2.5-flash
-
-
-
-mentora-frontend/.env.local
+```bash
+ollama pull llama3:8b
+ollama pull qwen2.5-coder:7b
 ```
 
-The GCP JSON key is only required if the Gemini/Vertex AI knowledge review flow must work.
+## 3. Branch Setup
 
-## Setup With Docker
+Clone the backend branch:
 
-Use this path when Docker Desktop is installed.
+```bash
+git clone -b knowledge-analysis/kalana https://github.com/mentora-ai-tutor/R26-SE-030.git
+```
 
-### 1. Pull Both Branches
+If the backend repo already exists:
 
-From the parent folder:
+```bash
+cd "R26-SE-030"
+git fetch origin
+git checkout knowledge-analysis/kalana
+git pull --ff-only origin knowledge-analysis/kalana
+```
+
+For the full UI demo, also clone or update the frontend branch beside this repo:
 
 ```bash
 git clone -b feature/kalana <frontend-repo-url> mentora-frontend
-git clone -b knowledge-analysis/kalana <backend-repo-url> R26-SE-030
 ```
 
-If the repositories are already cloned:
+If the frontend repo already exists:
 
 ```bash
-cd mentora-frontend
+cd "mentora-frontend"
+git fetch origin
 git checkout feature/kalana
-git pull
-
-cd ../R26-SE-030
-git checkout knowledge-analysis/kalana
-git pull
+git pull --ff-only origin feature/kalana
 ```
 
-Return to the parent folder:
+## 4. Required Setup Files And Docs
 
-```bash
-cd ..
-```
+Use this inventory when preparing a clean machine or reviewing whether the repo has everything needed.
 
-### 2. Create User Service Environment File
+| Path | Purpose | Commit to Git? |
+|---|---|---|
+| `README.md` | Backend repository overview. | Yes |
+| `ARCHITECTURE.md` | Knowledge Analysis Agent architecture and roadmap. | Yes |
+| `docs/FULL_SYSTEM_SETUP.md` | This full setup and PR workflow guide. | Yes |
+| `docs/INTEGRATION_PLAN.md` | GitHub OAuth, Gemini review, and Java sandbox integration plan. | Yes |
+| `.github/workflows/ci.yml` | PR/push CI that builds `ai-engine`, `user-service`, and `lmg-service`. | Yes |
+| `.gitignore` | Keeps env files, secrets, logs, builds, and local overrides out of Git. | Yes |
+| `docker-compose.yml` | Repo-local backend subset compose file. | Yes |
+| `docker-compose.prod.yml` | GHCR image-based production compose template. | Yes |
+| `../docker-compose.yml` | Parent full-stack local compose file for frontend + backend demo. | No, local parent setup |
+| `services/user service/.env.example` | Template for user-service runtime config. | Yes |
+| `services/user service/.env` | Local user-service secrets and connection values. | No |
+| `services/user service/README.md` | User-service endpoints and service setup notes. | Yes |
+| `services/user service/API_DOCS.md` | User-service API documentation. | Yes |
+| `services/user service/docs/postman.json` | User-service Postman collection. | Yes |
+| `services/user service/package.json` | User-service dependencies and scripts. | Yes |
+| `services/user service/package-lock.json` | Locked user-service npm dependencies. | Yes |
+| `services/user service/Dockerfile` | User-service image build file. | Yes |
+| `services/knowledge-analysis/.env` | Local knowledge-analysis runtime config. | No |
+| `services/knowledge-analysis/secrets/gcp-sa.json` | Google Cloud service account key for Vertex/Gemini. | No |
+| `services/knowledge-analysis/requirements.txt` | Knowledge-analysis Python dependencies. | Yes |
+| `services/knowledge-analysis/Dockerfile` | Knowledge-analysis image build file. | Yes |
+| `services/knowledge-analysis/KAA_BACKEND_DEVELOPMENT_GUIDE.md` | KAA development guide and module structure. | Yes |
+| `services/knowledge-analysis/scripts/smoke_test_llm.py` | LLM provider smoke test. | Yes |
+| `services/knowledge-analysis/tests/` | KAA test suite. | Yes |
+| `services/learning-generator/.env.example` | LMG service runtime config template. | Yes |
+| `services/learning-generator/.env` | Local LMG runtime config. | No |
+| `services/learning-generator/package.json` | LMG dependencies and scripts. | Yes |
+| `services/learning-generator/package-lock.json` | Locked LMG npm dependencies. | Yes |
+| `services/learning-generator/Dockerfile` | LMG image build file. | Yes |
+| `services/learning-generator/docs/` | LMG and n8n API docs. | Yes |
+| `services/learning-generator/postman/` | LMG Postman collections and environment. | Yes |
+| `services/learning-generator/n8n/` | LMG n8n workflow export. | Yes |
+| `ai-engine/learning-generator/requirements.txt` | AI engine Python dependencies. | Yes |
+| `ai-engine/learning-generator/Dockerfile` | AI engine image build file. | Yes |
+| `ai-engine/learning-generator/app/` | AI engine FastAPI app for Java execution and Ollama feedback. | Yes |
+| `services/peer-learning/.env.example` | Peer-learning config template. | Yes |
+| `services/peer-learning/.env` | Local peer-learning config. | No |
+| `services/peer-learning/README.md` | Peer-learning setup, endpoints, and test flow. | Yes |
+| `services/peer-learning/docker-compose.yml` | Standalone peer-learning compose file. | Yes |
+| `services/peer-learning/PeerLearning.postman_collection.json` | Peer-learning Postman collection. | Yes |
+| `services/assessment-agent/.env.example` | Assessment agent config template. | Yes |
+| `services/assessment-agent/.env` | Local assessment agent config. | No |
+| `services/assessment-agent/package.json` | Assessment agent dependencies and scripts. | Yes |
 
-From the parent `Mentora/` folder:
+Never commit `.env`, `.env.local`, service account JSON files, generated logs, `node_modules`, virtual environments, or local compose override files.
 
-```bash
-cp "R26-SE-030/services/user service/.env.example" "R26-SE-030/services/user service/.env"
-```
+## 5. Private Configuration Files
 
-Open:
+Create these files locally before running the system.
+
+### 5.1 User Service
+
+Create:
 
 ```text
 R26-SE-030/services/user service/.env
 ```
 
-Make sure these values are not empty:
-
-```env
-GH_CLIENT_ID=dummy-or-real-github-client-id
-GH_CLIENT_SECRET=dummy-or-real-github-client-secret
-GH_OAUTH_SCOPE=repo
-GH_OAUTH_CALLBACK_URL=http://localhost:3001/api/github/oauth/callback
-```
-
-Use real GitHub OAuth credentials if GitHub account linking and repository review must work. For a basic signup/login demo, dummy non-empty values are enough.
-
-### 3. Add GCP JSON Key
-
-Create the secrets folder:
+Start from the template:
 
 ```bash
-mkdir -p "R26-SE-030/services/knowledge-analysis/secrets"
+cp "services/user service/.env.example" "services/user service/.env"
 ```
 
-Place the service account JSON key here:
+Required values:
+
+```env
+PORT=3001
+NODE_ENV=development
+SERVICE_NAME=user-service
+MONGODB_URI=mongodb://localhost:27017/mentora_users
+JWT_SECRET=replace-with-a-long-dev-secret
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_SECRET=replace-with-a-different-long-dev-secret
+JWT_REFRESH_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+INTERNAL_SERVICE_KEY=replace-with-shared-internal-service-key
+CORS_ORIGIN=http://localhost:3000,http://localhost:3002,http://localhost:5173
+ENABLE_EMAIL_VERIFICATION=false
+ENABLE_ACCOUNT_LOCKOUT=true
+ENABLE_AUDIT_LOGGING=true
+GH_CLIENT_ID=replace-with-github-oauth-client-id
+GH_CLIENT_SECRET=replace-with-github-oauth-client-secret
+GH_OAUTH_SCOPE=repo
+GH_OAUTH_CALLBACK_URL=http://localhost:3001/api/github/oauth/callback
+FRONTEND_ORIGIN=http://localhost:3002
+```
+
+Use dummy non-empty GitHub OAuth values only for login/signup demos that do not test GitHub linking. Use real OAuth values for repository review.
+
+### 5.2 Knowledge Analysis
+
+Create:
 
 ```text
+R26-SE-030/services/knowledge-analysis/.env
 R26-SE-030/services/knowledge-analysis/secrets/gcp-sa.json
 ```
 
-Do not rename it unless `docker-compose.yml` is also updated.
+Example `.env`:
 
-### 4. Start The Full System
+```env
+APP_NAME=KAA - Knowledge Analysis Agent
+APP_VERSION=1.0.0
+CORS_ORIGINS=http://localhost:3000,http://localhost:3002,http://localhost:5173
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DB=knowledge_analysis
+USER_SERVICE_INTERNAL_URL=http://localhost:3001
+INTERNAL_SERVICE_KEY=replace-with-same-value-used-by-user-service
+GITHUB_API_URL=https://api.github.com
+GITHUB_PAT=
 
-From the parent `Mentora/` folder:
+LLM_PROVIDER=gemini
+GCP_PROJECT=replace-with-gcp-project-id
+GCP_LOCATION=us-central1
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/R26-SE-030/services/knowledge-analysis/secrets/gcp-sa.json
+GEMINI_MODEL_PRIMARY=gemini-2.5-pro
+GEMINI_MODEL_TOOLS=gemini-2.5-pro
+GEMINI_MODEL_GA=gemini-2.5-pro
+GEMINI_MODEL_FAST=gemini-2.5-flash
+
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+```
+
+For Docker full-stack setup, the parent compose file mounts the key at:
+
+```text
+/run/secrets/gcp-sa.json
+```
+
+### 5.3 Learning Generator
+
+Create this file if running `lmg-service`:
+
+```text
+R26-SE-030/services/learning-generator/.env
+```
+
+Start from the template:
+
+```bash
+cp "services/learning-generator/.env.example" "services/learning-generator/.env"
+```
+
+Make sure `INTERNAL_SERVICE_KEY` matches the user-service value.
+
+### 5.4 Frontend
+
+When running the frontend manually instead of through the parent compose file, create:
+
+```text
+mentora-frontend/.env.local
+```
+
+Recommended values:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_KNOWLEDGE_API_URL=http://localhost:5007
+NEXT_PUBLIC_AI_ENGINE_API_URL=http://localhost:5010
+NEXT_TELEMETRY_DISABLED=1
+```
+
+## 6. Full Demo Setup With Parent Docker Compose
+
+Use this path when testing the integrated frontend, auth, GitHub linking, knowledge-analysis, MongoDB, and AI engine.
+
+Run from the parent `SLIIT Work/` folder:
 
 ```bash
 docker compose up --build
 ```
 
-This starts:
+Expected services:
 
-```text
-MongoDB             -> localhost:27017
-User service        -> http://localhost:3001
-Knowledge service   -> http://localhost:5007
-Frontend            -> http://localhost:3002
-```
-
-### 5. Open The Application
-
-Open the frontend in the browser:
-
-```text
-http://localhost:3002
-```
+| Service | URL |
+|---|---|
+| Frontend | `http://localhost:3002` |
+| User service | `http://localhost:3001` |
+| Knowledge-analysis | `http://localhost:5007` |
+| AI engine | `http://localhost:5010` |
+| MongoDB | `mongodb://localhost:27017` |
 
 Health checks:
 
 ```text
+Frontend:
+http://localhost:3002
+
 User service:
 http://localhost:3001/health
 
-Knowledge service:
+Knowledge-analysis:
 http://localhost:5007/health
-
-Knowledge API docs:
 http://localhost:5007/docs
+
+AI engine:
+http://localhost:5010/health
 ```
 
-### 6. Check The Database
-
-Open MongoDB Compass and connect to:
+MongoDB Compass connection:
 
 ```text
 mongodb://localhost:27017
 ```
 
-Expected databases:
+Expected databases after using the app:
 
 ```text
 mentora_users
 knowledge_analysis
 ```
 
-After a user signs up or logs in, user records should appear in `mentora_users`.
-
-### 7. Demo Flow
-
-Use this order to verify the full system:
-
-```text
-1. Open http://localhost:3002
-2. Sign up as a new student
-3. Login
-4. Open the dashboard
-5. Check MongoDB Compass for the created user
-6. Test GitHub linking only if real GitHub OAuth credentials are configured
-7. Test repository review only if GitHub OAuth and the GCP JSON key are configured
-```
-
-### 8. Stop The System
-
-Stop containers:
+Stop the system:
 
 ```bash
 docker compose down
 ```
 
-Stop containers and delete MongoDB volume data:
+Use this to remove containers and volumes only when you intentionally want to delete local MongoDB data:
 
 ```bash
 docker compose down -v
 ```
 
-Use `down -v` only when you intentionally want to clear local database data.
+## 7. Repo-Local Docker Compose Setup
 
-## Manual Setup Without Docker
+Use this path only for the backend subset in this repo.
 
-Use this path only when Docker is not available.
-
-Run the services in this exact order:
-
-```text
-1. MongoDB
-2. User service
-3. Knowledge service
-4. Frontend
-```
-
-### 1. Start MongoDB
-
-Local MongoDB URI:
-
-```text
-mongodb://localhost:27017
-```
-
-If using MongoDB Atlas, use the Atlas connection string instead.
-
-### 2. Run User Service
-
-Create:
-
-```text
-R26-SE-030/services/user service/.env
-```
-
-Use this local configuration:
-
-```env
-PORT=3001
-NODE_ENV=development
-SERVICE_NAME=user-service
-MONGODB_URI=mongodb://localhost:27017/mentora_users
-
-JWT_SECRET=change-this-dev-jwt-secret-minimum-32-chars
-JWT_EXPIRES_IN=1h
-JWT_REFRESH_SECRET=change-this-dev-refresh-secret-minimum-32-chars
-JWT_REFRESH_EXPIRES_IN=7d
-INTERNAL_SERVICE_KEY=change-this-internal-service-key
-
-CORS_ORIGIN=http://localhost:3000
-BCRYPT_SALT_ROUNDS=12
-ENABLE_EMAIL_VERIFICATION=false
-ENABLE_ACCOUNT_LOCKOUT=true
-ENABLE_AUDIT_LOGGING=true
-
-GH_CLIENT_ID=dummy-or-real-github-client-id
-GH_CLIENT_SECRET=dummy-or-real-github-client-secret
-GH_OAUTH_SCOPE=repo
-GH_OAUTH_CALLBACK_URL=http://localhost:3001/api/github/oauth/callback
-FRONTEND_ORIGIN=http://localhost:3000
-```
-
-Run:
+From `R26-SE-030/`:
 
 ```bash
-cd "R26-SE-030/services/user service"
+docker compose up --build
+```
+
+This repo-local compose starts:
+
+| Service | URL |
+|---|---|
+| User service | `http://localhost:3001` |
+| Learning generator service | `http://localhost:5012` |
+| AI engine | `http://localhost:5010` |
+
+Important: this compose file does not start MongoDB. Before using it, either:
+
+```text
+1. Run MongoDB separately and point service `.env` files at it.
+2. Use the parent full-stack compose instead.
+3. Add a local `docker-compose.override.yml` with a MongoDB service. Do not commit that override unless the team agrees.
+```
+
+If a service runs inside Docker and MongoDB runs on the host machine, use `host.docker.internal` in the service `.env` file:
+
+```env
+MONGODB_URI=mongodb://host.docker.internal:27017/mentora_users
+```
+
+## 8. Manual Service Setup
+
+Use manual setup when developing one service at a time.
+
+### 8.1 User Service
+
+```bash
+cd "services/user service"
 npm install
 npm run dev
 ```
 
-Check:
+Health check:
 
 ```text
 http://localhost:3001/health
 ```
 
-### 3. Run Knowledge Service
-
-Create:
-
-```text
-R26-SE-030/services/knowledge-analysis/.env
-```
-
-Use this local configuration:
-
-```env
-APP_NAME=KAA - Knowledge Analysis Agent
-APP_VERSION=1.0.0
-CORS_ORIGINS=http://localhost:3000
-
-MONGODB_URL=mongodb://localhost:27017
-MONGODB_DB=knowledge_analysis
-
-USER_SERVICE_INTERNAL_URL=http://localhost:3001
-INTERNAL_SERVICE_KEY=change-this-internal-service-key
-
-LLM_PROVIDER=gemini
-GCP_PROJECT=chapmanvoice
-GCP_LOCATION=us-central1
-GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/R26-SE-030/services/knowledge-analysis/secrets/gcp-sa.json
-
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-GITHUB_PAT=
-```
-
-Place the GCP key here:
-
-```text
-R26-SE-030/services/knowledge-analysis/secrets/gcp-sa.json
-```
-
-Run:
+### 8.2 Knowledge Analysis
 
 ```bash
-cd R26-SE-030/services/knowledge-analysis
+cd "services/knowledge-analysis"
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 5007
+uvicorn app.main:app --reload --host 0.0.0.0 --port 5007
 ```
 
-Check:
+Health and docs:
 
 ```text
 http://localhost:5007/health
 http://localhost:5007/docs
 ```
 
-### 4. Run Frontend
-
-Create:
-
-```text
-mentora-frontend/.env.local
-```
-
-Use:
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_KNOWLEDGE_API_URL=http://localhost:5007
-```
-
-Run:
+Run tests:
 
 ```bash
-cd mentora-frontend
+pytest -q
+```
+
+Optional LLM smoke test:
+
+```bash
+python scripts/smoke_test_llm.py
+```
+
+### 8.3 AI Engine
+
+```bash
+cd "ai-engine/learning-generator"
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 5010
+```
+
+Health check:
+
+```text
+http://localhost:5010/health
+```
+
+### 8.4 Learning Generator
+
+```bash
+cd "services/learning-generator"
 npm install
 npm run dev
 ```
 
-Open:
+Health check:
 
 ```text
-http://localhost:3000
+http://localhost:3002/health
 ```
 
-## Common Problems
-
-### User Service Stops Immediately
-
-Check that these values are present and not empty in `R26-SE-030/services/user service/.env`:
+When published through repo-local Docker, use:
 
 ```text
-GH_CLIENT_ID
-GH_CLIENT_SECRET
-GH_OAUTH_SCOPE
-GH_OAUTH_CALLBACK_URL
+http://localhost:5012/health
 ```
 
-The user service treats them as required environment variables.
+### 8.5 Peer Learning
 
-### Frontend Shows Network Error
+```bash
+cd "services/peer-learning"
+cp .env.example .env
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-Check that the user service is running:
+Health and docs:
+
+```text
+http://localhost:8000/health
+http://localhost:8000/docs
+```
+
+### 8.6 Assessment Agent
+
+```bash
+cd "services/assessment-agent"
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Health check:
 
 ```text
 http://localhost:3001/health
 ```
 
-For Docker, frontend should use:
+If user-service is already using port `3001`, change the assessment agent `PORT` value before starting it.
+
+## 9. End-To-End Demo Checklist
+
+Use this order for a full demo:
 
 ```text
-http://localhost:3002
+1. Confirm backend branch is knowledge-analysis/kalana.
+2. Confirm frontend branch is feature/kalana.
+3. Create all required `.env` files.
+4. Add `services/knowledge-analysis/secrets/gcp-sa.json` if Gemini review is required.
+5. Start Ollama if the AI engine fallback is required.
+6. Run `docker compose up --build` from the parent folder.
+7. Open `http://localhost:3002`.
+8. Sign up as a new student.
+9. Login and confirm user records appear in `mentora_users`.
+10. Test GitHub linking only when real GitHub OAuth credentials are configured.
+11. Test repository review only when GitHub OAuth and GCP credentials are configured.
+12. Check `http://localhost:5007/docs` for knowledge-analysis endpoints.
 ```
 
-For manual setup, frontend should use:
+## 10. Validation Before Opening A PR
 
-```text
-http://localhost:3000
+Run the checks that match the files you changed.
+
+Knowledge-analysis:
+
+```bash
+cd "services/knowledge-analysis"
+source .venv/bin/activate
+pytest -q
 ```
 
-### Knowledge Review Fails
+User service:
 
-Check:
-
-```text
-1. GCP JSON key exists
-2. GOOGLE_APPLICATION_CREDENTIALS points to the correct file
-3. The service account has the required Vertex AI access
-4. GitHub OAuth is configured if repository review is being tested
+```bash
+cd "services/user service"
+npm install
+npm test
 ```
 
-### MongoDB Has No Data
+Learning generator:
 
-First create a user from the browser signup flow, then check:
-
-```text
-mongodb://localhost:27017
+```bash
+cd "services/learning-generator"
+npm install
+npm run lint
 ```
 
-Expected database:
+Docker build sanity check from the repo root:
 
-```text
-mentora_users
+```bash
+docker compose build
 ```
 
-## What To Commit
+Full-stack sanity check from the parent folder:
 
-Commit setup documentation and safe templates only:
-
-```text
-docs/FULL_SYSTEM_SETUP.md
-.env.example files
-.env.local.example files
+```bash
+docker compose up --build
 ```
 
-Do not commit:
+## 11. Merge `knowledge-analysis/kalana` To `main` Using A Pull Request
+
+Do not push directly to `main`. Merge this branch through a GitHub pull request.
+
+Prepare the branch:
+
+```bash
+cd "R26-SE-030"
+git status --short
+git fetch origin
+git checkout knowledge-analysis/kalana
+git pull --ff-only origin knowledge-analysis/kalana
+git merge origin/main
+```
+
+Resolve conflicts if any, then run the relevant validation checks from section 10.
+
+Push the branch:
+
+```bash
+git push origin knowledge-analysis/kalana
+```
+
+Create the PR in GitHub:
 
 ```text
-.env
-.env.local
-gcp-sa.json
-node_modules/
-.next/
-.venv/
-__pycache__/
+Base branch:    main
+Compare branch: knowledge-analysis/kalana
+Title:          Merge knowledge-analysis setup and integration work
+```
+
+Include in the PR description:
+
+```text
+Summary:
+- What changed
+- Which services are affected
+- Which setup files/docs were updated
+
+Validation:
+- Commands run locally
+- Docker services tested
+- Any checks not run and why
+
+Secrets:
+- Confirm no `.env`, service account JSON, OAuth secret, or token was committed
+```
+
+The repository CI runs on pull requests targeting `main`. The current workflow builds:
+
+```text
+ai-engine
+user-service
+lmg-service
+```
+
+Merge only after:
+
+```text
+1. CI checks pass.
+2. Required reviewers approve.
+3. The PR contains no private secrets.
+4. Any merge conflicts with `main` are resolved.
+```
+
+After the PR is merged, sync local `main`:
+
+```bash
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+```
+
+Delete the feature branch only if the team is finished with it:
+
+```bash
+git branch -d knowledge-analysis/kalana
+git push origin --delete knowledge-analysis/kalana
+```
+
+## 12. Common Problems
+
+MongoDB connection fails in repo-local Docker:
+
+```text
+The repo-local compose file does not start MongoDB. Use the parent compose file or point `.env` files to a reachable MongoDB instance.
+```
+
+GitHub OAuth popup links but frontend does not update:
+
+```text
+Check `FRONTEND_ORIGIN`. For parent Docker setup it should be `http://localhost:3002`.
+```
+
+Gemini review fails:
+
+```text
+Check `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_PROJECT`, `GCP_LOCATION`, and service account permissions. Use `services/knowledge-analysis/scripts/smoke_test_llm.py` to test provider access.
+```
+
+AI engine feedback fails:
+
+```text
+Confirm Ollama is running and the configured models are pulled.
 ```

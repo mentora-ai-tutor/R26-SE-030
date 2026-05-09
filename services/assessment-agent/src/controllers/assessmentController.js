@@ -88,14 +88,13 @@ const getSession = async (req, res, next) => {
     const learnerId = req.user.student_id;
 
     let sessionState = await db.collection('ame_session_updates').findOne(
-      { session_id: sessionId, learner_id: learnerId },
+      { session_id: sessionId },
       { sort: { update_timestamp: -1 } }
     );
 
     if (!sessionState) {
       sessionState = await db.collection('ame_sessions').findOne({
         session_id: sessionId,
-        learner_id: learnerId,
       });
     }
 

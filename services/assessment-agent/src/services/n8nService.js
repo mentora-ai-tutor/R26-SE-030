@@ -6,7 +6,7 @@ const startSession = async (payload) => {
     console.log('[n8n] POST', url);
     console.log('[n8n] Payload:', JSON.stringify(payload, null, 2));
     const response = await axios.post(url, payload, {
-      timeout: 1200000,
+      timeout: 3600000,
       headers: { 'Content-Type': 'application/json' },
     });
     console.log('[n8n] Response status:', response.status);
@@ -36,7 +36,7 @@ const submitAnswer = async (payload) => {
     console.log('[n8n] POST', url);
     console.log('[n8n] Payload:', JSON.stringify(payload, null, 2));
     const response = await axios.post(url, payload, {
-      timeout: 1200000,
+      timeout: 3600000,
       headers: { 'Content-Type': 'application/json' },
     });
     console.log('[n8n] Response status:', response.status);

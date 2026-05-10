@@ -8,5 +8,3 @@ coverage
 .env.local
 .git
 .DS_Store
-secrets/
-*.gcp-sa.json

@@ -52,12 +52,10 @@ docker-compose.override.yml
 # Local dev
 *.local
 
-# Secrets — never commit
+# Secrets - never commit
 secrets/
 *.gcp-sa.json
 gcp-sa.json
 
-
-#docs
-docs/FULL_SYSTEM_SETUP.md
+# Local docs
 docs/PHASE_2_SANDBOX_QUIZ_POPUP_PLAN.md

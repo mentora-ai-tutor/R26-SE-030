@@ -59,15 +59,6 @@ const studentSchema = new mongoose.Schema(
         default: '',
       },
     },
-    github: {
-      linked: { type: Boolean, default: false },
-      gh_login: { type: String },
-      linked_at: { type: Date },
-      credential_ref: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'GithubCredential',
-      },
-    },
     stats: {
       overall_mastery_score: {
         type: Number,

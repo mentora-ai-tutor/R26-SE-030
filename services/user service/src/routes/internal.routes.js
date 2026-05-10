@@ -9,6 +9,4 @@ router.get('/students/:studentId', internalController.getStudentById);
 
 router.patch('/students/:studentId/stats', validate(updateStatsSchema), internalController.updateStudentStats);
 
-router.get('/github/credential/:studentId', internalController.getGithubCredential);
-
 module.exports = router;

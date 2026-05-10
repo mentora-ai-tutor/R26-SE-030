@@ -124,19 +124,7 @@ const getQuestionsByTopic = async (req, res, next) => {
     const learnerId = req.user.student_id;
     const { topic } = req.query;
 
-    const collection = db.collection('ame_questions');
-
-    let query = { learner_id: learnerId };
-    if (topic) {
-      query['current_question.topic'] = topic;
-    }
-
-    let questions = await collection.find(query).sort({ question_generated_at: 1 }).toArray();
-
-    if (questions.length === 0) {
-      questions = await collection.find().sort({ question_generated_at: 1 }).toArray();
-    }
-
+    // Build map of answered questions from this learner's session history
     const sessionUpdates = await db.collection('ame_session_updates')
       .find({ learner_id: learnerId })
       .sort({ update_timestamp: -1 })
@@ -151,13 +139,28 @@ const getQuestionsByTopic = async (req, res, next) => {
       }
     }
 
+    const answeredIds = Object.keys(sessionHistoryMap);
+    if (answeredIds.length === 0) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
+    // Fetch only questions matching the learner's answered question IDs
+    const questions = await db.collection('ame_questions')
+      .find({ 'current_question.question_id': { $in: answeredIds } })
+      .sort({ question_generated_at: 1 })
+      .toArray();
+
     const formattedQuestions = [];
     let number = 1;
     for (const q of questions) {
       const currentQ = q.current_question;
       if (!currentQ) continue;
 
+      if (topic && currentQ.topic !== topic) continue;
+
       const historyEntry = sessionHistoryMap[currentQ.question_id];
+      if (!historyEntry) continue;
+
       const options = currentQ.options ? Object.entries(currentQ.options).map(([key, value]) => value) : [];
       const difficultyMap = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
@@ -168,14 +171,14 @@ const getQuestionsByTopic = async (req, res, next) => {
         type: currentQ.question_type || 'mcq',
         code_snippet: currentQ.code_snippet,
         options: options,
-        learner_answer: historyEntry ? historyEntry.submitted_answer : 'Not answered',
-        correct_answer: historyEntry ? (historyEntry.correct_answer || currentQ.correct_answer) : currentQ.correct_answer,
-        is_correct: historyEntry ? historyEntry.is_correct : false,
+        learner_answer: historyEntry.submitted_answer || 'Not answered',
+        correct_answer: historyEntry.correct_answer || currentQ.correct_answer || '',
+        is_correct: historyEntry.is_correct || false,
         explanation: currentQ.evaluation_criteria || '',
         topic: currentQ.topic,
         difficulty: difficultyMap[currentQ.difficulty] || 'Medium',
         bloom_level: currentQ.blooms_level || 1,
-        time_spent: 0,
+        time_spent: historyEntry.time_spent || 0,
         timestamp: new Date(q.question_generated_at || Date.now()).getTime(),
       });
       number++;

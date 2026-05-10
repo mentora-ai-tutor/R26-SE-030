@@ -1,5 +1,6 @@
 const n8nService = require('../services/n8nService');
 const mongoose = require('mongoose');
+const { getFeedbackReport } = require('../services/mongoService');
 
 const startSession = async (req, res, next) => {
   try {
@@ -220,10 +221,46 @@ const getSessions = async (req, res, next) => {
   }
 };
 
+const getFeedbackReportBySession = async (req, res, next) => {
+  try {
+    const db = mongoose.connection.db;
+    const { sessionId } = req.params;
+    const learnerId = req.user.student_id;
+
+    const report = await getFeedbackReport(db, sessionId);
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Feedback report not found for this session',
+      });
+    }
+
+    if (report.learner_id !== learnerId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to view this report',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: report,
+    });
+  } catch (error) {
+    next({
+      statusCode: 500,
+      message: 'Failed to retrieve feedback report',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   startSession,
   submitAnswer,
   getSession,
   getSessions,
   getQuestionsByTopic,
+  getFeedbackReportBySession,
 };

@@ -1,0 +1,1370 @@
+{
+  "name": "AME Agent - Fixed (remediation syntax error resolved)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ame/start-session",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "75f7b563-b2da-4e07-ac4b-2e354b3b8e34",
+      "name": "Webhook - Start Session",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "ame-start-session"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// NODE: Validate & Parse Mastery Profile Input\n// PURPOSE: Parse the Knowledge Analysis Agent output and\n// validate it before starting assessment session.\n//\n// SUPPORTS NEW KAA FORMAT:\n//   - student_id (replaces learner_id)\n//   - data_sources.github for GitHub availability\n//   - recommendations.priority_order for topic ordering\n//   - gap_type (FUNDAMENTAL_GAP / PARTIAL_GAP) for difficulty\n//   - observed_error_patterns instead of error_patterns\n//   - overall_mastery_score (0-100) instead of overall_skill_level\n//\n// All OUTPUT field names are IDENTICAL to previous version\n// so zero downstream nodes require any changes.\n// ============================================================\n\nconst body = $input.first().json.body;\n\n// ── Accept both student_id (new format) and learner_id (old format) ──\nconst learnerId = body.student_id || body.learner_id;\nif (!learnerId)        throw new Error('Missing student_id (or learner_id)');\nif (!body.mastery_profile) throw new Error('Missing mastery_profile');\nif (!body.mastery_profile.knowledge_gaps || body.mastery_profile.knowledge_gaps.length === 0) {\n  throw new Error('No knowledge gaps found in mastery_profile');\n}\n\nconst profile    = body.mastery_profile;\nconst dataSources = body.data_sources || {};\n\n// ── GitHub availability: new format uses data_sources.github ──\n// Old format used profile.github_analysis object\nconst hasGithub = (dataSources.github === 'available') || !!profile.github_analysis;\n\n// ── Derive overall_skill_level for downstream prompt compatibility ──\n// New format: overall_mastery_score 0-100\n// Old format: overall_skill_level string\nconst overallScore = profile.overall_mastery_score || 0;\nlet derivedSkillLevel = 'beginner';\nif (overallScore >= 70)      derivedSkillLevel = 'advanced';\nelse if (overallScore >= 45) derivedSkillLevel = 'intermediate';\n\n// Keep the original field if it exists (old format), otherwise use derived value\nprofile.overall_skill_level = profile.overall_skill_level || derivedSkillLevel;\n\n// ── Enrich each knowledge gap for downstream compatibility ──\n// New format: observed_error_patterns = { sandbox: [...], quizzes: [...], github: [...] }\n// Downstream nodes expect: gap.error_patterns = flat array\n// Also map gap_type to a priority string so the sort still works as fallback\nconst rawGaps = profile.knowledge_gaps;\nconst enrichedGaps = rawGaps.map(gap => {\n  // Flatten observed_error_patterns into error_patterns (what downstream nodes read)\n  if (!gap.error_patterns) {\n    const obs = gap.observed_error_patterns || {};\n    const sandboxErrs = Array.isArray(obs.sandbox) ? obs.sandbox : [];\n    const quizErrs    = Array.isArray(obs.quizzes) ? obs.quizzes : [];\n    const githubErrs  = Array.isArray(obs.github)  ? obs.github  : [];\n    gap.error_patterns = [...sandboxErrs, ...quizErrs, ...githubErrs];\n  }\n\n  // Map gap_type to priority string for fallback sort compatibility\n  // New format has no gap.priority field - derive it from gap_type\n  if (!gap.priority) {\n    if (gap.gap_type === 'FUNDAMENTAL_GAP') gap.priority = 'high';\n    else if (gap.gap_type === 'PARTIAL_GAP') gap.priority = 'medium';\n    else gap.priority = 'low';\n  }\n\n  return gap;\n});\n\n// Update profile with enriched gaps\nprofile.knowledge_gaps = enrichedGaps;\n\n// ── Sort topics by priority ──\n// New format: recommendations.priority_order gives explicit order (most critical first)\n// Old format: sort by gap.priority field\nconst recommendations = body.recommendations || {};\nconst priorityOrder   = recommendations.priority_order || [];\n\nlet sortedGaps;\nif (priorityOrder.length > 0) {\n  // Use explicit priority_order from recommendations (new format)\n  const gapsByTopic = {};\n  enrichedGaps.forEach(g => { gapsByTopic[g.topic] = g; });\n\n  // Start with priority_order topics in order\n  const ordered = priorityOrder\n    .map(t => gapsByTopic[t])\n    .filter(Boolean);\n\n  // Append any gaps not mentioned in priority_order\n  const remaining = enrichedGaps.filter(g => !priorityOrder.includes(g.topic));\n  sortedGaps = [...ordered, ...remaining];\n} else {\n  // Fallback: sort by gap.priority field (old format compatibility)\n  const priorityMap = { critical: 4, high: 3, medium: 2, low: 1 };\n  sortedGaps = [...enrichedGaps].sort((a, b) =>\n    (priorityMap[b.priority] || 0) - (priorityMap[a.priority] || 0)\n  );\n}\n\n// ── Select first topic ──\nconst selectedTopic = sortedGaps[0];\n\n// ── Determine starting difficulty ──\n// New format: use gap_type of the first topic\n// FUNDAMENTAL_GAP = always start easy (needs foundation building)\n// PARTIAL_GAP     = start medium (has some understanding)\n// Old format: used overall_skill_level\nlet startDifficulty = 'easy';\n\nif (selectedTopic.gap_type === 'PARTIAL_GAP') {\n  startDifficulty = 'medium';\n} else if (selectedTopic.gap_type === 'FUNDAMENTAL_GAP') {\n  startDifficulty = 'easy';\n} else {\n  // Old format fallback\n  if (profile.overall_skill_level === 'intermediate') startDifficulty = 'medium';\n  if (profile.overall_skill_level === 'advanced')     startDifficulty = 'hard';\n}\n\n// Old format GitHub override (keep for backward compatibility)\nif (!selectedTopic.gap_type && hasGithub && profile.github_analysis &&\n    profile.github_analysis.code_quality_score > 70) {\n  startDifficulty = 'medium';\n}\n\n// ── Build session data (ALL field names IDENTICAL to old version) ──\nconst sessionData = {\n  learner_id:              learnerId,\n  session_id:              `SESSION_${Date.now()}_${learnerId}`,\n  mastery_profile:         profile,\n  has_github_access:       hasGithub,\n  selected_topic:          selectedTopic.topic,\n  selected_topic_details:  selectedTopic,\n  all_topics:              sortedGaps.map(g => g.topic),\n  remaining_topics:        sortedGaps.slice(1).map(g => g.topic),\n  current_difficulty:      startDifficulty,\n  question_number:         1,\n  mastery_score:           0,\n  total_questions_asked:   0,\n  correct_answers:         0,\n  consecutive_correct:     0,\n  consecutive_wrong:       0,\n  session_history:         [],\n  topic_scores:            {},\n  mastery_threshold:       85,\n  max_questions_per_topic: 10,\n  session_started_at:      new Date().toISOString(),\n  session_status:          'active'\n};\n\n// ── Initialise topic scores (IDENTICAL to old version) ──\nsortedGaps.forEach(gap => {\n  sessionData.topic_scores[gap.topic] = {\n    mastery_score:   0,\n    questions_asked: 0,\n    correct:         0,\n    is_mastered:     false\n  };\n});\n\nreturn [{ json: sessionData }];\n"
+      },
+      "id": "a6bd6b63-2552-4a11-b848-6c11ae423039",
+      "name": "Parse & Validate Mastery Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_sessions",
+        "fields": "=learner_id,session_id,mastery_profile,has_github_access,selected_topic,all_topics,remaining_topics,current_difficulty,question_number,mastery_score,total_questions_asked,correct_answers,consecutive_correct,consecutive_wrong,session_history,topic_scores,mastery_threshold,session_started_at,session_status",
+        "options": {}
+      },
+      "id": "b93a6338-1869-4568-84da-5ab5aef08f0a",
+      "name": "MongoDB - Save Session",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        528,
+        0
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\n\n// ✅ Handle both structures\nconst session = raw.updated_session || raw;\n\n// ✅ Safe extraction\nconst topic      = session.selected_topic || \"\";\nconst difficulty = session.current_difficulty || \"easy\";\nconst profile    = session.mastery_profile || {};\n\n// ✅ Get topic details safely\nconst topicDetails = (profile.knowledge_gaps || []).find(\n  t => t.topic === topic\n) || {};\n\n// ─────────────────────────────────────────────\n// Bloom's Taxonomy Adaptive Question Scaffold\n// ─────────────────────────────────────────────\n\nconst bloomsScaffold = {\n\n  // ============================================================\n  // EASY LEVEL\n  // Bloom's Level 1-2\n  // Remembering + Understanding\n  // ============================================================\n\n  easy: {\n\n    level_name:\n      \"Remembering and Understanding (Bloom's Level 1-2)\",\n\n    question_type: \"mcq\",\n\n    instruction: `\nGenerate a MULTIPLE CHOICE QUESTION (MCQ).\n\nRequirements:\n- Exactly 4 options: A, B, C, D\n- Only ONE correct answer\n- Focus on:\n  • definitions\n  • syntax recognition\n  • concept identification\n  • basic understanding\n  • terminology\n\nAvoid:\n- long coding tasks\n- debugging challenges\n- complex algorithms\n\nThe learner should mainly recall or recognise concepts.\n`\n  },\n\n  // ============================================================\n  // MEDIUM LEVEL\n  // Bloom's Level 3-4\n  // Applying + Analyzing\n  // ============================================================\n\n  medium: {\n\n    level_name:\n      \"Applying and Analyzing (Bloom's Level 3-4)\",\n\n    question_type: \"code_completion\",\n\n    instruction: `\nGenerate a Java CODE COMPLETION or CODE TRACING question.\n\nRequirements:\n- Include Java code snippet\n- Learner must:\n  • complete missing logic\n  • trace execution flow\n  • identify outputs\n  • analyze recursion/loops\n  • understand program behavior\n\nFocus on:\n- applying concepts in code\n- analyzing execution\n- logical reasoning\n- understanding flow\n\nAvoid:\n- extremely advanced architecture\n- full large-scale implementations\n\nThe learner should apply knowledge practically.\n`\n  },\n\n  // ============================================================\n  // HARD LEVEL\n  // Bloom's Level 5-6\n  // Evaluating + Creating\n  // ============================================================\n\n  hard: {\n\n    level_name:\n      \"Evaluating and Creating (Bloom's Level 5-6)\",\n\n    question_type: \"coding_challenge\",\n\n    instruction: `\nGenerate a Java DEBUGGING problem or CODING CHALLENGE.\n\nRequirements:\n- Include realistic Java code\n- Learner must:\n  • debug errors\n  • optimize logic\n  • design solutions\n  • implement algorithms\n  • evaluate correctness\n  • create working code\n\nFocus on:\n- problem solving\n- debugging ability\n- algorithmic thinking\n- software design reasoning\n- advanced implementation\n\nAvoid:\n- simple recall questions\n- beginner syntax-only tasks\n\nThe learner should demonstrate mastery and independent problem solving.\n`\n  }\n};\n\nconst scaffold =\n  bloomsScaffold[difficulty] || bloomsScaffold.easy;\n\n// ✅ Safe arrays\nconst misconceptions =\n  topicDetails.misconceptions || [];\n\n// ✅ Extract observed error patterns safely\nconst errorPatterns =\n  Object.values(topicDetails.observed_error_patterns || {})\n    .flat()\n    .slice(0, 5);\n\n// ✅ Filter previous questions ONLY from current topic\nconst askedQuestions = (session.session_history || [])\n  .filter(h => h.topic === topic)\n  .map(h => h.question_text)\n  .slice(-5);\n\n// ─────────────────────────────────────────────\n// Build stable Ollama prompt\n// ─────────────────────────────────────────────\n\nconst promptText = `\nYou are an expert Java tutor.\n\nGenerate EXACTLY ONE adaptive Java assessment question.\n\nIMPORTANT RULES:\n- Return ONLY valid JSON\n- No markdown\n- No explanations\n- No extra text\n- No code fences\n- Never return empty output\n- Always complete the JSON\n\nTOPIC:\n${topic}\n\nDIFFICULTY:\n${difficulty}\n\nBLOOM LEVEL:\n${scaffold.level_name}\n\nQUESTION REQUIREMENT:\n${scaffold.instruction}\n\nKNOWN MISCONCEPTIONS:\n${misconceptions.join(', ')}\n\nKNOWN ERROR PATTERNS:\n${errorPatterns.join(', ')}\n\nDO NOT REPEAT:\n${askedQuestions.join('\\n')}\n\nJSON FORMAT:\n\n${difficulty === 'easy'\n? `{\n  \"topic\": \"${topic}\",\n  \"difficulty\": \"${difficulty}\",\n  \"blooms_level\": \"${scaffold.level_name}\",\n  \"question_type\": \"mcq\",\n  \"question_text\": \"...\",\n  \"code_snippet\": null,\n  \"options\": {\n    \"A\": \"...\",\n    \"B\": \"...\",\n    \"C\": \"...\",\n    \"D\": \"...\"\n  },\n  \"correct_answer\": \"A\",\n  \"evaluation_criteria\": \"...\",\n  \"hints\": [\"...\", \"...\"]\n}`\n\n: `{\n  \"topic\": \"${topic}\",\n  \"difficulty\": \"${difficulty}\",\n  \"blooms_level\": \"${scaffold.level_name}\",\n  \"question_type\": \"${scaffold.question_type}\",\n  \"question_text\": \"...\",\n  \"code_snippet\": \"Java code here\",\n  \"options\": null,\n  \"correct_answer\": null,\n  \"evaluation_criteria\": \"...\",\n  \"hints\": [\"...\", \"...\"]\n}`\n}\n`;\n\n// ─────────────────────────────────────────────\n// Ollama Payload\n// ─────────────────────────────────────────────\n\nconst ollamaPayload = {\n\n  model: \"gemma4:latest\",\n\n  prompt: promptText,\n\n  stream: false,\n\n  format: \"json\",\n\n  options: {\n    temperature: 0.2,\n    num_predict: 1200,\n    num_ctx: 4096,\n    top_p: 0.9,\n    repeat_penalty: 1.1\n  }\n};\n\n// ─────────────────────────────────────────────\n// Final return\n// ─────────────────────────────────────────────\n\nreturn [\n  {\n    json: {\n      ...session,\n      question_prompt: promptText,\n      bloom_level: scaffold.level_name,\n      ollama_payload: ollamaPayload\n    }\n  }\n];"
+      },
+      "id": "2a47a3f6-77d7-4769-8a0c-87d598cefe43",
+      "name": "Build Question Generation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollama_payload) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "10672b27-74d5-4710-943b-86ef78a5209e",
+      "name": "Ollama Gemma4 - Generate Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const session = $('Build Question Generation Prompt').first().json;\nconst ollamaResponse = $input.first().json;\n\nlet questionData;\n\ntry {\n\n  // ─────────────────────────────────────────────\n  // Get raw Ollama response safely\n  // ─────────────────────────────────────────────\n  let rawText = ollamaResponse.response || '';\n\n  console.log('🟡 RAW OLLAMA RESPONSE:');\n  console.log(rawText);\n\n  // ─────────────────────────────────────────────\n  // Remove markdown wrappers\n  // ─────────────────────────────────────────────\n  rawText = rawText\n    .replace(/```json/g, '')\n    .replace(/```/g, '')\n    .trim();\n\n  // ─────────────────────────────────────────────\n  // Extract JSON object safely\n  // Handles extra text before/after JSON\n  // ─────────────────────────────────────────────\n  const jsonMatch = rawText.match(/\\{[\\s\\S]*\\}/);\n\n  if (!jsonMatch) {\n    throw new Error('No valid JSON object found in Ollama response');\n  }\n\n  const cleanedJson = jsonMatch[0];\n\n  console.log('🟢 CLEANED JSON:');\n  console.log(cleanedJson);\n\n  // ─────────────────────────────────────────────\n  // Parse JSON\n  // ─────────────────────────────────────────────\n  questionData = JSON.parse(cleanedJson);\n\n  // ─────────────────────────────────────────────\n  // Validate required fields\n  // ─────────────────────────────────────────────\n  const requiredFields = [\n    'question_text',\n    'question_type',\n    'correct_answer',\n    'topic',\n    'difficulty'\n  ];\n\n  for (const field of requiredFields) {\n\n    if (\n      questionData[field] === undefined ||\n      questionData[field] === null ||\n      questionData[field] === ''\n    ) {\n      throw new Error(`Missing required field: ${field}`);\n    }\n  }\n\n  // ─────────────────────────────────────────────\n  // Ensure question_id always unique\n  // ─────────────────────────────────────────────\n  questionData.question_id =\n    \"Q_\" +\n    Date.now() +\n    \"_\" +\n    Math.random().toString(36).substring(2, 8);\n\n  // ─────────────────────────────────────────────\n  // Normalize MCQ structure\n  // ─────────────────────────────────────────────\n  if (questionData.question_type === 'mcq') {\n\n    if (!questionData.options) {\n      throw new Error('MCQ missing options object');\n    }\n\n    const requiredOptions = ['A', 'B', 'C', 'D'];\n\n    for (const opt of requiredOptions) {\n\n      if (!questionData.options[opt]) {\n        throw new Error(`Missing MCQ option: ${opt}`);\n      }\n    }\n\n    questionData.correct_answer =\n      String(questionData.correct_answer)\n        .trim()\n        .toUpperCase();\n  }\n\n  console.log('✅ QUESTION PARSED SUCCESSFULLY');\n\n} catch (e) {\n\n  console.log('❌ QUESTION PARSE FAILED');\n  console.log('ERROR:', e.message);\n\n  console.log('🔴 ORIGINAL RESPONSE:');\n  console.log(ollamaResponse.response);\n\n  // ❌ IMPORTANT:\n  // DO NOT inject unrelated fallback question\n  // Throw structured error instead\n\n  throw new Error(\n    `Failed to parse adaptive question from Ollama: ${e.message}`\n  );\n}\n\n// ─────────────────────────────────────────────\n// Final return\n// ─────────────────────────────────────────────\nreturn [{\n  json: {\n    ...session,\n    current_question: questionData,\n    question_generated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "a57b5c44-8461-425e-b87b-be3ecf1025c7",
+      "name": "Parse Generated Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_questions",
+        "fields": "=session_id,learner_id,current_question,question_generated_at,current_difficulty,bloom_level",
+        "options": {}
+      },
+      "id": "4cd44dc4-c540-4e12-a35a-413c76c90970",
+      "name": "MongoDB - Save Question",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        2128,
+        0
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"session_id\": \"{{ $('Parse & Validate Mastery Profile').first().json.session_id }}\",\n  \"learner_id\": \"{{ $('Parse & Validate Mastery Profile').first().json.learner_id }}\",\n  \"message\": \"Session started. Here is your first question.\",\n  \"question\": {{ JSON.stringify($('Parse Generated Question').first().json.current_question) }},\n  \"session_info\": {\n    \"topic\": \"{{ $('Parse & Validate Mastery Profile').first().json.selected_topic }}\",\n    \"difficulty\": \"{{ $('Parse & Validate Mastery Profile').first().json.current_difficulty }}\",\n    \"question_number\": 1,\n    \"mastery_score\": 0,\n    \"mastery_threshold\": 85,\n    \"topics_remaining\": {{ $('Parse & Validate Mastery Profile').first().json.all_topics.length }}\n  }\n}",
+        "options": {}
+      },
+      "id": "a6a0a90c-e44d-4160-8e78-dcfa427a85ff",
+      "name": "Respond - Session Started",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2384,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ame/submit-answer",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4bdfd7d7-87bd-4f0f-80e4-fa2182c6ae22",
+      "name": "Webhook - Submit Answer",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        16,
+        352
+      ],
+      "webhookId": "ame-submit-answer"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ============================================================\n// Validate & Extract Session Data\n// READS session state from MongoDB (no session_state in request needed)\n// Learner only sends: session_id, learner_id, question_id, answer\n//\n// Priority:\n//   1. ame_session_updates (has latest state after first answer)\n//   2. ame_sessions (initial state, used for very first answer)\n// ============================================================\n\nconst body = $('Webhook - Submit Answer').first().json.body;\n\n// ── Validate required fields ──\nif (!body.session_id)  throw new Error('Missing session_id');\nif (!body.learner_id)  throw new Error('Missing learner_id');\nif (!body.question_id) throw new Error('Missing question_id');\nif (body.answer === undefined || body.answer === null) throw new Error('Missing answer');\n\n// ── Read from MongoDB - Fetch Session State (ame_session_updates) ──\nlet sessionUpdateDoc = null;\ntry {\n  const raw = $('MongoDB - Fetch Session State').first().json;\n  // n8n returns {} or a doc with _id when found\n  if (raw && raw.updated_session) sessionUpdateDoc = raw;\n} catch(e) { /* not found */ }\n\n// ── Fallback: read from MongoDB - Fetch Initial Session (ame_sessions) ──\nlet initialSessionDoc = null;\ntry {\n  const raw = $('MongoDB - Fetch Initial Session').first().json;\n  if (raw && raw.session_id) initialSessionDoc = raw;\n} catch(e) { /* not found */ }\n\n// ── Read current question from MongoDB - Fetch Current Question ──\nlet questionDoc = null;\ntry {\n  const raw = $('MongoDB - Fetch Current Question').first().json;\n  if (raw && raw.current_question) questionDoc = raw;\n} catch(e) { /* not found */ }\n\n// ── Determine session state source ──\n// Use ame_session_updates if available (has latest state including mastery updates)\n// Fall back to ame_sessions (initial state, used for very first answer submission)\nlet sessionState;\nif (sessionUpdateDoc && sessionUpdateDoc.updated_session) {\n  sessionState = sessionUpdateDoc.updated_session;\n} else if (initialSessionDoc && initialSessionDoc.session_id) {\n  // ame_sessions stores the full initial session fields at root level\n  sessionState = initialSessionDoc;\n} else {\n  throw new Error(\n    `No session state found in MongoDB for session_id: ${body.session_id}. ` +\n    `Ensure start-session was called first and the session was saved correctly.`\n  );\n}\n\n// ── Validate question ──\nif (!questionDoc || !questionDoc.current_question) {\n  throw new Error(\n    `No question found in MongoDB for question_id: ${body.question_id}. ` +\n    `The question may not have been saved yet.`\n  );\n}\n\nconst currentQuestion = questionDoc.current_question;\n\n// ── Verify question_id matches ──\nif (currentQuestion.question_id !== body.question_id) {\n  throw new Error(\n    `question_id mismatch: request has ${body.question_id} ` +\n    `but MongoDB has ${currentQuestion.question_id}`\n  );\n}\n\n// ── Reconstruct sessionData — IDENTICAL structure as before ──\n// Same field names used by ALL downstream nodes — nothing else needs changing\nconst sessionData = {\n  session_id:                sessionState.session_id            || body.session_id,\n  learner_id:                sessionState.learner_id            || body.learner_id,\n  mastery_profile:           sessionState.mastery_profile,\n  selected_topic:            sessionState.selected_topic,\n  all_topics:                sessionState.all_topics            || [],\n  remaining_topics:          sessionState.remaining_topics      || [],\n  current_difficulty:        sessionState.current_difficulty,\n  question_number:           sessionState.question_number       || 1,\n  mastery_score:             sessionState.mastery_score         || 0,\n  total_questions_asked:     sessionState.total_questions_asked || 0,\n  correct_answers:           sessionState.correct_answers       || 0,\n  consecutive_correct:       sessionState.consecutive_correct   || 0,\n  consecutive_wrong:         sessionState.consecutive_wrong     || 0,\n  session_history:           sessionState.session_history       || [],\n  topic_scores:              sessionState.topic_scores          || {},\n  mastery_threshold:         sessionState.mastery_threshold     || 85,\n  max_questions_per_topic:   sessionState.max_questions_per_topic || 10,\n  session_started_at:        sessionState.session_started_at    || new Date().toISOString(),\n  remediation_mode:          sessionState.remediation_mode      || false,\n  remediation_questions:     sessionState.remediation_questions || 0,\n  max_remediation_questions: sessionState.max_remediation_questions || 6\n};\n\n// ── Return identical structure — all downstream nodes unchanged ──\nreturn [{ json: {\n  session_id:       body.session_id,\n  learner_id:       body.learner_id,\n  question_id:      body.question_id,\n  submitted_answer: body.answer,\n  submitted_at:     new Date().toISOString(),\n  sessionData,\n  questionData:     { current_question: currentQuestion },\n  question:         currentQuestion,\n  submittedAnswer:  body.answer\n}}];\n"
+      },
+      "id": "5919a614-3471-4f3e-91c8-8ca90e637d6f",
+      "name": "Validate & Extract Session Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data            = $input.first().json;\nconst question        = data.question;\nconst submittedAnswer = data.submittedAnswer;\n\nlet promptText = null;\nlet isMcq = false;\n\nif (question.question_type === 'mcq') {\n  isMcq = true;\n} else {\n  promptText = `You are an expert Java programming evaluator. Evaluate this learner's Java answer.\n\nQUESTION:\nTopic: ${question.topic}\nDifficulty: ${question.difficulty}\nType: ${question.question_type}\nQuestion: ${question.question_text}\n${question.code_snippet && question.code_snippet !== 'null' ? `\\nCode Provided:\\n${question.code_snippet}` : ''}\n\nEXPECTED ANSWER: ${question.correct_answer}\nEVALUATION CRITERIA: ${question.evaluation_criteria}\nLEARNER ANSWER: ${submittedAnswer}\n\nIMPORTANT: Respond with ONLY a valid JSON object. No explanation, no markdown, no extra text. Just raw JSON.\n\n{\n  \"is_correct\": <true or false>,\n  \"correctness_score\": <number 0-100>,\n  \"evaluation_summary\": \"<1-2 sentence summary>\",\n  \"what_is_correct\": \"<what the learner got right>\",\n  \"what_is_wrong\": \"<what was wrong, or Nothing if fully correct>\",\n  \"key_concept_understood\": <true or false>,\n  \"partial_credit\": <true or false>\n}`;\n}\n\nconst ollamaPayload = promptText ? {\n  model: \"gemma4:latest\",\n  format: \"json\",\n  prompt: promptText,\n  stream: false,\n  options: { temperature: 0.1, num_predict: 1024, num_ctx: 4096, keep_alive: '10m' }\n} : null;\n\nreturn [{ json: {\n  ...data,\n  evaluationPrompt: promptText,\n  is_mcq:           isMcq,\n  ollama_payload:   ollamaPayload\n}}];\n"
+      },
+      "id": "c44c201a-692d-47b7-8533-c7e95928cb98",
+      "name": "Build Evaluation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-mcq",
+              "leftValue": "={{ $json.is_mcq }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b5b0e948-ace7-476d-a3bd-c1493fc916b6",
+      "name": "IF - MCQ or Open Answer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        864,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data      = $input.first().json;\nconst correct   = String(data.question.correct_answer).trim().toUpperCase();\nconst submitted = String(data.submittedAnswer).trim().toUpperCase();\nconst isCorrect = correct === submitted;\n\nreturn [{ json: {\n  ...data,\n  evaluation_result: {\n    is_correct:             isCorrect,\n    correctness_score:      isCorrect ? 100 : 0,\n    evaluation_summary:     isCorrect ? 'Correct answer selected.' : `Incorrect. The correct answer was ${correct}.`,\n    what_is_correct:        isCorrect ? 'You selected the right option.' : 'N/A',\n    what_is_wrong:          isCorrect ? 'Nothing' : `You selected ${submitted} but the correct answer is ${correct}.`,\n    key_concept_understood: isCorrect,\n    partial_credit:         false\n  }\n}}];\n"
+      },
+      "id": "920addb0-2c81-46b5-8113-8707a718d2c9",
+      "name": "MCQ Direct Evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollama_payload) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "da5acbf0-c2a8-46e2-a40e-9638724c2b34",
+      "name": "Ollama Gemma4 - Evaluate Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1136,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst evalData       = $('Build Evaluation Prompt').first().json;\nconst ollamaResponse = $input.first().json;\n\n// Extract question and answer data for smart fallback\nconst question        = evalData.question        || {};\nconst submittedAnswer = evalData.submittedAnswer  || '';\nconst correctAnswer   = question.correct_answer   || '';\nconst questionText    = question.question_text    || '';\nconst topic           = question.topic            || 'Java';\nconst evalCriteria    = question.evaluation_criteria || '';\n\nlet evalResult;\nlet rawResponseText = '';\ntry {\n  const rawText     = ollamaResponse.response || '';\n  rawResponseText   = rawText;\n  const cleanedText = rawText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  evalResult = JSON.parse(cleanedText);\n} catch(e) {\n  // ── SMART FALLBACK: use real question/answer data instead of generic text ──\n  // Attempt basic string match for MCQ as a safety net\n  const submTrim    = String(submittedAnswer).trim().toUpperCase();\n  const corrTrim    = String(correctAnswer).trim().toUpperCase();\n  const likelyRight = submTrim === corrTrim || corrTrim.startsWith(submTrim) || submTrim.startsWith(corrTrim);\n\n  const whatCorrect = likelyRight\n    ? `Your answer \"${submittedAnswer}\" matches the expected answer for this ${topic} question.`\n    : submittedAnswer\n      ? `You provided the answer: \"${submittedAnswer}\" for the question about ${topic}.`\n      : `No clear correct elements could be determined from your response.`;\n\n  const whatWrong = likelyRight\n    ? 'Nothing - your answer appears correct.'\n    : correctAnswer\n      ? `Your answer \"${submittedAnswer}\" did not match the expected answer \"${correctAnswer}\". ${evalCriteria ? 'Evaluation criteria: ' + evalCriteria : ''}`\n      : `Your answer did not match what was expected for this ${topic} question. Please review the concept and try again.`;\n\n  evalResult = {\n    is_correct:             likelyRight,\n    correctness_score:      likelyRight ? 80 : 0,\n    evaluation_summary:     likelyRight\n      ? `Your answer appears to match the expected response for this ${topic} question.`\n      : `Your answer did not match the expected response for this ${topic} question. The correct answer was: ${correctAnswer || 'see explanation'}.`,\n    what_is_correct:        whatCorrect,\n    what_is_wrong:          whatWrong,\n    key_concept_understood: likelyRight,\n    partial_credit:         false,\n    _parse_fallback:        true,\n    _raw_response_length:   rawResponseText.length\n  };\n}\n\nreturn [{ json: { ...evalData, evaluation_result: evalResult }}];\n\n"
+      },
+      "id": "cc062b95-6474-4694-b4f7-5e80310d9d72",
+      "name": "Parse Evaluation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        496
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3b3840cd-9197-4b48-a218-cd40ce245e36",
+      "name": "Merge Evaluation Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1696,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data       = $input.first().json;\nconst evalResult = data.evaluation_result;\nconst session    = data.sessionData;\nconst question   = data.question;\n\n// ── Existing mastery calculation (UNCHANGED) ──────────────────\nconst difficultyWeights = { easy: 0.6, medium: 0.8, hard: 1.0 };\nconst diffWeight = difficultyWeights[question.difficulty] || 0.6;\n\nconst rubricEval  = data.rubric_evaluation || {};\nconst rubricScore = rubricEval.weighted_rubric_score !== undefined\n  ? Number(rubricEval.weighted_rubric_score)\n  : (evalResult.is_correct ? 80 : 20);\n\nlet rawScore = evalResult.correctness_score || 0;\n\nif (evalResult.is_correct)\n  rawScore = Math.max(rawScore, 80);\n\nif (evalResult.partial_credit && !evalResult.is_correct)\n  rawScore = Math.max(rawScore, 40);\n\nconst blendedScore = Math.round((rawScore * 0.60) + (rubricScore * 0.40));\nrawScore = blendedScore;\n\nconst weightedScore = rawScore * diffWeight;\nconst topicKey      = question.topic;\n\nconst prevTopicData =\n  session.topic_scores?.[topicKey] ||\n  { mastery_score: 0, questions_asked: 0, correct: 0 };\n\nconst prevMastery = prevTopicData.mastery_score || 0;\n\nlet newMastery = Math.round((prevMastery * 0.6) + (weightedScore * 0.4));\n\nif (evalResult.is_correct && newMastery < prevMastery) {\n  newMastery = prevMastery;\n}\n\nif (evalResult.is_correct) {\n  const improvement = question.difficulty === 'hard' ? 8\n    : question.difficulty === 'medium' ? 5 : 3;\n  newMastery = Math.min(100, Math.max(newMastery, prevMastery + improvement));\n} else {\n  const penalty = question.difficulty === 'hard' ? 6\n    : question.difficulty === 'medium' ? 4 : 2;\n  newMastery = Math.max(0, newMastery - penalty);\n}\n\nconst newConsecutiveCorrect = evalResult.is_correct ? (session.consecutive_correct || 0) + 1 : 0;\nconst newConsecutiveWrong   = evalResult.is_correct ? 0 : (session.consecutive_wrong  || 0) + 1;\n\nlet bonusAdjustedMastery = newMastery;\nif (newConsecutiveCorrect >= 3) bonusAdjustedMastery = Math.min(100, newMastery + 5);\nif (newConsecutiveWrong   >= 3) bonusAdjustedMastery = Math.max(0,   newMastery - 5);\nif (evalResult.is_correct && bonusAdjustedMastery < prevMastery) bonusAdjustedMastery = prevMastery;\n\n// ── CONCEPT-LEVEL REMEDIATION: determine partial-correct ─────\n// partial_correct = not binary correct, but score between 30-79\n// This means learner has SOME understanding but specific gaps\nconst isPartialCorrect = (\n  !evalResult.is_correct &&\n  rawScore >= 30 &&\n  rawScore < 80\n);\n\n// ── EXTRACT weak concepts from evaluation feedback ────────────\n// Sources: what_is_wrong, evaluation_summary, misconceptions\n// These become the focus of the NEXT question\nconst weakConceptSources = [\n  evalResult.what_is_wrong         || '',\n  evalResult.evaluation_summary    || '',\n  rubricEval.concept_misunderstanding || '',\n  rubricEval.weaknesses_observed   || '',\n  rubricEval.weakest_area          || ''\n].filter(s => s && s.length > 5 && s !== 'Nothing');\n\n// Also include known misconceptions from mastery profile for this topic\nconst topicGap = (session.mastery_profile?.knowledge_gaps || [])\n  .find(g => g.topic === topicKey) || {};\nconst profileMisconceptions = (topicGap.misconceptions || []).slice(0, 2);\n\nconst weakConcepts = weakConceptSources.length > 0\n  ? weakConceptSources\n  : profileMisconceptions;\n\n// ── ADAPTIVE DIFFICULTY — concept-level rules ─────────────────\n// KEEP same difficulty for partial-correct (has some understanding)\n// DOWNGRADE only when score < 30 (very low — fundamental gap)\n// UPGRADE only for fully correct (existing logic)\nlet nextDifficulty = question.difficulty;\n\nif (evalResult.is_correct && newConsecutiveCorrect >= 2) {\n  // Existing: upgrade after 2 consecutive correct\n  if (question.difficulty === 'easy')   nextDifficulty = 'medium';\n  else if (question.difficulty === 'medium') nextDifficulty = 'hard';\n\n} else if (!evalResult.is_correct) {\n  if (isPartialCorrect) {\n    // NEW: partial-correct → KEEP same difficulty, focus on weak concept\n    nextDifficulty = question.difficulty;\n  } else if (rawScore < 30 && newConsecutiveWrong >= 1) {\n    // Only downgrade for very low scores (fundamental misunderstanding)\n    if (question.difficulty === 'hard')   nextDifficulty = 'medium';\n    else if (question.difficulty === 'medium') nextDifficulty = 'easy';\n  }\n  // score 0-29 but first wrong → keep same (don't downgrade on first failure)\n}\n\n// ── Topic transition ──────────────────────────────────────────\nconst updatedTopicScores = { ...(session.topic_scores || {}) };\nupdatedTopicScores[topicKey] = {\n  mastery_score:   bonusAdjustedMastery,\n  questions_asked: (prevTopicData.questions_asked || 0) + 1,\n  correct:         (prevTopicData.correct || 0) + (evalResult.is_correct ? 1 : 0),\n  is_mastered:     bonusAdjustedMastery >= (session.mastery_threshold || 85)\n};\n\nconst topicMastered      = bonusAdjustedMastery >= (session.mastery_threshold || 85);\nconst maxQuestionsReached = updatedTopicScores[topicKey].questions_asked >= (session.max_questions_per_topic || 10);\nconst moveToNextTopic     = topicMastered || maxQuestionsReached;\nconst remainingTopics     = session.remaining_topics || [];\nconst allTopicsMastered   = moveToNextTopic && remainingTopics.length === 0;\n\nlet nextTopic           = session.selected_topic;\nlet nextRemainingTopics = remainingTopics;\n\nif (moveToNextTopic && remainingTopics.length > 0) {\n  nextTopic           = remainingTopics[0];\n  nextRemainingTopics = remainingTopics.slice(1);\n  // Adaptive starting difficulty for new topic\n  const nextTopicDetails = (session.mastery_profile?.knowledge_gaps || [])\n    .find(t => t.topic === nextTopic) || {};\n  if (nextTopicDetails.gap_type === 'PARTIAL_GAP') nextDifficulty = 'medium';\n  else if (nextTopicDetails.gap_type === 'FUNDAMENTAL_GAP') nextDifficulty = 'easy';\n  else {\n    const skill = session.mastery_profile?.overall_skill_level || 'beginner';\n    nextDifficulty = skill === 'advanced' ? 'hard' : skill === 'intermediate' ? 'medium' : 'easy';\n  }\n}\n\n// ── Remediation mode ──────────────────────────────────────────\nconst questionsOnTopic  = updatedTopicScores[topicKey].questions_asked;\nconst currentRemMode    = session.remediation_mode || false;\nconst remQuestions      = session.remediation_questions || 0;\nconst maxRemQuestions   = session.max_remediation_questions || 6;\nlet newRemediationMode      = currentRemMode;\nlet newRemediationQuestions = remQuestions;\n\nif (currentRemMode && bonusAdjustedMastery >= 70) {\n  newRemediationMode = false; newRemediationQuestions = 0;\n} else if (!currentRemMode && questionsOnTopic >= 5 && bonusAdjustedMastery < 50) {\n  newRemediationMode = true;  newRemediationQuestions = 0;\n} else if (newRemediationMode) {\n  newRemediationQuestions = remQuestions + 1;\n}\nif (newRemediationMode && newRemediationQuestions >= maxRemQuestions) {\n  newRemediationMode = false; newRemediationQuestions = 0;\n}\n\n// ── Build history entry — ADD weak_concepts and is_partial_correct ──\nconst historyEntry = {\n  question_id:        question.question_id,\n  question_text:      question.question_text,\n  question_type:      question.question_type,\n  difficulty:         question.difficulty,\n  topic:              question.topic,\n  submitted_answer:   data.submittedAnswer,\n  correct_answer:     question.correct_answer,\n  is_correct:         evalResult.is_correct,\n  is_partial_correct: isPartialCorrect,\n  score:              bonusAdjustedMastery,\n  correctness_score:  rawScore,\n  // CRITICAL: store extracted weak concepts for next question generation\n  weak_concepts:      weakConcepts,\n  timestamp:          new Date().toISOString()\n};\n\nconst updatedHistory = [...(session.session_history || []), historyEntry];\n\nreturn [{\n  json: {\n    ...data,\n\n    mastery_calculation: {\n      prev_mastery:      prevMastery,\n      raw_score:         rawScore,\n      weighted_score:    weightedScore,\n      new_mastery:       bonusAdjustedMastery,\n      difficulty_weight: diffWeight,\n      rubric_score:      rubricScore,\n      blended_score:     blendedScore,\n      is_partial_correct: isPartialCorrect,\n      weak_concepts:     weakConcepts\n    },\n\n    updated_session: {\n      ...session,\n      selected_topic:            nextTopic,\n      remaining_topics:          nextRemainingTopics,\n      current_difficulty:        nextDifficulty,\n      question_number:           (session.question_number || 1) + 1,\n      total_questions_asked:     (session.total_questions_asked || 0) + 1,\n      correct_answers:           (session.correct_answers || 0) + (evalResult.is_correct ? 1 : 0),\n      consecutive_correct:       moveToNextTopic && remainingTopics.length > 0 ? 0 : newConsecutiveCorrect,\n      consecutive_wrong:         moveToNextTopic && remainingTopics.length > 0 ? 0 : newConsecutiveWrong,\n      topic_scores:              updatedTopicScores,\n      session_history:           updatedHistory,\n      mastery_score:             bonusAdjustedMastery,\n      last_updated:              new Date().toISOString(),\n      remediation_mode:          newRemediationMode,\n      remediation_questions:     newRemediationQuestions,\n      max_remediation_questions: maxRemQuestions\n    },\n\n    topic_mastered:        topicMastered,\n    move_to_next_topic:    moveToNextTopic,\n    all_topics_mastered:   allTopicsMastered,\n    session_complete:      allTopicsMastered,\n    current_topic_mastery: bonusAdjustedMastery,\n\n    remediation_mode:    newRemediationMode,\n    remediation_entered: !currentRemMode && newRemediationMode,\n    remediation_exited:  currentRemMode  && !newRemediationMode,\n\n    // Pass through for Prepare Next Question\n    is_partial_correct: isPartialCorrect,\n    weak_concepts:      weakConcepts\n  }\n}];"
+      },
+      "id": "893a2d73-04b8-4e8b-8ea5-cf524c7e8255",
+      "name": "Calculate Mastery Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data       = $input.first().json;\nconst evalResult = data.evaluation_result;\nconst question   = data.question;\nconst mastery    = data.current_topic_mastery;\nconst isRemMode  = data.updated_session?.remediation_mode || false;\nconst rubricEval   = data.rubric_evaluation || {};\nconst rubricScore  = rubricEval.weighted_rubric_score !== undefined ? rubricEval.weighted_rubric_score : null;\nconst perfLevel    = rubricEval.performance_level || null;\nconst strongArea   = rubricEval.strongest_area || null;\nconst weakArea     = rubricEval.weakest_area || null;\nconst reasonQual   = rubricEval.reasoning_quality || null;\nconst authFlag     = rubricEval.authenticity_flag || null;\nconst rubricSummary = rubricEval.rubric_summary || null;\nconst remEntered = data.remediation_entered || false;\nconst remExited  = data.remediation_exited  || false;\n\n// ── Question type classification ──────────────────────────\n// MCQ feedback must NOT reference reasoning, explanation depth,\n// or conceptual articulation — the learner only selected a letter\nconst isMcq = (question.question_type === 'mcq');\n\n// Build adaptive context based on remediation state + correctness\nlet adaptiveContext;\nif (remEntered) {\n  adaptiveContext = `The learner has just ENTERED REMEDIATION MODE. Their mastery is low (${mastery}%) despite multiple attempts.\nProvide extra supportive, encouraging feedback. Explain the concept from scratch in simple terms.\nAcknowledge that this topic is challenging and that remediation will help them.`;\n} else if (remExited) {\n  adaptiveContext = `The learner has just EXITED REMEDIATION MODE - their mastery improved to ${mastery}%!\nCelebrate this achievement. Summarise what they now understand. Encourage them to continue building on this foundation.`;\n} else if (isRemMode) {\n  adaptiveContext = evalResult.is_correct\n    ? `In REMEDIATION MODE - learner answered correctly. Great progress! Reinforce the concept clearly. Build confidence.`\n    : `In REMEDIATION MODE - learner is still struggling. Provide maximum support: step-by-step explanation, very simple example, direct targeted hint.`;\n} else {\n  adaptiveContext = evalResult.is_correct\n    ? 'Learner answered CORRECTLY. Provide reinforcement and deeper insight to strengthen understanding.'\n    : 'Learner answered INCORRECTLY. Provide hints, simplified explanation targeting their misconception, and guidance to improve.';\n}\n\nlet promptText;\n\nif (isMcq) {\n  // ── MCQ FEEDBACK PROMPT ────────────────────────────────────\n  // Simple, focused on correctness and concept explanation only\n  // No reasoning quality, no explanation depth, no articulation\n  promptText = `You are an expert Java programming tutor providing personalized feedback for a multiple choice question.\n\nQUESTION:\nTopic: ${question.topic}\nDifficulty: ${question.difficulty}\nQuestion: ${question.question_text}\n\nRESULT:\nLearner Selected: ${data.submittedAnswer}\nCorrect Answer: ${question.correct_answer}\nResult: ${evalResult.is_correct ? 'CORRECT' : 'INCORRECT'}\nCurrent Topic Mastery: ${mastery}%\n${isRemMode ? 'REMEDIATION MODE: Active' : ''}\n${remEntered ? 'STATUS: Just ENTERED remediation mode' : ''}\n${remExited  ? 'STATUS: Just EXITED remediation mode - mastery improved!' : ''}\n\nINSTRUCTION: ${adaptiveContext}\n\nCRITICAL RULES FOR MCQ FEEDBACK:\n- This is a multiple choice question. The learner selected a single letter option.\n- Do NOT comment on reasoning quality, explanation depth, or conceptual articulation.\n- Do NOT say the learner lacks reasoning or explanation — they were not asked to explain.\n- DO explain the underlying Java concept clearly.\n- DO explain why the correct answer is correct.\n- If incorrect, DO provide a hint about what to review.\n- Keep feedback concise and encouraging.\n\nIMPORTANT: Respond with ONLY a valid JSON object. No explanation, no markdown. Just raw JSON:\n{\n  \"feedback_type\": \"${evalResult.is_correct ? 'correct' : 'incorrect'}\",\n  \"immediate_feedback\": \"<1-2 sentence reaction to the answer — correctness only>\",\n  \"concept_explanation\": \"<clear explanation of the underlying Java concept being tested>\",\n  \"mistake_analysis\": ${evalResult.is_correct ? 'null' : '\"<brief explanation of what the wrong option means vs the correct one>\"'},\n  \"correct_explanation\": \"<why option ${question.correct_answer} is correct>\",\n  \"improvement_tip\": ${evalResult.is_correct ? 'null' : '\"<1 specific thing to review or remember>\"'},\n  \"hint_for_retry\": ${evalResult.is_correct ? 'null' : '\"<a memory aid or conceptual hint>\"'},\n  \"deeper_insight\": ${evalResult.is_correct ? '\"<one interesting related fact or advanced connection>\"' : 'null'},\n  \"encouragement\": \"<short motivational sentence>\",\n  \"remediation_note\": ${(isRemMode || remEntered || remExited) ? '\"<special note about remediation status>\"' : 'null'},\n  \"suggested_resources\": [\"<resource 1>\", \"<resource 2>\"],\n  \"rubric_feedback\": {\n    \"score\": ${rubricScore !== null ? rubricScore : 'null'},\n    \"performance_level\": \"${perfLevel || 'N/A'}\",\n    \"strongest_area\": \"correctness\",\n    \"weakest_area\": \"${evalResult.is_correct ? 'None' : 'correctness'}\",\n    \"reasoning_quality\": \"N/A - MCQ\",\n    \"strengths\": \"${evalResult.is_correct ? 'Correct option selected.' : 'Attempted the question.'}\",\n    \"weaknesses\": \"${evalResult.is_correct ? 'None' : 'Selected wrong option.'}\",\n    \"concept_misunderstanding\": ${evalResult.is_correct ? 'null' : '\"<brief note on what concept may be misunderstood>\"'},\n    \"improvement_roadmap\": \"${evalResult.is_correct ? 'Continue to the next question.' : 'Review the concept and understand why option ' + question.correct_answer + ' is correct.'}\"\n  }\n}`;\n\n} else {\n  // ── OPEN-ENDED FEEDBACK PROMPT ─────────────────────────────\n  // Full rubric context included — reasoning, code quality, etc.\n  promptText = `You are an expert Java programming tutor providing personalized feedback.\n\nQUESTION:\nTopic: ${question.topic}\nDifficulty: ${question.difficulty}\nType: ${question.question_type}\nQuestion: ${question.question_text}\n${question.code_snippet && question.code_snippet !== 'null' ? `\\nCode:\\n${question.code_snippet}` : ''}\n\nEVALUATION RESULT:\nResult: ${evalResult.is_correct ? 'CORRECT' : 'INCORRECT'}\nScore: ${evalResult.correctness_score}/100\nWhat was correct: ${evalResult.what_is_correct}\nWhat was wrong: ${evalResult.what_is_wrong}\nCorrect Answer: ${question.correct_answer}\nLearner Answer: ${data.submittedAnswer}\nCurrent Topic Mastery: ${mastery}%\n${isRemMode ? `REMEDIATION MODE: Active - learner needs extra support` : ''}\n${remEntered ? 'STATUS: Just ENTERED remediation mode' : ''}\n${remExited  ? 'STATUS: Just EXITED remediation mode - mastery improved!' : ''}\n\nRUBRIC EVALUATION RESULTS:\n${rubricScore !== null ? `Rubric Score: ${rubricScore}/100` : ''}\n${perfLevel ? `Performance Level: ${perfLevel}` : ''}\n${strongArea ? `Strongest Area: ${strongArea}` : ''}\n${weakArea ? `Weakest Area: ${weakArea}` : ''}\n${reasonQual && reasonQual !== 'N/A - MCQ does not require reasoning' ? `Reasoning Quality: ${reasonQual}` : ''}\n${authFlag && authFlag !== 'Genuine' && authFlag !== 'N/A - MCQ' ? `Note: ${authFlag}` : ''}\n${rubricScore !== null ? `Rubric Criteria Breakdown: ${JSON.stringify((rubricEval.rubric_criteria||[]).map(c => c.criterion + ': ' + c.score + '/100'))}` : ''}\n${rubricEval.strengths_observed ? `Strengths Observed: ${rubricEval.strengths_observed}` : ''}\n${rubricEval.weaknesses_observed ? `Weaknesses Observed: ${rubricEval.weaknesses_observed}` : ''}\n${rubricEval.concept_misunderstanding ? `Concept Misunderstanding: ${rubricEval.concept_misunderstanding}` : ''}\n\nINSTRUCTION: ${adaptiveContext}\nUSE THE RUBRIC DATA ABOVE to make feedback highly specific, referencing actual strengths and weaknesses found.\n\nIMPORTANT: Respond with ONLY a valid JSON object. No explanation, no markdown, no extra text. Just raw JSON.\n\n{\n  \"feedback_type\": \"${evalResult.is_correct ? 'correct' : 'incorrect'}\",\n  \"immediate_feedback\": \"<1-2 sentence immediate reaction>\",\n  \"concept_explanation\": \"<clear explanation of the underlying Java concept>\",\n  \"mistake_analysis\": ${evalResult.is_correct ? 'null' : '\"<specific analysis of the mistake>\"'},\n  \"correct_explanation\": \"<why the correct answer is correct>\",\n  \"improvement_tip\": \"<1 specific actionable improvement tip>\",\n  \"hint_for_retry\": ${evalResult.is_correct ? 'null' : '\"<a helpful hint targeting the misconception>\"'},\n  \"deeper_insight\": ${evalResult.is_correct ? '\"<advanced insight to deepen understanding>\"' : 'null'},\n  \"encouragement\": \"<motivational closing sentence>\",\n  \"remediation_note\": ${(isRemMode || remEntered || remExited) ? '\"<special note about remediation status>\"' : 'null'},\n  \"suggested_resources\": [\"<resource 1>\", \"<resource 2>\"],\n  \"rubric_feedback\": {\n    \"score\": ${rubricScore !== null ? rubricScore : 'null'},\n    \"performance_level\": \"${perfLevel || 'N/A'}\",\n    \"strongest_area\": \"${strongArea || 'N/A'}\",\n    \"weakest_area\": \"${weakArea || 'N/A'}\",\n    \"reasoning_quality\": \"${reasonQual || 'N/A'}\",\n    \"strengths\": \"<specific strengths from learner response>\",\n    \"weaknesses\": \"<specific weaknesses or gaps>\",\n    \"concept_misunderstanding\": \"<identified misconception or null>\",\n    \"improvement_roadmap\": \"<step-by-step concrete improvement plan>\"\n  }\n}`;\n}\n\nconst ollamaPayload = {\n  model: 'gemma4:latest',\n  format: 'json',\n  prompt: promptText,\n  stream: false,\n  // MCQ feedback needs less context — smaller and faster\n  options: isMcq\n    ? { temperature: 0.5, num_predict: 800,  num_ctx: 3072, keep_alive: '10m' }\n    : { temperature: 0.7, num_predict: 1500, num_ctx: 4096, keep_alive: '10m' }\n};\n\nreturn [{ json: { ...data, feedback_prompt: promptText, ollama_payload: ollamaPayload }}];\n"
+      },
+      "id": "3a716a08-d13f-47dd-b311-1818d7453aee",
+      "name": "Build Feedback Generation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2256,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollama_payload) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "1780a501-31f9-49a0-906a-990ac5ab6750",
+      "name": "Ollama Gemma4 - Generate Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2544,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst allData        = $('Build Feedback Generation Prompt').first().json;\nconst ollamaResponse = $input.first().json;\n\n// Real question/answer data available for smart fallback\nconst question        = allData.question        || {};\nconst evalResult      = allData.evaluation_result || {};\nconst submittedAnswer = allData.submittedAnswer  || '';\nconst questionText    = question.question_text   || '';\nconst correctAnswer   = question.correct_answer  || '';\nconst topic           = question.topic           || 'Java';\nconst codeSnippet     = (question.code_snippet && question.code_snippet !== 'null') ? question.code_snippet : null;\nconst hints           = Array.isArray(question.hints) ? question.hints : [];\nconst evalCriteria    = question.evaluation_criteria || '';\nconst isCorrect       = evalResult.is_correct || false;\nconst whatWasWrong    = evalResult.what_is_wrong || '';\n\nlet feedbackData;\ntry {\n  const rawText     = ollamaResponse.response || '';\n  const cleanedText = rawText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  feedbackData = JSON.parse(cleanedText);\n} catch(e) {\n  // ── SMART FALLBACK: build meaningful feedback from actual question data ──\n\n  // Build a real concept explanation from question data\n  const conceptExplanation = codeSnippet\n    ? `This question tests your understanding of ${topic}. The code involved is:\\n\\n${codeSnippet}\\n\\nThe expected answer is: ${correctAnswer}. ${evalCriteria ? 'Key point: ' + evalCriteria : ''}`\n    : `This question tests your understanding of ${topic}. The expected answer is: ${correctAnswer}. ${evalCriteria ? 'Key point: ' + evalCriteria : ''}`;\n\n  // Build specific correct explanation\n  const correctExplanation = correctAnswer\n    ? `The correct answer is \"${correctAnswer}\". ${evalCriteria ? evalCriteria : 'Review this concept in the Java documentation to strengthen your understanding.'}`\n    : `Review this ${topic} concept carefully and compare your answer with the expected solution.`;\n\n  // Build specific mistake analysis for incorrect answers\n  const mistakeAnalysis = !isCorrect\n    ? `You answered \"${submittedAnswer}\" but the correct answer is \"${correctAnswer}\". ${whatWasWrong ? whatWasWrong : 'Review the concept and check the evaluation criteria: ' + evalCriteria}`\n    : null;\n\n  // Use real hints from the question if available\n  const hintForRetry = !isCorrect\n    ? (hints.length > 0 ? hints[0] : `Review the ${topic} concept and focus on: ${correctAnswer}`)\n    : null;\n\n  feedbackData = {\n    feedback_type:       isCorrect ? 'correct' : 'incorrect',\n    immediate_feedback:  isCorrect\n      ? `Well done! You correctly answered this ${topic} question.`\n      : `Not quite right. You answered \"${submittedAnswer}\" but the expected answer was \"${correctAnswer}\".`,\n    concept_explanation: conceptExplanation,\n    mistake_analysis:    mistakeAnalysis,\n    correct_explanation: correctExplanation,\n    improvement_tip:     hints.length > 1\n      ? hints[1]\n      : `Practice more ${topic} examples. Focus specifically on: ${evalCriteria || correctAnswer}`,\n    hint_for_retry:      hintForRetry,\n    deeper_insight:      isCorrect\n      ? `Great work on ${topic}! To deepen your understanding, explore how ${topic} applies in real Java projects and edge cases.`\n      : null,\n    encouragement:       isCorrect\n      ? 'Excellent work! Keep building on this knowledge.'\n      : 'Keep going! Every mistake is a learning opportunity. Review the concept and try the next question.',\n    suggested_resources: [\n      'Java Documentation (docs.oracle.com/javase)',\n      `Search: \"Java ${topic} tutorial\" on Baeldung or W3Schools`\n    ],\n    _parse_fallback: true\n  };\n}\n\nreturn [{ json: { ...allData, feedback: feedbackData }}];\n\n"
+      },
+      "id": "857fa799-e890-44fd-a46d-5bb293d85962",
+      "name": "Parse Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2816,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_answers",
+        "fields": "=session_id,learner_id,question_id,submitted_answer,evaluation_result,rubric_evaluation,mastery_calculation,feedback,submitted_at",
+        "options": {}
+      },
+      "id": "02d8b62a-8e80-4740-be4e-c97fa514056c",
+      "name": "MongoDB - Save Answer & Evaluation",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        352
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_session_updates",
+        "fields": "=session_id,\nlearner_id,\nupdated_session,\ncurrent_question,\nquestion_generated_at,\nmastery_calculation,\ntopic_mastered,\nsession_complete,\ncurrent_topic_mastery,\nupdate_timestamp",
+        "options": {}
+      },
+      "id": "858a59f3-9aad-461e-a212-76eb33052dba",
+      "name": "MongoDB - Log Session Update",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        3664,
+        352
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// ── Early exit if session complete ──\nif (data.session_complete) {\n  return [{ json: { ...data, next_question: null, feedback_report: null } }];\n}\n\nconst safeObject = (obj) => obj ?? {};\nconst safeArray  = (arr) => Array.isArray(arr) ? arr : [];\n\nconst session    = safeObject(data.updated_session);\nconst topic      = session.selected_topic ?? 'Java Basics';\nconst difficulty = session.current_difficulty ?? 'easy';\nconst profile    = safeObject(session.mastery_profile);\nconst evalResult = safeObject(data.evaluation_result);\nconst isCorrect  = evalResult.is_correct ?? false;\n\n// ── Partial Correct + Weak Concepts ───────────────────────────\nconst isPartialCorrect = data.is_partial_correct || false;\n\nconst currentWeakConcepts = safeArray(data.weak_concepts);\nconst sessionHistory      = safeArray(session.session_history);\n\nconst lastEntry     = sessionHistory.length > 0\n  ? sessionHistory[sessionHistory.length - 1]\n  : null;\n\nconst lastWeakConc  = lastEntry\n  ? safeArray(lastEntry.weak_concepts)\n  : [];\n\nconst weakConcepts =\n  currentWeakConcepts.length > 0\n    ? currentWeakConcepts\n    : lastWeakConc;\n\nconst hasWeakConcepts = weakConcepts.length > 0;\n\n// ── Remediation State ─────────────────────────────────────────\nconst isRemediationMode    = session.remediation_mode || false;\nconst remediationQuestions = session.remediation_questions || 0;\n\nconst knowledgeGaps  = safeArray(profile.knowledge_gaps);\n\nconst topicDetails =\n  knowledgeGaps.find(g => g.topic === topic) ?? {};\n\nconst misconceptions =\n  safeArray(topicDetails.misconceptions);\n\nconst errorPatterns =\n  safeArray(\n    topicDetails.error_patterns ||\n    topicDetails.observed_error_patterns ||\n    []\n  );\n\nconst askedQuestions =\n  sessionHistory\n    .map(h => h.question_text)\n    .filter(Boolean);\n\nconst avoidSection =\n  askedQuestions.length > 0\n    ? `\\nNEVER repeat these already-asked questions:\\n${askedQuestions.slice(-8).join('\\n')}`\n    : '';\n\nconst topicScores   = safeObject(session.topic_scores);\nconst topicScoreObj = safeObject(topicScores[topic]);\n\nconst masteryScore =\n  topicScoreObj.mastery_score ?? 0;\n\nconst questionsAsked =\n  topicScoreObj.questions_asked ?? 0;\n\nconst consecutiveCorrect =\n  session.consecutive_correct ?? 0;\n\nconst consecutiveWrong =\n  session.consecutive_wrong ?? 0;\n\n// ── Bloom's Taxonomy Levels ──────────────────────────────────\nconst bloomsLevels = {\n\n  L1: {\n    name: \"Remembering (Bloom's L1)\",\n    difficulty: 'easy',\n    question_type: 'mcq',\n    instruction:\n      \"Generate an MCQ testing RECALL of facts, keywords, and syntax. 4 options A-D.\"\n  },\n\n  L2: {\n    name: \"Understanding (Bloom's L2)\",\n    difficulty: 'easy',\n    question_type: 'mcq',\n    instruction:\n      \"Generate an MCQ testing UNDERSTANDING of concepts. 4 options A-D.\"\n  },\n\n  L3: {\n    name: \"Applying (Bloom's L3)\",\n    difficulty: 'medium',\n    question_type: 'code_completion',\n    instruction:\n      \"Generate a Java CODE COMPLETION task with a code snippet.\"\n  },\n\n  L4: {\n    name: \"Analyzing (Bloom's L4)\",\n    difficulty: 'medium',\n    question_type: 'code_tracing',\n    instruction:\n      \"Generate a Java CODE TRACING problem where learner predicts execution/output.\"\n  },\n\n  L5: {\n    name: \"Evaluating (Bloom's L5)\",\n    difficulty: 'hard',\n    question_type: 'debugging',\n    instruction:\n      \"Generate a Java DEBUGGING challenge with intentional bugs.\"\n  },\n\n  L6: {\n    name: \"Creating (Bloom's L6)\",\n    difficulty: 'hard',\n    question_type: 'coding_challenge',\n    instruction:\n      \"Generate a Java CODING CHALLENGE requiring full implementation.\"\n  }\n};\n\nfunction getDifficultyLevel(diff) {\n\n  if (diff === 'easy')   return 'L1';\n  if (diff === 'medium') return 'L3';\n  if (diff === 'hard')   return 'L5';\n\n  return 'L1';\n}\n\nfunction getNextBloomsLevel(\n  currentDiff,\n  isCorrect,\n  consecCorrect,\n  consecWrong,\n  isPartial\n) {\n\n  const currentLevel =\n    getDifficultyLevel(currentDiff);\n\n  const levelOrder =\n    ['L1','L2','L3','L4','L5','L6'];\n\n  const currentIdx =\n    levelOrder.indexOf(currentLevel);\n\n  if (isCorrect) {\n\n    // Move upward after 2 consecutive correct answers\n    if (\n      consecCorrect >= 2 &&\n      currentIdx < levelOrder.length - 1\n    ) {\n      return levelOrder[currentIdx + 1];\n    }\n\n    return currentLevel;\n\n  } else if (isPartial) {\n\n    // Maintain same level for partial understanding\n    return currentLevel;\n\n  } else {\n\n    // Step downward after incorrect answer\n    if (\n      consecWrong >= 1 &&\n      currentIdx > 0\n    ) {\n      return levelOrder[currentIdx - 1];\n    }\n\n    return currentLevel;\n  }\n}\n\nlet promptText;\nlet nextDiff;\n\nconst misconceptionNote =\n  misconceptions.length > 0\n    ? `\\nKnown misconceptions: ${misconceptions.slice(0,3).join(', ')}`\n    : '';\n\nconst errorNote =\n  errorPatterns.length > 0\n    ? `\\nError patterns: ${errorPatterns.slice(0,3).join(', ')}`\n    : '';\n\n// ── REMEDIATION MODE ──────────────────────────────────────────\nif (isRemediationMode) {\n\n  // ── VALIDATION RULE: Context-aware remediation type selection ─\n  // Determine what the learner was doing BEFORE entering remediation\n  // by reading the last few history entries' difficulty levels.\n  // If learner was solving hard/medium problems and is partial-correct,\n  // NEVER drop to recall MCQ — preserve conceptual continuity.\n\n  const prevDifficulties = sessionHistory\n    .slice(-3)\n    .map(h => h.difficulty)\n    .filter(Boolean);\n\n  const wasSolvingHard   = prevDifficulties.includes('hard');\n  const wasSolvingMedium = prevDifficulties.includes('medium') || wasSolvingHard;\n\n  // CRITICAL VALIDATION:\n  // If learner was at hard/medium AND had partial credit\n  // → analytical remediation (NEVER recall MCQ)\n  const needsAnalyticalRemediation = (\n    (wasSolvingHard || wasSolvingMedium) && isPartialCorrect\n  );\n\n  // Context-aware question type selection\n  // needsAnalyticalRemediation → code_tracing or code_completion always\n  // Coming from easy + fully wrong → allowed to use structured MCQ briefly\n  let remQuestionType, remBloomsLevel, remDifficulty;\n\n  if (needsAnalyticalRemediation) {\n    // Learner was doing hard/medium and has partial understanding\n    // Preserve cognitive level — use analytical question types\n    remDifficulty   = wasSolvingHard ? 'medium' : 'medium';\n    remBloomsLevel  = \"Analyzing (Bloom's L4) - REMEDIATION\";\n    remQuestionType = remediationQuestions < 3 ? 'code_tracing' : 'code_completion';\n\n  } else {\n    // Learner was at easy level or fully wrong at all levels\n    // Allow gentle scaffolding: structured MCQ → code_tracing progression\n    remDifficulty   = remediationQuestions < 2 ? 'easy' : 'medium';\n    remBloomsLevel  = remediationQuestions < 2\n      ? \"Understanding (Bloom's L2) - REMEDIATION\"\n      : \"Analyzing (Bloom's L4) - REMEDIATION\";\n    // Even for easy path: use MCQ only for first 1 question, then tracing\n    remQuestionType = remediationQuestions < 1 ? 'mcq' : 'code_tracing';\n  }\n\n  const remConceptFocus =\n    hasWeakConcepts\n      ? `\\nFOCUS specifically on these weak areas identified from the learner's last answer:\\n${weakConcepts.slice(0,4).join('\\n')}`\n      : '';\n\n  // Build remediation-specific instruction that preserves concept continuity\n  let remInstructionDetail;\n\n  if (needsAnalyticalRemediation) {\n    remInstructionDetail = `\nREMEDIATION TYPE: Analytical Scaffolded Remediation\nREASON: Learner was solving ${wasSolvingHard ? 'hard' : 'medium'}-difficulty problems and showed partial understanding.\n\nDO NOT generate:\n- Simple recall questions (\"What is the purpose of X?\")\n- Terminology-only MCQs\n- Beginner-level definition questions\n\nINSTEAD generate one of:\n- Guided code execution tracing (trace through recursive calls step by step)\n- Scaffolded code analysis (partially completed recursive logic to analyze)\n- Structured code completion (fill in the specific missing logic related to the weak concept)\n- Identify incorrect recursive branch or base condition error\n- Fix a broken recursion structure that matches the learner's weak concept\n\nCONCEPTUAL CONTINUITY RULE:\nThe question MUST stay connected to the learner's previous work.\nIf learner was working on recursion → generate recursion tracing.\nIf learner was working on sorting → generate sorting trace.\nIf learner was working on data structures → generate structural analysis.\nNEVER jump to an unrelated simpler topic.`;\n  } else {\n    remInstructionDetail = `\nREMEDIATION TYPE: Gentle Scaffolded Support\nREASON: Learner needs foundational reinforcement.\n\nGenerate a guided analytical question:\n- Use simple but complete Java code snippet\n- Focus on the specific weak concept identified\n- Include execution tracing elements\n- Reinforce the concept step by step\nDO NOT generate pure terminology recall questions.`;\n  }\n\n  promptText = `You are an expert adaptive Java tutor.\n\nGenerate EXACTLY ONE remediation question.\n\nSTRICT RULES:\n- difficulty MUST be exactly \"${remDifficulty}\"\n- blooms_level MUST be exactly \"${remBloomsLevel}\"\n- question_type MUST be exactly \"${remQuestionType}\"\n- Return ONLY valid JSON\n- No markdown\n- No explanations outside JSON\n- Ensure JSON is COMPLETE and properly closed\n\nIMPORTANT MCQ RULES (only if question_type is mcq):\n- options MUST be: { \"A\":\"...\", \"B\":\"...\", \"C\":\"...\", \"D\":\"...\" }\n- correct_answer MUST contain ONLY: \"A\", \"B\", \"C\", or \"D\"\n- NEVER place explanations, reasoning, or sentences inside correct_answer\n\nIMPORTANT NON-MCQ RULES (for code_tracing, code_completion, debugging):\n- options MUST be null\n- correct_answer should contain: actual output, expected code, or null\n- evaluation_criteria must explain how the answer will be evaluated\n${remInstructionDetail}\n\nTOPIC: ${topic}\nMISCONCEPTIONS:${misconceptionNote}\nERRORS:${errorNote}\n${remConceptFocus}\n\nGenerate REAL Java content only targeting the specific weak concepts above.\nMaintain conceptual continuity with the learner's previous problem-solving work.\n\nReturn ONLY valid JSON.`;\n\n  nextDiff = remDifficulty;\n\n} else {\n\n  // ── NORMAL ADAPTIVE FLOW ───────────────────────────────────\n\n  const nextLevel = getNextBloomsLevel(\n    difficulty,\n    isCorrect,\n    consecutiveCorrect,\n    consecutiveWrong,\n    isPartialCorrect\n  );\n\n  const bloom = bloomsLevels[nextLevel];\n\n  nextDiff = bloom.difficulty;\n\n  let conceptFocusSection = '';\n\n  if (hasWeakConcepts && !isCorrect) {\n\n    conceptFocusSection = `\nCONCEPT-LEVEL REMEDIATION REQUIRED:\n\nThe learner's last answer revealed these weak concepts:\n\n${weakConcepts.slice(0,4).map((c,i) =>\n  `${i+1}. ${c}`).join('\\n')}\n\nDo NOT generate a generic ${topic} question.\nTarget these specific weak concepts directly.\nUse a different angle than previous questions.`;\n\n  } else if (hasWeakConcepts && isPartialCorrect) {\n\n    conceptFocusSection = `\nPARTIAL UNDERSTANDING DETECTED:\n\nFocus on these gaps:\n\n${weakConcepts.slice(0,3).map((c,i) =>\n  `${i+1}. ${c}`).join('\\n')}\n\nMaintain current cognitive level.\nDeepen conceptual understanding.\nDo NOT repeat previous question structure.`;\n  }\n\n  let adaptiveInstruction;\n\n  if (isCorrect) {\n\n    adaptiveInstruction =\n      `Learner answered CORRECTLY (${consecutiveCorrect} consecutive correct answers).\n\nMove toward ${bloom.name}.\nGenerate a MORE CHALLENGING question.`;\n\n  } else if (isPartialCorrect) {\n\n    adaptiveInstruction =\n      `Learner gave a PARTIALLY CORRECT answer.\n\nMaintain current Bloom level:\n${bloom.name}\n\nTarget the weak concepts identified above.\nDo NOT drop difficulty unnecessarily.`;\n\n  } else {\n\n    adaptiveInstruction =\n      `Learner answered INCORRECTLY.\n\nProvide scaffolded support using:\n${bloom.name}\n\nKeep same concept but use a different angle.\nDo NOT repeat the same question.`;\n  }\n\n  // ✅ FIXED:\n  // Includes code_tracing now\n\n  let correctAnswerRule = '';\n\n  if (\n    [\n      'coding_challenge',\n      'debugging',\n      'code_completion',\n      'code_tracing'\n    ].includes(bloom.question_type)\n  ) {\n\n    correctAnswerRule = `\n- For ${bloom.question_type} questions:\n\n  - options MUST be null\n\n  - correct_answer MUST NOT be:\n      \"A\", \"B\", \"C\", or \"D\"\n\n  - correct_answer should contain:\n      - actual output\n      - expected code\n      - debugging fix\n      - or null\n\n  - evaluation_criteria must explain how the answer will be evaluated`;\n  }\n\n  promptText = `You are an expert adaptive Java tutor using Bloom's Taxonomy.\n\nGenerate EXACTLY ONE adaptive Java assessment question.\n\nSTRICT RULES:\n- difficulty MUST be exactly \"${nextDiff}\"\n- blooms_level MUST be exactly \"${bloom.name}\"\n- question_type MUST be exactly \"${bloom.question_type}\"\n- Return ONLY valid JSON\n- No markdown\n- No explanations outside JSON\n- Ensure JSON is COMPLETE and properly closed\n\nIMPORTANT MCQ RULES:\n- For MCQ questions:\n  - options MUST be:\n    {\n      \"A\":\"...\",\n      \"B\":\"...\",\n      \"C\":\"...\",\n      \"D\":\"...\"\n    }\n\n  - correct_answer MUST contain ONLY:\n      \"A\", \"B\", \"C\", or \"D\"\n\n  - NEVER place:\n      - explanations\n      - reasoning\n      - full sentences\n      - option text\n      inside correct_answer\n\nVALID:\n\"correct_answer\":\"A\"\n\nINVALID:\n\"correct_answer\":\"Because synchronization prevents race conditions\"\n\nIMPORTANT NON-MCQ RULES:\n- For NON-MCQ questions:\n  - options MUST be null\n\n  - correct_answer MUST NOT be:\n      \"A\", \"B\", \"C\", or \"D\"\n\n  - correct_answer should contain:\n      - actual output\n      - expected code\n      - debugging fix\n      - or null\n\nVALID:\n\"correct_answer\":\"31\"\n\nVALID:\n\"correct_answer\":\"public int sum(int a,int b)\"\n\nINVALID:\n\"correct_answer\":\"B\"\n\n${correctAnswerRule}\n\nLEARNER STATE:\n- Topic: ${topic}\n- Mastery: ${masteryScore}%\n- Questions Asked: ${questionsAsked}\n- Consecutive Correct: ${consecutiveCorrect}\n- Consecutive Wrong: ${consecutiveWrong}\n${misconceptionNote}\n${errorNote}\n${conceptFocusSection}\n\nADAPTIVE INSTRUCTION:\n${adaptiveInstruction}\n\n${avoidSection}\n\nQUESTION INSTRUCTION:\n${bloom.instruction}\n\nRequired JSON structure:\n{\n  \"question_id\":\"Q_DYNAMIC\",\n  \"topic\":\"${topic}\",\n  \"difficulty\":\"${nextDiff}\",\n  \"blooms_level\":\"${bloom.name}\",\n  \"question_type\":\"${bloom.question_type}\",\n  \"question_text\":\"Actual adaptive question\",\n  \"code_snippet\":\"Java code if required, otherwise null\",\n\n  \"options\": ${\n    bloom.question_type === 'mcq'\n      ? '{\"A\":\"...\",\"B\":\"...\",\"C\":\"...\",\"D\":\"...\"}'\n      : 'null'\n  },\n\n  \"correct_answer\": ${\n    bloom.question_type === 'mcq'\n      ? '\"A\"'\n      : '\"actual expected output or null\"'\n  },\n\n  \"evaluation_criteria\":\"Specific evaluation criteria\",\n  \"hints\":[\n    \"Hint targeting the weak concept\",\n    \"More specific hint\"\n  ]\n}`;\n}\n\n// ── Stable Ollama Payload ────────────────────────────────────\nconst ollamaPayload = {\n  model: \"gemma4:latest\",\n  prompt: promptText,\n  stream: false,\n  format: \"json\",\n  options: {\n    temperature: 0.1,\n    num_predict: 900,\n    num_ctx: 4096,\n    keep_alive: '10m'\n  }\n};\n\nreturn [{\n  json: {\n    ...data,\n    next_question_prompt: promptText,\n    ollama_payload: ollamaPayload,\n    feedback_report: null,\n    is_remediation: isRemediationMode,\n    is_partial_correct: isPartialCorrect,\n    weak_concepts: weakConcepts\n  }\n}];"
+      },
+      "id": "071aaf12-7573-41ac-88b1-d30a080686e0",
+      "name": "Prepare Next Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "session-complete",
+              "leftValue": "={{ $json.session_complete }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "05de1ae4-ac7d-46cc-81f8-c193e7ce43d5",
+      "name": "IF - Session Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3936,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollama_payload) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "d161c75a-606d-4172-a8ef-cf18241e96da",
+      "name": "Ollama Gemma4 - Generate Next Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4224,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data    = $input.first().json;\nconst session = data.updated_session;\n\nconst topicResults = Object.entries(session.topic_scores || {}).map(([topic, scores]) => ({\n  topic,\n  mastery_score:   scores.mastery_score,\n  questions_asked: scores.questions_asked,\n  correct:         scores.correct,\n  accuracy:        scores.questions_asked > 0 ? Math.round((scores.correct / scores.questions_asked) * 100) : 0,\n  is_mastered:     scores.is_mastered\n}));\n\nconst overallAccuracy = session.total_questions_asked > 0\n  ? Math.round((session.correct_answers / session.total_questions_asked) * 100) : 0;\n\n// Build full Q&A review from session history for learner reference\n// Each entry has question, learner answer, correct answer, result, feedback\nconst history = session.session_history || [];\nconst fullQaReview = history.map((h, idx) => ({\n  question_number:  idx + 1,\n  topic:            h.topic || session.selected_topic,\n  question_id:      h.question_id,\n  question_text:    h.question_text,\n  question_type:    h.question_type,\n  difficulty:       h.difficulty,\n  learner_answer:   h.submitted_answer,\n  correct_answer:   h.correct_answer,\n  is_correct:       h.is_correct,\n  mastery_after:    h.score,\n  timestamp:        h.timestamp\n}));\n\nreturn [{ json: {\n  ...data,\n  next_question: null,\n  full_qa_review: fullQaReview,\n  session_summary: {\n    session_id:               session.session_id,\n    total_questions:          session.total_questions_asked,\n    correct_answers:          session.correct_answers,\n    overall_accuracy:         overallAccuracy,\n    topics_covered:           topicResults,\n    mastered_topics:          topicResults.filter(t => t.is_mastered).map(t => t.topic),\n    session_duration_minutes: Math.round((new Date() - new Date(session.session_started_at)) / 60000),\n    overall_mastery:          Math.round(topicResults.reduce((sum, t) => sum + t.mastery_score, 0) / Math.max(topicResults.length, 1))\n  }\n}}];\n"
+      },
+      "id": "35c94cb9-a1ef-4497-991b-f15b76392bbe",
+      "name": "Generate Session Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4224,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData       = $('Prepare Next Question').first().json;\nconst ollamaResponse = $input.first().json;\n\nlet nextQuestion;\n\ntry {\n\n  // ─────────────────────────────────────────────\n  // Get raw Ollama response safely\n  // ─────────────────────────────────────────────\n  let rawText = ollamaResponse.response || '';\n\n  console.log('🟡 RAW NEXT QUESTION RESPONSE:');\n  console.log(rawText);\n\n  // ─────────────────────────────────────────────\n  // Remove markdown wrappers\n  // ─────────────────────────────────────────────\n  rawText = rawText\n    .replace(/```json/g, '')\n    .replace(/```/g, '')\n    .trim();\n\n  // ─────────────────────────────────────────────\n  // Detect truncated response early\n  // ─────────────────────────────────────────────\n  if (\n    rawText.includes('\"hints\": [') &&\n    !rawText.trim().endsWith('}')\n  ) {\n\n    throw new Error(\n      'Ollama returned truncated JSON response. Increase token limit or reduce response size.'\n    );\n  }\n\n  // ─────────────────────────────────────────────\n  // Extract JSON safely (PRODUCTION SAFE)\n  // ─────────────────────────────────────────────\n  const firstBrace = rawText.indexOf('{');\n  const lastBrace  = rawText.lastIndexOf('}');\n\n  if (\n    firstBrace === -1 ||\n    lastBrace === -1\n  ) {\n    throw new Error(\n      'No complete JSON object found in Ollama response'\n    );\n  }\n\n  const cleanedJson =\n    rawText.substring(firstBrace, lastBrace + 1);\n\n  console.log('🟢 CLEANED NEXT QUESTION JSON:');\n  console.log(cleanedJson);\n\n  // ─────────────────────────────────────────────\n  // Parse JSON safely\n  // ─────────────────────────────────────────────\n  try {\n\n    nextQuestion = JSON.parse(cleanedJson);\n\n  } catch(parseErr) {\n\n    console.log('❌ JSON PARSE ERROR');\n    console.log(parseErr.message);\n\n    // Additional debugging\n    console.log('🔴 POSSIBLE TRUNCATED JSON:');\n    console.log(\n      cleanedJson.substring(\n        Math.max(0, cleanedJson.length - 1200)\n      )\n    );\n\n    throw new Error(\n      `Invalid JSON returned by Ollama: ${parseErr.message}`\n    );\n  }\n\n  // ─────────────────────────────────────────────\n  // Normalize alternate Ollama response formats\n  // ─────────────────────────────────────────────\n\n  // question → question_text\n  if (\n    nextQuestion.question &&\n    !nextQuestion.question_text\n  ) {\n    nextQuestion.question_text =\n      nextQuestion.question;\n  }\n\n  // answer → correct_answer\n  if (\n    nextQuestion.answer &&\n    !nextQuestion.correct_answer\n  ) {\n    nextQuestion.correct_answer =\n      nextQuestion.answer;\n  }\n\n  // explanation → evaluation_criteria\n  if (\n    nextQuestion.explanation &&\n    !nextQuestion.evaluation_criteria\n  ) {\n    nextQuestion.evaluation_criteria =\n      nextQuestion.explanation;\n  }\n\n  // Auto-detect MCQ\n  if (\n    nextQuestion.options &&\n    !nextQuestion.question_type\n  ) {\n    nextQuestion.question_type = 'mcq';\n  }\n\n  // Auto-fill topic\n  if (!nextQuestion.topic) {\n\n    nextQuestion.topic =\n      prevData.updated_session.selected_topic;\n  }\n\n  // Auto-fill difficulty\n  if (!nextQuestion.difficulty) {\n\n    nextQuestion.difficulty =\n      prevData.updated_session.current_difficulty;\n  }\n\n  // Auto-fill Bloom level\n  if (!nextQuestion.blooms_level) {\n\n    nextQuestion.blooms_level =\n      prevData.bloom_level || '';\n  }\n\n  // ─────────────────────────────────────────────\n  // Generate unique question ID\n  // ─────────────────────────────────────────────\n  nextQuestion.question_id =\n    \"Q_\" +\n    Date.now() +\n    \"_\" +\n    Math.random().toString(36).substring(2, 8);\n\n  // ─────────────────────────────────────────────\n  // Normalize oversized fields\n  // Prevent MongoDB / UI overflow\n  // ─────────────────────────────────────────────\n\n  if (\n    nextQuestion.question_text &&\n    nextQuestion.question_text.length > 2500\n  ) {\n\n    nextQuestion.question_text =\n      nextQuestion.question_text.substring(0, 2500);\n  }\n\n  if (\n    nextQuestion.code_snippet &&\n    nextQuestion.code_snippet.length > 3000\n  ) {\n\n    nextQuestion.code_snippet =\n      nextQuestion.code_snippet.substring(0, 3000);\n  }\n\n  if (\n    nextQuestion.evaluation_criteria &&\n    nextQuestion.evaluation_criteria.length > 1200\n  ) {\n\n    nextQuestion.evaluation_criteria =\n      nextQuestion.evaluation_criteria.substring(0, 1200);\n  }\n\n  // Limit hints\n  if (\n    Array.isArray(nextQuestion.hints)\n  ) {\n\n    nextQuestion.hints =\n      nextQuestion.hints\n        .slice(0, 2)\n        .map(h =>\n          String(h).substring(0, 200)\n        );\n  }\n\n  // ─────────────────────────────────────────────\n  // Validate required fields\n  // ─────────────────────────────────────────────\n  const requiredFields = [\n    'question_text',\n    'question_type',\n    'topic',\n    'difficulty'\n  ];\n\n  for (const field of requiredFields) {\n\n    if (\n      nextQuestion[field] === undefined ||\n      nextQuestion[field] === null ||\n      nextQuestion[field] === ''\n    ) {\n\n      throw new Error(\n        `Missing required field: ${field}`\n      );\n    }\n  }\n\n  // ─────────────────────────────────────────────\n  // Validate based on question type\n  // ─────────────────────────────────────────────\n\n  const mcqTypes = ['mcq'];\n\n  if (\n    mcqTypes.includes(\n      nextQuestion.question_type\n    )\n  ) {\n\n    // ─────────────────────────────────────────────\n    // MCQ validation\n    // ─────────────────────────────────────────────\n\n    if (!nextQuestion.options) {\n\n      throw new Error(\n        'MCQ question missing options'\n      );\n    }\n\n    // Convert array → object\n    if (\n      Array.isArray(nextQuestion.options)\n    ) {\n\n      if (\n        nextQuestion.options.length !== 4\n      ) {\n\n        throw new Error(\n          'MCQ must contain exactly 4 options'\n        );\n      }\n\n      nextQuestion.options = {\n        A: nextQuestion.options[0],\n        B: nextQuestion.options[1],\n        C: nextQuestion.options[2],\n        D: nextQuestion.options[3]\n      };\n    }\n\n    // Validate option structure\n    const requiredOptions =\n      ['A', 'B', 'C', 'D'];\n\n    for (const opt of requiredOptions) {\n\n      if (!nextQuestion.options[opt]) {\n\n        throw new Error(\n          `Missing MCQ option: ${opt}`\n        );\n      }\n    }\n\n    // Auto-detect correct answer\n    if (\n      nextQuestion.correct_answer === undefined ||\n      nextQuestion.correct_answer === null ||\n      nextQuestion.correct_answer === ''\n    ) {\n\n      console.log(\n        '⚠️ correct_answer missing. Attempting auto-detection...'\n      );\n\n      if (nextQuestion.explanation) {\n\n        const optionEntries =\n          Object.entries(nextQuestion.options);\n\n        for (const [key, value] of optionEntries) {\n\n          if (\n            String(nextQuestion.explanation)\n              .toLowerCase()\n              .includes(\n                String(value).toLowerCase()\n              )\n          ) {\n\n            nextQuestion.correct_answer = key;\n            break;\n          }\n        }\n      }\n\n      // Safe fallback\n      if (!nextQuestion.correct_answer) {\n\n        nextQuestion.correct_answer = 'A';\n      }\n    }\n\n    // Convert full text → option letter\n    const optionEntries =\n      Object.entries(nextQuestion.options);\n\n    for (const [key, value] of optionEntries) {\n\n      const optionText =\n        String(value).trim().toLowerCase();\n\n      const answerText =\n        String(nextQuestion.correct_answer || '')\n          .trim()\n          .toLowerCase();\n\n      // Exact match\n      if (optionText === answerText) {\n\n        nextQuestion.correct_answer = key;\n        break;\n      }\n\n      // Partial match\n      if (\n        answerText.includes(optionText)\n      ) {\n\n        nextQuestion.correct_answer = key;\n        break;\n      }\n    }\n\n    // Normalize answer\n    nextQuestion.correct_answer =\n      String(nextQuestion.correct_answer)\n        .trim()\n        .toUpperCase();\n\n    // Final validation\n    const validAnswers =\n      ['A', 'B', 'C', 'D'];\n\n    if (\n      !validAnswers.includes(\n        nextQuestion.correct_answer\n      )\n    ) {\n\n      throw new Error(\n        `Invalid MCQ correct_answer: ${nextQuestion.correct_answer}`\n      );\n    }\n\n  } else {\n\n    // ─────────────────────────────────────────────\n    // Non-MCQ validation\n    // ─────────────────────────────────────────────\n\n    nextQuestion.options = null;\n\n    // Remove invalid MCQ-style answers\n    if (\n      ['A','B','C','D'].includes(\n        String(nextQuestion.correct_answer || '')\n          .trim()\n          .toUpperCase()\n      )\n    ) {\n\n      console.log(\n        '⚠️ Invalid non-MCQ answer format detected. Removing option-letter answer.'\n      );\n\n      nextQuestion.correct_answer = null;\n    }\n\n    const codeQuestionTypes = [\n      'code_completion',\n      'code_tracing',\n      'debugging',\n      'coding_challenge'\n    ];\n\n    if (\n      codeQuestionTypes.includes(\n        nextQuestion.question_type\n      ) &&\n      !nextQuestion.code_snippet\n    ) {\n\n      throw new Error(\n        `${nextQuestion.question_type} requires code_snippet`\n      );\n    }\n  }\n\n  console.log(\n    '✅ NEXT QUESTION PARSED SUCCESSFULLY'\n  );\n\n} catch(e) {\n\n  console.log(\n    '❌ NEXT QUESTION PARSE FAILED'\n  );\n\n  console.log('ERROR:', e.message);\n\n  console.log('🔴 ORIGINAL RESPONSE:');\n  console.log(ollamaResponse.response);\n\n  throw new Error(\n    `Failed to parse adaptive next question from Ollama: ${e.message}`\n  );\n}\n\n// ─────────────────────────────────────────────\n// Prepare fields for MongoDB insert\n// ─────────────────────────────────────────────\nconst sess = prevData.updated_session;\n\n// ─────────────────────────────────────────────\n// Final return\n// ─────────────────────────────────────────────\nreturn [{\n  json: {\n    ...prevData,\n\n    next_question: nextQuestion,\n\n    feedback_report: null,\n\n    // MongoDB fields\n    session_id:\n      sess.session_id,\n\n    learner_id:\n      sess.learner_id ||\n      prevData.learner_id,\n\n    current_question:\n      nextQuestion,\n\n    question_generated_at:\n      new Date().toISOString(),\n\n    current_difficulty:\n      nextQuestion.difficulty ||\n      sess.current_difficulty,\n\n    bloom_level:\n      nextQuestion.blooms_level || ''\n  }\n}];"
+      },
+      "id": "19af263d-6a0a-4e1f-86d4-de6c27f7d5dc",
+      "name": "Parse Next Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4496,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ecc2f731-9eca-4a38-97b0-f1973b41e860",
+      "name": "Merge - With or Without Next Question",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        5632,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"session_id\": \"{{ $('Parse Feedback').first().json.updated_session.session_id }}\",\n  \"evaluation\": {{ JSON.stringify($('Parse Feedback').first().json.evaluation_result) }},\n  \"feedback\": {{ JSON.stringify($('Parse Feedback').first().json.feedback) }},\n  \"mastery_update\": {\n    \"topic\": \"{{ $('Parse Feedback').first().json.question.topic }}\",\n    \"previous_mastery\": {{ $('Parse Feedback').first().json.mastery_calculation.prev_mastery }},\n    \"current_mastery\": {{ $('Parse Feedback').first().json.current_topic_mastery }},\n    \"mastery_threshold\": 85,\n    \"topic_mastered\": {{ $('Parse Feedback').first().json.topic_mastered }},\n    \"session_complete\": {{ $('Parse Feedback').first().json.session_complete }},\n    \"remediation_mode\": {{ $('Parse Feedback').first().json.updated_session.remediation_mode || false }},\n    \"remediation_entered\": {{ $('Parse Feedback').first().json.remediation_entered || false }},\n    \"remediation_exited\": {{ $('Parse Feedback').first().json.remediation_exited || false }}\n  },\n  \"next_question\": {{ $json.next_question !== null && $json.next_question !== undefined ? JSON.stringify($json.next_question) : 'null' }},\n  \"session_summary\": {{ $json.session_summary !== undefined && $json.session_summary !== null ? JSON.stringify($json.session_summary) : 'null' }},\n  \"feedback_report\": {{ $json.feedback_report !== undefined && $json.feedback_report !== null ? JSON.stringify($json.feedback_report) : 'null' }},\n  \"qa_review\": {{ $json.full_qa_review !== undefined && $json.full_qa_review !== null ? JSON.stringify($json.full_qa_review) : 'null' }},\n  \"rubric_evaluation\": {{ $('Parse Feedback').first().json.rubric_evaluation ? JSON.stringify($('Parse Feedback').first().json.rubric_evaluation) : null }},\n  \"session_progress\": {\n    \"question_number\": {{ $('Parse Feedback').first().json.updated_session.question_number }},\n    \"current_topic\": \"{{ $('Parse Feedback').first().json.updated_session.selected_topic }}\",\n    \"current_difficulty\": \"{{ $('Parse Feedback').first().json.updated_session.current_difficulty }}\",\n    \"topics_remaining\": {{ $('Parse Feedback').first().json.updated_session.remaining_topics.length }},\n    \"overall_accuracy\": {{ $('Parse Feedback').first().json.updated_session.total_questions_asked > 0 ? Math.round(($('Parse Feedback').first().json.updated_session.correct_answers / $('Parse Feedback').first().json.updated_session.total_questions_asked) * 100) : 0 }},\n    \"remediation_mode\": {{ $('Parse Feedback').first().json.updated_session.remediation_mode || false }},\n    \"remediation_questions\": {{ $('Parse Feedback').first().json.updated_session.remediation_questions || 0 }},\n    \"session_state\": {{ JSON.stringify($('Parse Feedback').first().json.updated_session) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "4c467f65-b43a-467c-9aa3-47e9e9a3e9a8",
+      "name": "Respond - Answer Result with Next Question",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        5904,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data    = $input.first().json;\nconst session = data.updated_session;\nconst summary = data.session_summary;\n\nconst topicScores = session.topic_scores  || {};\nconst history     = session.session_history || [];\nconst profileGaps = (session.mastery_profile && session.mastery_profile.knowledge_gaps) || [];\nconst fullQaReview = data.full_qa_review || [];\n\n// ── Per-topic enriched details ──────────────────────────────\nconst topicDetails = Object.entries(topicScores).map(([topic, scores]) => {\n  const gap = profileGaps.find(g => g.topic === topic) || {};\n  return {\n    topic,\n    mastery_score:   scores.mastery_score   || 0,\n    questions_asked: scores.questions_asked || 0,\n    correct:         scores.correct         || 0,\n    accuracy:        scores.questions_asked > 0\n      ? Math.round((scores.correct / scores.questions_asked) * 100) : 0,\n    is_mastered:     scores.is_mastered     || false,\n    misconceptions:  gap.misconceptions     || [],\n    error_patterns:  gap.error_patterns     || [],\n    priority:        gap.priority           || 'medium'\n  };\n});\n\n// ── Bloom's Taxonomy progression analysis ───────────────────\n// Derives cognitive depth reached from question difficulty\nconst bloomFromDifficulty = { easy: 'L1-L2 (Remembering/Understanding)',\n                               medium: 'L3-L4 (Applying/Analyzing)',\n                               hard: 'L5-L6 (Evaluating/Creating)' };\n\nconst highestDifficultyCorrect = (() => {\n  const order = ['hard','medium','easy'];\n  for (const d of order) {\n    if (history.some(h => h.difficulty === d && h.is_correct)) return d;\n  }\n  return 'easy';\n})();\n\n// Count how many questions at each difficulty level were correct\nconst diffCounts = { easy:{asked:0,correct:0}, medium:{asked:0,correct:0}, hard:{asked:0,correct:0} };\nhistory.forEach(h => {\n  const d = h.difficulty || 'easy';\n  if (diffCounts[d]) {\n    diffCounts[d].asked++;\n    if (h.is_correct) diffCounts[d].correct++;\n  }\n});\n\n// Question type breakdown\nconst typeCounts = {};\nhistory.forEach(h => {\n  const t = h.question_type || 'unknown';\n  if (!typeCounts[t]) typeCounts[t] = { asked:0, correct:0 };\n  typeCounts[t].asked++;\n  if (h.is_correct) typeCounts[t].correct++;\n});\n\n// Consecutive correct streaks (peak)\nlet peakStreak = 0, curStreak = 0;\nhistory.forEach(h => {\n  if (h.is_correct) { curStreak++; peakStreak = Math.max(peakStreak, curStreak); }\n  else curStreak = 0;\n});\n\n// Mastery progression trajectory (score at each question)\nconst masteryTrajectory = history.slice(-10).map((h,i) => `Q${history.length-Math.min(10,history.length)+i+1}:${h.score||0}%`).join(' ');\n\n// Difficulty progression string\nconst diffProgression = history.slice(-10).map((h,i) => `Q${history.length-Math.min(10,history.length)+i+1}:${h.difficulty}`).join(' ');\n\n// Coding questions (non-MCQ) performance\nconst codingQs = history.filter(h => h.question_type !== 'mcq');\nconst codingCorrect = codingQs.filter(h => h.is_correct).length;\n\n// MCQ performance\nconst mcqQs = history.filter(h => h.question_type === 'mcq');\nconst mcqCorrect = mcqQs.filter(h => h.is_correct).length;\n\n// Observed misconceptions: ONLY include ones explicitly from KAA\n// profile for topics where learner was incorrect\nconst observedMisconceptions = topicDetails.flatMap(t => {\n  if (t.correct < t.questions_asked) return t.misconceptions.slice(0,2);\n  return [];\n});\n\n// Advanced achievement flags\nconst solvedHardCoding   = history.some(h => h.difficulty === 'hard' && h.question_type !== 'mcq' && h.is_correct);\nconst reachedL56         = diffCounts.hard.correct > 0;\nconst highMastery        = summary.overall_mastery >= 85;\nconst excellentMastery   = summary.overall_mastery >= 90;\nconst strongAccuracy     = summary.overall_accuracy >= 80;\nconst allMastered        = topicDetails.every(t => t.is_mastered);\n\n// Per-topic Q&A evidence (compact, factual)\nconst topicQAEvidence = topicDetails.map(t => {\n  const topicHistory = history.filter(h => (h.topic || session.selected_topic) === t.topic);\n  const topicCodingCorrect = topicHistory.filter(h => h.question_type !== 'mcq' && h.is_correct).length;\n  const topicHardCorrect   = topicHistory.filter(h => h.difficulty === 'hard' && h.is_correct).length;\n  const topicHighestCorrect = topicHistory.filter(h => h.is_correct).map(h => h.difficulty).includes('hard') ? 'hard' : topicHistory.filter(h => h.is_correct).map(h => h.difficulty).includes('medium') ? 'medium' : 'easy';\n  return `${t.topic}|mastery=${t.mastery_score}%|q=${t.questions_asked}|correct=${t.correct}|acc=${t.accuracy}%|${t.is_mastered?'MASTERED':'NOT_MASTERED'}|highest_correct=${topicHighestCorrect}|coding_correct=${topicCodingCorrect}|hard_correct=${topicHardCorrect}`;\n}).join('\\n');\n\n// Compact Q&A list with full context for AI to analyze\nconst truncate = (s, max) =>\n  s && s.length > max ? String(s).substring(0, max) + '...' : String(s || '');\n\nconst qaDetailedList = fullQaReview.slice(0, 10).map((q, i) =>\n  `Q${i+1}|${truncate(q.topic,22)}|${q.difficulty}|${q.question_type}|${q.is_correct?'CORRECT':'WRONG'}|mastery_after=${q.mastery_after||0}%`\n).join('\\n');\n\n// ── PROMPT ───────────────────────────────────────────────────\n// Designed to be within 3500 tokens input + 1200 output = 4700 total\n// Keep factual data dense but prompt instructions focused.\nconst promptText = `You are an expert Java programming instructor writing a FINAL PERSONALIZED FEEDBACK REPORT.\n\nSTRICT RULES:\n1. Base ALL feedback on the actual session data below. Do NOT invent.\n2. FORBIDDEN PHRASES — NEVER use any of these:\n   \"practice more examples\", \"review incorrect answers\", \"attempted all questions\",\n   \"continue learning\", \"showed persistence\", \"completed the assessment\",\n   \"retake assessment\", \"review concepts\", \"engaged with all topics\",\n   \"needs more practice\", \"Write 5 Java programs\".\n3. misconceptions_found MUST be [] (empty array) when a topic has zero errors.\n4. key_weaknesses MUST be [] (empty array) when overall_accuracy >= 95%.\n5. topic_reports MUST be SPECIFIC to each topic — never copy-paste across topics.\n6. improvement_plan MUST name the exact sub-concept the learner struggled with,\n   OR if no struggle: recommend the specific NEXT advanced topic to study.\n7. If overall_mastery >= 90%: strengths MUST mention algorithmic thinking,\n   Bloom level reached (L5/L6), and specific question types solved correctly.\n8. If solved_hard_coding_challenges=true: mention recursive decomposition,\n   implementation quality, data structure selection, or optimization reasoning.\n9. If overall_accuracy >= 95%: recommend ADVANCED follow-on topics ONLY.\n   Do NOT recommend remediation, review, or re-assessment.\n10. Generate instructor-quality, evidence-based academic feedback only.\n11. Each strength and weakness statement MUST cite a specific data point from\n    the session (e.g., \"answered all 3 hard coding challenges correctly\",\n    \"progressed from easy MCQ to hard coding_challenge in 5 questions\").\n\nSESSION DATA:\nlearner=${session.learner_id}\ntotal_questions=${session.total_questions_asked}\ncorrect=${session.correct_answers}\naccuracy=${summary.overall_accuracy}%\noverall_mastery=${summary.overall_mastery}%\nduration=${summary.session_duration_minutes}min\npeak_consecutive_correct_streak=${peakStreak}\nmastery_trajectory=${masteryTrajectory}\ndifficulty_progression=${diffProgression}\nhighest_difficulty_answered_correctly=${highestDifficultyCorrect} (${bloomFromDifficulty[highestDifficultyCorrect]})\nreached_bloom_L5_L6=${reachedL56}\nsolved_hard_coding_challenges=${solvedHardCoding}\nmcq_performance=${mcqCorrect}/${mcqQs.length} correct\ncoding_question_performance=${codingCorrect}/${codingQs.length} correct\ndifficulty_breakdown=easy:${diffCounts.easy.correct}/${diffCounts.easy.asked} medium:${diffCounts.medium.correct}/${diffCounts.medium.asked} hard:${diffCounts.hard.correct}/${diffCounts.hard.asked}\nquestion_type_breakdown=${Object.entries(typeCounts).map(([t,v])=>`${t}:${v.correct}/${v.asked}`).join(' ')}\n\nTOPIC PERFORMANCE:\n${topicQAEvidence}\n\nQ&A PROGRESSION:\n${qaDetailedList}\n\n${observedMisconceptions.length > 0 ? 'KAA-IDENTIFIED MISCONCEPTIONS (only for topics with errors):\\n' + observedMisconceptions.join('; ') : 'NO MISCONCEPTIONS IDENTIFIED (learner performed correctly)'}\n\nReturn ONLY raw JSON. No markdown. No text before or after.\n\n{\"report_title\":\"Java Programming Assessment - Personalised Feedback Report\",\"generated_at\":\"${new Date().toISOString()}\",\"learner_id\":\"${session.learner_id}\",\"session_id\":\"${session.session_id}\",\"overall_assessment\":\"<2-3 sentences based STRICTLY on session data above — mastery %, Bloom level reached, coding performance>\",\"overall_grade\":\"<Excellent|Good|Satisfactory|Needs Improvement|Poor>\",\"overall_mastery_percentage\":${summary.overall_mastery},\"overall_accuracy_percentage\":${summary.overall_accuracy},\"session_duration_minutes\":${summary.session_duration_minutes},\"total_questions\":${session.total_questions_asked},\"total_correct\":${session.correct_answers},\"key_strengths\":[\"<specific strength 1 observed in data>\",\"<specific strength 2 observed in data>\"],\"key_weaknesses\":${observedMisconceptions.length > 0 ? '[\"<specific weakness observed in data>\"]' : '[]'},\"topic_reports\":[${topicDetails.map(t => `{\"topic_name\":\"${t.topic}\",\"mastery_percentage\":${t.mastery_score},\"is_mastered\":${t.is_mastered},\"questions_asked\":${t.questions_asked},\"correct_answers\":${t.correct},\"accuracy\":${t.accuracy},\"strengths\":\"<specific strength for ${t.topic} based on actual q/a data>\",\"weaknesses\":${t.correct < t.questions_asked ? `\"<specific weakness for ${t.topic} based on actual errors>\"` : '\"none observed\"'},\"misconceptions_found\":${observedMisconceptions.length > 0 && t.correct < t.questions_asked ? '[\"<misconception observed for this topic only if errors exist>\"]' : '[]'},\"improvement_plan\":\"<plan specific to ${t.topic} performance: mastery=${t.mastery_score}% accuracy=${t.accuracy}%>\",\"recommended_exercises\":[\"<exercise specific to ${t.topic}>\"]}`).join(',')}],\"learning_path\":{\"immediate_focus\":\"<topic with lowest mastery or next challenge if all mastered>\",\"week_1_goals\":[\"<specific measurable goal based on this session>\"],\"long_term_goals\":[\"<advanced topic recommendation if mastery >= 90, else targeted improvement>\"]},\"motivational_message\":\"<personalized message referencing actual achievement: mastery score, Bloom level, or specific question type success>\",\"next_assessment_recommendation\":\"<specific recommendation based on mastery level and progression>\"}`;\n\nconst ollamaPayload = {\n  model: \"gemma4:latest\",\n  prompt: promptText,\n  stream: false,\n  format: \"json\",\n  options: { temperature: 0.4, num_predict: 1800, num_ctx: 4096, keep_alive: '10m' }\n};\n\nreturn [{\n  json: {\n    ...data,\n    report_prompt: promptText,\n    ollama_payload: ollamaPayload\n  }\n}];\n"
+      },
+      "id": "b1c3c3aa-e59a-46b8-9a1b-10458699cdab",
+      "name": "Build Feedback Report Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4512,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollama_payload) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "0bcb05b9-7f52-498c-87f7-bdb70db05506",
+      "name": "Ollama Gemma4 - Generate Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4784,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst prevData       = $('Build Feedback Report Prompt').first().json;\nconst ollamaResponse = $input.first().json;\n\nlet reportData;\ntry {\n  const rawText     = ollamaResponse.response;\n  const cleanedText = rawText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  reportData = JSON.parse(cleanedText);\n\n} catch(e) {\n  // ── PERFORMANCE-AWARE FALLBACK ─────────────────────────────\n  // Only runs when Ollama JSON parsing fails.\n  // Builds evidence-based content from real session data.\n  // ZERO generic/forbidden phrases.\n  const session    = prevData.updated_session;\n  const summary    = prevData.session_summary;\n  const history    = session.session_history || [];\n  const topicScores = session.topic_scores || {};\n  const profileGaps = (session.mastery_profile && session.mastery_profile.knowledge_gaps) || [];\n\n  // ── Performance flags ──────────────────────────────────────\n  const overallMastery   = summary.overall_mastery  || 0;\n  const overallAccuracy  = summary.overall_accuracy || 0;\n  const totalQ           = session.total_questions_asked || 0;\n  const totalCorrect     = session.correct_answers || 0;\n\n  const solvedHard       = history.some(h => h.difficulty === 'hard' && h.is_correct);\n  const solvedHardCoding = history.some(h => h.difficulty === 'hard' && h.question_type !== 'mcq' && h.is_correct);\n  const hardTypes        = [...new Set(history.filter(h => h.difficulty === 'hard' && h.is_correct).map(h => h.question_type))];\n  const solvedCoding     = history.some(h => ['coding_challenge','debugging','code_completion'].includes(h.question_type) && h.is_correct);\n  const reachedL56       = history.some(h => h.difficulty === 'hard' && h.is_correct);\n\n  const diffCounts = { easy:{asked:0,correct:0}, medium:{asked:0,correct:0}, hard:{asked:0,correct:0} };\n  history.forEach(h => {\n    const d = h.difficulty || 'easy';\n    if (diffCounts[d]) { diffCounts[d].asked++; if (h.is_correct) diffCounts[d].correct++; }\n  });\n\n  const highestCorrect = solvedHard ? 'hard' : history.some(h => h.difficulty === 'medium' && h.is_correct) ? 'medium' : 'easy';\n  const bloomLevel     = highestCorrect === 'hard' ? 'Bloom L5-L6 (Evaluating/Creating)' : highestCorrect === 'medium' ? 'Bloom L3-L4 (Applying/Analyzing)' : 'Bloom L1-L2 (Remembering/Understanding)';\n\n  // ── Overall grade ──────────────────────────────────────────\n  const grade = overallMastery >= 90 ? 'Excellent'\n    : overallMastery >= 75 ? 'Good'\n    : overallMastery >= 60 ? 'Satisfactory'\n    : overallMastery >= 40 ? 'Needs Improvement' : 'Poor';\n\n  // ── Key strengths — evidence-based ────────────────────────\n  const strengths = [];\n  if (overallAccuracy >= 95)\n    strengths.push(`Achieved ${overallAccuracy}% accuracy across all ${totalQ} questions demonstrating consistent mastery`);\n  if (solvedHardCoding)\n    strengths.push(`Successfully completed hard-difficulty ${hardTypes.join(' and ')} tasks, demonstrating Bloom L5-L6 algorithmic thinking and implementation quality`);\n  if (reachedL56)\n    strengths.push(`Progressed to ${bloomLevel} — the highest cognitive level in this session`);\n  if (diffCounts.medium.asked > 0 && diffCounts.medium.correct === diffCounts.medium.asked)\n    strengths.push(`Solved all ${diffCounts.medium.asked} medium-difficulty code application questions correctly`);\n  if (diffCounts.easy.correct === diffCounts.easy.asked && diffCounts.easy.asked > 0)\n    strengths.push(`Demonstrated solid foundational recall across ${diffCounts.easy.asked} easy-level questions`);\n  if (strengths.length === 0)\n    strengths.push(`Completed ${totalQ} questions with ${overallAccuracy}% accuracy at ${bloomLevel}`);\n\n  // ── Key weaknesses — only when errors exist ────────────────\n  const weaknesses = [];\n  if (overallAccuracy < 80) {\n    const incorrectTopics = Object.entries(topicScores)\n      .filter(([,s]) => s.correct < s.questions_asked)\n      .map(([topic]) => topic);\n    if (incorrectTopics.length > 0)\n      weaknesses.push(`Incorrect answers observed in: ${incorrectTopics.join(', ')} — review the specific sub-concepts involved`);\n  }\n  // If accuracy >= 95, weaknesses stays []\n\n  // ── Per-topic reports ─────────────────────────────────────\n  const topicReports = Object.entries(topicScores).map(([topic, s]) => {\n    const gap      = profileGaps.find(g => g.topic === topic) || {};\n    const mastery  = s.mastery_score   || 0;\n    const asked    = s.questions_asked || 0;\n    const correct  = s.correct         || 0;\n    const accuracy = asked > 0 ? Math.round((correct/asked)*100) : 0;\n    const mastered = s.is_mastered || false;\n\n    const topicHistory  = history.filter(h => (h.topic || session.selected_topic) === topic);\n    const hardCorrect   = topicHistory.filter(h => h.difficulty === 'hard' && h.is_correct);\n    const codingCorrect = topicHistory.filter(h => h.question_type !== 'mcq' && h.is_correct);\n    const hasErrors     = correct < asked;\n\n    // Strength: cite actual question types and difficulty levels solved\n    let strength = '';\n    if (hardCorrect.length > 0 && codingCorrect.length > 0)\n      strength = `Solved ${hardCorrect.length} hard-difficulty ${[...new Set(hardCorrect.map(h=>h.question_type))].join('/')} task(s) correctly on ${topic}, demonstrating deep implementation ability at ${bloomLevel}`;\n    else if (codingCorrect.length > 0)\n      strength = `Correctly completed ${codingCorrect.length} code-based question(s) on ${topic}, applying concepts in practice`;\n    else if (correct === asked && asked > 0)\n      strength = `Answered all ${asked} questions correctly on ${topic} with ${accuracy}% accuracy`;\n    else\n      strength = `Demonstrated partial understanding of ${topic} across ${correct}/${asked} correct answers`;\n\n    // Weakness: only when errors exist, cite specific gap data\n    let weakness = 'none observed';\n    if (hasErrors) {\n      const knownMisconceptions = gap.misconceptions || [];\n      const knownErrors         = gap.error_patterns || [];\n      const details = [...knownMisconceptions.slice(0,1), ...knownErrors.slice(0,1)].join('; ');\n      weakness = details.length > 0\n        ? `Struggled with: ${details}`\n        : `${asked - correct} question(s) answered incorrectly on ${topic} — focus on the sub-concepts from those specific questions`;\n    }\n\n    // Misconceptions: only from KAA profile, only when errors exist\n    const misconceptions = hasErrors ? (gap.misconceptions || []).slice(0,2) : [];\n\n    // Improvement plan: advanced if mastered, targeted if not\n    let improvement = '';\n    if (mastered && mastery >= 90)\n      improvement = `Mastered at ${mastery}%. Progress to advanced ${topic} topics such as ${topic.includes('OOP') ? 'design patterns and SOLID principles' : topic.includes('Thread') ? 'concurrent data structures and Fork/Join framework' : topic.includes('Collection') ? 'stream processing and functional-style collection operations' : 'algorithmic optimization and real-world application development'}`;\n    else if (mastered)\n      improvement = `Topic mastered at ${mastery}%. Consolidate by implementing a project that integrates ${topic} with other Java concepts`;\n    else\n      improvement = `Focus on the ${asked - correct} incorrect question(s) — specifically the sub-concepts: ${(gap.error_patterns || ['core concepts']).slice(0,2).join(', ')}`;\n\n    // Recommended next topics\n    const nextTopics = mastered\n      ? [ topic.includes('OOP') ? 'Design Patterns (GoF)' : topic.includes('Thread') ? 'Java Concurrent Collections' : topic.includes('Collection') ? 'Java Streams and Functional Interfaces' : `Advanced ${topic}` ]\n      : [ topic ];\n\n    return {\n      topic_name:          topic,\n      mastery_percentage:  mastery,\n      is_mastered:         mastered,\n      questions_asked:     asked,\n      correct_answers:     correct,\n      accuracy:            accuracy,\n      performance_level:   mastery >= 90 ? 'excellent' : mastery >= 75 ? 'good' : mastery >= 60 ? 'satisfactory' : 'needs_improvement',\n      strengths:           strength,\n      weaknesses:          weakness,\n      misconceptions_found: misconceptions,\n      improvement_plan:    improvement,\n      advanced_readiness:  mastered && mastery >= 85 ? 'Ready for advanced topics' : 'Continue building mastery',\n      recommended_next_topics: nextTopics\n    };\n  });\n\n  // ── Learning path ─────────────────────────────────────────\n  const masteredTopics   = topicReports.filter(t => t.is_mastered).map(t => t.topic_name);\n  const unmasteredTopics = topicReports.filter(t => !t.is_mastered).map(t => t.topic_name);\n\n  const immediateFocus = unmasteredTopics.length > 0\n    ? `Deepen mastery in ${unmasteredTopics[0]} — focus on the specific sub-concepts from the incorrect answers in this session`\n    : `Progress to advanced Java topics building on your demonstrated mastery of: ${masteredTopics.join(', ')}`;\n\n  const nextStage = masteredTopics.length > 0 && unmasteredTopics.length === 0\n    ? [`Tackle advanced-difficulty ${masteredTopics[0]} implementation projects`, 'Explore Java design patterns and architectural concepts']\n    : [`Complete ${unmasteredTopics[0] || 'remaining topics'} to mastery level`, 'Revisit the specific question types where errors occurred'];\n\n  const advancedReady = masteredTopics.map(t =>\n    t.includes('OOP') ? 'Design Patterns' : t.includes('Thread') ? 'Concurrent Collections' : t.includes('Collection') ? 'Java Streams API' : `Advanced ${t}`\n  );\n\n  // ── Overall assessment ────────────────────────────────────\n  let assessment = '';\n  if (overallMastery >= 90 && solvedHardCoding)\n    assessment = `Demonstrated exceptional performance with ${overallAccuracy}% accuracy and ${overallMastery}% mastery. Successfully reached ${bloomLevel} by solving hard-difficulty ${hardTypes.join(' and ')} tasks, showing strong algorithmic thinking and implementation ability.`;\n  else if (overallMastery >= 75)\n    assessment = `Performed strongly across the session with ${overallAccuracy}% accuracy and ${overallMastery}% overall mastery. Reached ${bloomLevel} on the Bloom's Taxonomy scale.`;\n  else\n    assessment = `Completed the assessment with ${overallAccuracy}% accuracy and ${overallMastery}% overall mastery. The session progressed through ${bloomLevel} on the Bloom's Taxonomy scale.`;\n\n  // ── Motivational message — evidence-based ─────────────────\n  let motivation = '';\n  if (overallMastery >= 90 && solvedHardCoding)\n    motivation = `Outstanding performance — ${overallAccuracy}% accuracy and mastery of ${bloomLevel} demonstrates genuine Java expertise. Your ability to solve hard ${hardTypes.join(' and ')} challenges shows you are ready for professional-level Java development.`;\n  else if (overallMastery >= 75)\n    motivation = `Strong session performance with ${overallMastery}% mastery. Your progression to ${bloomLevel} confirms solid Java understanding — keep advancing to the next challenge level.`;\n  else\n    motivation = `Good effort across ${totalQ} questions. Your ${overallMastery}% mastery shows a developing understanding of Java — focus on the specific sub-concepts from this session and your next assessment will show clear improvement.`;\n\n  reportData = {\n    report_title:                'Java Programming Assessment - Personalised Feedback Report',\n    generated_at:                new Date().toISOString(),\n    learner_id:                  session.learner_id,\n    session_id:                  session.session_id,\n    overall_assessment:          assessment,\n    overall_grade:               grade,\n    overall_mastery_percentage:  overallMastery,\n    overall_accuracy_percentage: overallAccuracy,\n    session_duration_minutes:    summary.session_duration_minutes,\n    total_questions:             totalQ,\n    total_correct:               totalCorrect,\n    key_strengths:               strengths,\n    key_weaknesses:              weaknesses,\n    topic_reports:               topicReports,\n    mastered_topics:             masteredTopics,\n    topics_needing_improvement:  unmasteredTopics,\n    misconceptions_to_address:   topicReports.flatMap(t => t.misconceptions_found),\n    learning_path: {\n      immediate_focus:              immediateFocus,\n      next_stage_recommendations:   nextStage,\n      advanced_topics_ready_for:    advancedReady,\n      week_1_goals:   [ nextStage[0] ],\n      long_term_goals: advancedReady.length > 0 ? advancedReady : [ 'Build a complete Java project integrating all assessed topics' ]\n    },\n    recommended_resources: [\n      { topic: 'Java General', resource_name: 'Official Java Documentation', resource_type: 'website', url_hint: 'docs.oracle.com/javase' },\n      { topic: 'Java General', resource_name: 'Effective Java — Joshua Bloch', resource_type: 'book', url_hint: 'effectivejava.com' }\n    ],\n    final_instructor_summary: assessment,\n    next_assessment_recommendation: masteredTopics.length === topicReports.length\n      ? `All topics mastered. Progress to advanced Java concepts — recommended: ${advancedReady.join(', ')}`\n      : `Reassess ${unmasteredTopics.join(', ')} after targeted practice on the specific sub-concepts identified in this session.`,\n    motivational_message: motivation\n  };\n}\n\nreturn [{ json: { ...prevData, feedback_report: reportData } }];\n"
+      },
+      "id": "f67ad113-c1e8-4436-8fae-fba8881c4473",
+      "name": "Parse Feedback Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data    = $input.first().json;\nconst session = data.updated_session;\nreturn [{ json: {\n  ...data,\n  session_id:      session.session_id,\n  learner_id:      session.learner_id,\n  feedback_report: data.feedback_report,\n  session_summary: data.session_summary,\n  full_qa_review:  data.full_qa_review || [],\n  generated_at:    new Date().toISOString()\n}}];\n"
+      },
+      "id": "554cbe48-445a-4bc4-8cca-c2f96dbf9a55",
+      "name": "Prepare Save Feedback Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5344,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_feedback_reports",
+        "fields": "=session_id,learner_id,feedback_report,session_summary,full_qa_review,generated_at",
+        "options": {}
+      },
+      "id": "7141ae32-f4d9-429b-97cd-2e185b949695",
+      "name": "MongoDB - Save Feedback Report",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        5632,
+        496
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Pull all required fields from Parse Feedback output (still in scope)\nconst src = $('Parse Feedback').first().json;\n\nreturn [{ json: {\n  // Fields for MongoDB - Log Session Update\n  session_id:            src.updated_session.session_id,\n  learner_id:            src.updated_session.learner_id,\n  updated_session:       src.updated_session,\n  mastery_calculation:   src.mastery_calculation,\n  topic_mastered:        src.topic_mastered,\n  session_complete:      src.session_complete,\n  current_topic_mastery: src.current_topic_mastery,\n  remediation_mode:      src.remediation_mode      || false,\n  remediation_entered:   src.remediation_entered   || false,\n  remediation_exited:    src.remediation_exited    || false,\n  update_timestamp:      new Date().toISOString(),\n  // Also pass evaluation_result so Prepare Next Question can use correct isCorrect\n  evaluation_result:     src.evaluation_result,\n  question:              src.question,\n  submittedAnswer:       src.submittedAnswer,\n  mastery_score:         src.current_topic_mastery\n}}];\n"
+      },
+      "id": "d16aede2-3bf8-4e2f-8b10-9a6619ca31b7",
+      "name": "Prepare Log Session Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_questions",
+        "fields": "=session_id,learner_id,current_question,question_generated_at,current_difficulty,bloom_level",
+        "options": {}
+      },
+      "id": "b995f8dc-fda8-4b96-a9f8-c2e499786b6d",
+      "name": "MongoDB - Save Next Question",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        4848,
+        208
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// MongoDB - Save Next Question outputs only the insert result (no data)\n// This node restores the full data from Parse Next Question named node\nconst fullData = $('Parse Next Question').first().json;\n\nreturn [{ json: {\n  ...fullData,\n  next_question_db_saved: true\n}}];\n"
+      },
+      "id": "b81dfb78-0ee1-49e1-8a46-8023b55b6e5e",
+      "name": "Restore Next Question Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5056,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// MongoDB - Save Feedback Report outputs only the insert result (no data)\n// This node restores the full data from Prepare Save Feedback Report named node\nconst fullData = $('Prepare Save Feedback Report').first().json;\n\nreturn [{ json: {\n  ...fullData,\n  feedback_report_db_saved: true\n}}];\n"
+      },
+      "id": "588646f9-d0ca-4961-9bd3-5cb84b14d85a",
+      "name": "Restore Feedback Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5920,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// MongoDB - Log Session Update outputs only the insert result (strips all data)\n// This node restores the full session data from Prepare Log Session Update\n// which still has updated_session, session_complete, evaluation_result etc.\nconst fullData = $('Prepare Log Session Update').first().json;\n\nreturn [{ json: {\n  ...fullData\n}}];\n"
+      },
+      "id": "0d29cd39-caea-4566-a7c8-25e1fc96dd18",
+      "name": "Restore Session Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3568,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// Ensure Next Question Fields for MongoDB Save\n// PURPOSE: Guarantee that all fields required by MongoDB - Save Next Question\n// are explicitly present at the root level of the output JSON.\n// This node reads from Parse Next Question (named reference) to ensure\n// the correct data is always available regardless of any upstream scope issue.\n// ================================================================\n\nconst src = $('Parse Next Question').first().json;\nconst sess = src.updated_session || {};\n\n// Explicitly extract and guarantee all 6 fields that MongoDB - Save Next Question needs:\n// fields: session_id, learner_id, current_question, question_generated_at, current_difficulty, bloom_level\n\nconst session_id            = src.session_id            || sess.session_id            || '';\nconst learner_id            = src.learner_id            || sess.learner_id            || '';\nconst current_question      = src.current_question      || src.next_question          || {};\nconst question_generated_at = src.question_generated_at || new Date().toISOString();\nconst current_difficulty    = src.current_difficulty    || sess.current_difficulty    || 'easy';\nconst bloom_level           = src.bloom_level           || (current_question && current_question.blooms_level) || '';\n\n// Spread ALL of src so nothing downstream breaks, then override with guaranteed fields\nreturn [{ json: {\n  ...src,\n  session_id,\n  learner_id,\n  current_question,\n  question_generated_at,\n  current_difficulty,\n  bloom_level\n}}];\n"
+      },
+      "id": "5139a25d-342d-4e68-9aa5-6a9f97282047",
+      "name": "Ensure Next Question Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4672,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "collection": "ame_session_updates",
+        "options": {
+          "limit": 1,
+          "sort": "{\"update_timestamp\": -1}"
+        },
+        "query": "={{ JSON.stringify({ session_id: $('Webhook - Submit Answer').first().json.body.session_id }) }}"
+      },
+      "id": "36abe798-b1db-45c9-b162-0ae0b915d42d",
+      "name": "MongoDB - Fetch Session State",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        752
+      ],
+      "alwaysOutputData": false,
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "ame_questions",
+        "options": {
+          "limit": 1
+        },
+        "query": "={{ JSON.stringify({ session_id: $('Webhook - Submit Answer').first().json.body.session_id, 'current_question.question_id': $('Webhook - Submit Answer').first().json.body.question_id }) }}"
+      },
+      "id": "c9fe5b52-acb4-44ef-9983-5c0d272f04f9",
+      "name": "MongoDB - Fetch Current Question",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        160,
+        752
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "ame_sessions",
+        "options": {
+          "limit": 1
+        },
+        "query": "={{ JSON.stringify({ session_id: $('Webhook - Submit Answer').first().json.body.session_id }) }}"
+      },
+      "id": "c5198767-7639-4418-b889-afa4bc18bbcf",
+      "name": "MongoDB - Fetch Initial Session",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        752
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        6112,
+        352
+      ],
+      "id": "851c0e14-635d-459d-991a-8ed1ecb4f0bc",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Build initial ame_session_updates document from session data\n// This runs at session START so submit-answer can find session state\n// even for the very first answer (before any answer is processed)\nconst sessionData = $('Parse & Validate Mastery Profile').first().json;\n\nreturn [{ json: {\n  session_id:            sessionData.session_id,\n  learner_id:            sessionData.learner_id,\n  // updated_session mirrors the full session state - same as Flow 2 writes\n  updated_session: {\n    session_id:                sessionData.session_id,\n    learner_id:                sessionData.learner_id,\n    mastery_profile:           sessionData.mastery_profile,\n    selected_topic:            sessionData.selected_topic,\n    all_topics:                sessionData.all_topics,\n    remaining_topics:          sessionData.remaining_topics,\n    current_difficulty:        sessionData.current_difficulty,\n    question_number:           sessionData.question_number,\n    mastery_score:             sessionData.mastery_score,\n    total_questions_asked:     sessionData.total_questions_asked,\n    correct_answers:           sessionData.correct_answers,\n    consecutive_correct:       sessionData.consecutive_correct,\n    consecutive_wrong:         sessionData.consecutive_wrong,\n    session_history:           sessionData.session_history,\n    topic_scores:              sessionData.topic_scores,\n    mastery_threshold:         sessionData.mastery_threshold,\n    max_questions_per_topic:   sessionData.max_questions_per_topic,\n    session_started_at:        sessionData.session_started_at,\n    session_status:            'active',\n    remediation_mode:          false,\n    remediation_questions:     0,\n    max_remediation_questions: 6\n  },\n  // mastery_calculation is null at session start (no answer yet)\n  mastery_calculation:   null,\n  topic_mastered:        false,\n  session_complete:      false,\n  current_topic_mastery: 0,\n  remediation_mode:      false,\n  remediation_entered:   false,\n  remediation_exited:    false,\n  update_timestamp:      sessionData.session_started_at\n}}];\n"
+      },
+      "id": "ef064719-7c31-40f3-9fcf-a4400c4ef07e",
+      "name": "Prepare Initial Session Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ame_session_updates",
+        "fields": "=session_id,learner_id,updated_session,mastery_calculation,topic_mastered,session_complete,current_topic_mastery,remediation_mode,remediation_entered,remediation_exited,update_timestamp",
+        "options": {}
+      },
+      "id": "dea31a56-7582-4aea-b893-e8221468e570",
+      "name": "MongoDB - Save Initial Session Update",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        0
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "W8eEXXGkSjlX2EGD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ============================================================\n// Build Rubric Evaluation Prompt\n// Question-type-aware rubric — MCQ vs Open-ended\n// MCQ: correctness ONLY — no reasoning, no explanation quality\n// Open-ended: full multi-dimensional rubric\n// ============================================================\nconst data            = $input.first().json;\nconst question        = data.question;\nconst evalResult      = data.evaluation_result;\nconst submittedAnswer = data.submittedAnswer;\nconst qType           = question.question_type || 'mcq';\nconst difficulty      = question.difficulty    || 'easy';\nconst topic           = question.topic         || 'Java';\n\n// ── Question type classification ────────────────────────────\n// MCQ: binary choice — only correctness matters\n// Open-ended: multi-dimensional quality evaluation\nconst isMcq = (qType === 'mcq');\n\n// ── Define rubric criteria by question type ─────────────────\n// MCQ: ONLY correctness — single criterion, weight 1.0\n// Gemma4 must NOT be asked to evaluate reasoning for MCQ\nconst rubricsByType = {\n  mcq: [\n    {\n      criterion:   'correctness',\n      weight:      1.00,\n      description: 'Whether the learner selected the correct answer option. ' +\n                   'IMPORTANT: This is a multiple choice question. ' +\n                   'Do NOT evaluate reasoning, explanation quality, or conceptual depth. ' +\n                   'Score 100 if correct option selected, 0 if wrong option selected.'\n    }\n  ],\n  conceptual: [\n    { criterion: 'correctness',              weight: 0.30, description: 'Factual accuracy of the response'                                  },\n    { criterion: 'conceptual_understanding', weight: 0.35, description: 'Depth of understanding demonstrated in the explanation'            },\n    { criterion: 'logical_reasoning',        weight: 0.25, description: 'Coherence and logical flow of the explanation'                     },\n    { criterion: 'authenticity',             weight: 0.10, description: 'Human-like reasoning vs. mechanical/copy-paste response'           }\n  ],\n  code_completion: [\n    { criterion: 'correctness',              weight: 0.35, description: 'Code produces the correct output'                                  },\n    { criterion: 'conceptual_understanding', weight: 0.25, description: 'Correct use of Java constructs and concepts'                      },\n    { criterion: 'code_quality',             weight: 0.20, description: 'Code readability, naming, and structure'                          },\n    { criterion: 'logical_reasoning',        weight: 0.15, description: 'Logical approach used to solve the problem'                       },\n    { criterion: 'authenticity',             weight: 0.05, description: 'Genuine learner reasoning vs. template-copied code'               }\n  ],\n  code_tracing: [\n    { criterion: 'correctness',              weight: 0.50, description: 'Correct final output or traced value'                             },\n    { criterion: 'logical_reasoning',        weight: 0.35, description: 'Evidence of step-by-step trace reasoning'                        },\n    { criterion: 'conceptual_understanding', weight: 0.15, description: 'Shows understanding of what the code does'                       }\n  ],\n  debugging: [\n    { criterion: 'correctness',              weight: 0.30, description: 'All bugs correctly identified and fixed'                         },\n    { criterion: 'logical_reasoning',        weight: 0.30, description: 'Systematic debugging approach shown'                             },\n    { criterion: 'code_quality',             weight: 0.20, description: 'Fixed code follows good practices'                               },\n    { criterion: 'conceptual_understanding', weight: 0.15, description: 'Understands WHY the bugs exist'                                  },\n    { criterion: 'authenticity',             weight: 0.05, description: 'Personal debugging process visible'                              }\n  ],\n  coding_challenge: [\n    { criterion: 'correctness',              weight: 0.30, description: 'Solution produces correct output for all cases'                  },\n    { criterion: 'logical_reasoning',        weight: 0.25, description: 'Algorithm design and problem-solving approach'                   },\n    { criterion: 'code_quality',             weight: 0.20, description: 'Code readability, structure, naming conventions'                 },\n    { criterion: 'solution_efficiency',      weight: 0.15, description: 'Time/space complexity and optimal approach'                      },\n    { criterion: 'conceptual_understanding', weight: 0.07, description: 'Correct use of Java-specific features'                           },\n    { criterion: 'authenticity',             weight: 0.03, description: 'Genuine problem-solving vs. AI-generated pattern'                }\n  ],\n  descriptive: [\n    { criterion: 'correctness',              weight: 0.30, description: 'Factual accuracy of the response'                                },\n    { criterion: 'conceptual_understanding', weight: 0.35, description: 'Depth of conceptual understanding demonstrated'                  },\n    { criterion: 'logical_reasoning',        weight: 0.25, description: 'Coherence and logical flow of explanation'                       },\n    { criterion: 'authenticity',             weight: 0.10, description: 'Human-like reasoning vs. copied response'                        }\n  ]\n};\n\n// Fallback to coding_challenge for unknown open-ended types\nconst criteria = rubricsByType[qType] || (isMcq ? rubricsByType['mcq'] : rubricsByType['coding_challenge']);\n\n// Build criteria list for the prompt\nconst criteriaList = criteria.map(c =>\n  `  - ${c.criterion} (weight: ${Math.round(c.weight * 100)}%): ${c.description}`\n).join('\\n');\n\nconst criteriaJson = criteria.map(c =>\n  `    {\"criterion\": \"${c.criterion}\", \"score\": <0-100>, \"weight\": ${c.weight}, \"evidence\": \"<specific evidence from the answer>\", \"feedback\": \"<1 sentence specific feedback for this criterion>\"}`\n).join(',\\n');\n\n// ── MCQ-specific prompt (correctness only, no reasoning eval) ──\nlet promptText;\n\nif (isMcq) {\n  const correct   = String(question.correct_answer || '').trim().toUpperCase();\n  const submitted = String(submittedAnswer || '').trim().toUpperCase();\n  const isCorrect = evalResult.is_correct;\n  const score     = isCorrect ? 100 : 0;\n\n  promptText = `You are a Java assessment rubric evaluator.\nThis is a MULTIPLE CHOICE question. The learner selected a single option letter.\n\nQUESTION CONTEXT:\nTopic: ${topic}\nDifficulty: ${difficulty.toUpperCase()}\nQuestion Type: MCQ (Multiple Choice)\nQuestion: ${String(question.question_text || '').substring(0, 300)}\nCorrect Option: ${correct}\nLearner Selected: ${submitted}\nResult: ${isCorrect ? 'CORRECT' : 'INCORRECT'}\n\nCRITICAL INSTRUCTION:\nThis is MCQ. You MUST evaluate ONLY whether the correct option was selected.\nDo NOT evaluate:\n- Reasoning quality\n- Explanation depth\n- Conceptual articulation\n- How well the learner explains their choice\nThe learner only had to select A, B, C, or D. That is the complete task.\n\nRUBRIC: Single criterion — correctness only.\nCorrectness score: ${score} (${isCorrect ? '100 because correct option was selected' : '0 because wrong option was selected'})\n\nRespond with ONLY valid JSON:\n{\n  \"rubric_criteria\": [\n    {\"criterion\": \"correctness\", \"score\": ${score}, \"weight\": 1.0, \"evidence\": \"${isCorrect ? 'Learner selected the correct option ' + correct : 'Learner selected ' + submitted + ' but correct was ' + correct}\", \"feedback\": \"${isCorrect ? 'Correct option selected.' : 'Incorrect option selected. The correct answer was ' + correct + '.'}\"}\n  ],\n  \"weighted_rubric_score\": ${score},\n  \"performance_level\": \"${score === 100 ? 'Excellent' : 'Needs_Improvement'}\",\n  \"strongest_area\": \"correctness\",\n  \"weakest_area\": \"${score === 100 ? 'None' : 'correctness'}\",\n  \"reasoning_quality\": \"N/A - MCQ does not require reasoning\",\n  \"authenticity_flag\": \"N/A - MCQ\",\n  \"rubric_summary\": \"${isCorrect ? 'Learner correctly identified option ' + correct + ' for this MCQ question.' : 'Learner selected ' + submitted + ' instead of the correct option ' + correct + '.'}\",\n  \"strengths_observed\": \"${isCorrect ? 'Correct answer selected.' : 'Attempted the question.'}\",\n  \"weaknesses_observed\": \"${isCorrect ? 'None' : 'Selected wrong option ' + submitted + '. Correct was ' + correct + '.'}\",\n  \"concept_misunderstanding\": ${isCorrect ? 'null' : '\"May not fully understand the concept tested by this question.\"'},\n  \"improvement_roadmap\": \"${isCorrect ? 'Continue to the next question.' : 'Review the concept of ' + topic + ' and understand why option ' + correct + ' is correct.'}\"\n}`;\n\n} else {\n  // ── Open-ended prompt (full multi-dimensional rubric) ───────\n  promptText = `You are an expert Java programming assessment rubric evaluator.\nEvaluate the following learner response using a structured rubric.\n\nQUESTION CONTEXT:\nTopic: ${topic}\nDifficulty: ${difficulty.toUpperCase()}\nQuestion Type: ${qType}\nQuestion: ${String(question.question_text || '').substring(0, 300)}\n${question.code_snippet && question.code_snippet !== 'null' ? `Code Provided:\\n${String(question.code_snippet).substring(0, 400)}` : ''}\nExpected Answer: ${String(question.correct_answer || '').substring(0, 200)}\nEvaluation Criteria: ${question.evaluation_criteria || ''}\n\nLEARNER RESPONSE:\n${String(submittedAnswer || '').substring(0, 500)}\n\nINITIAL EVALUATION (for context):\nResult: ${evalResult.is_correct ? 'CORRECT' : 'INCORRECT'}\nInitial Score: ${evalResult.correctness_score}/100\nWhat was correct: ${String(evalResult.what_is_correct || '').substring(0, 150)}\nWhat was wrong: ${String(evalResult.what_is_wrong || '').substring(0, 150)}\n\nRUBRIC CRITERIA TO EVALUATE:\n${criteriaList}\n\nSCORING RULES:\n- Score each criterion from 0 to 100\n- 0-20: No evidence or completely wrong\n- 21-40: Minimal attempt, significant errors\n- 41-60: Partial understanding, notable gaps\n- 61-80: Good understanding, minor issues\n- 81-100: Strong understanding, near perfect\n\nIMPORTANT: Respond with ONLY a valid JSON object. No markdown, no extra text. Just raw JSON:\n{\n  \"rubric_criteria\": [\n${criteriaJson}\n  ],\n  \"weighted_rubric_score\": <calculated weighted average 0-100>,\n  \"performance_level\": \"<Excellent|Good|Satisfactory|Needs_Improvement|Poor>\",\n  \"strongest_area\": \"<criterion name where learner performed best>\",\n  \"weakest_area\": \"<criterion name where learner needs most improvement>\",\n  \"reasoning_quality\": \"<Deep|Surface|Minimal|Absent>\",\n  \"authenticity_flag\": \"<Genuine|Likely_AI_Assisted|Unclear>\",\n  \"rubric_summary\": \"<2-3 sentence summary of overall rubric performance>\",\n  \"strengths_observed\": \"<specific strengths seen in the response>\",\n  \"weaknesses_observed\": \"<specific weaknesses or gaps observed>\",\n  \"concept_misunderstanding\": \"<any specific misconception identified, or null>\",\n  \"improvement_roadmap\": \"<concrete step-by-step improvement suggestion>\"\n}`;\n}\n\nconst ollamaPayload = {\n  model: 'gemma4:latest',\n  format: 'json',\n  prompt: promptText,\n  stream: false,\n  // MCQ: smaller context fine, open-ended needs more\n  options: isMcq\n    ? { temperature: 0.0, num_predict: 600,  num_ctx: 2048, keep_alive: '10m' }\n    : { temperature: 0.2, num_predict: 1500, num_ctx: 6144, keep_alive: '10m' }\n};\n\nreturn [{ json: {\n  ...data,\n  is_mcq_rubric:   isMcq,\n  rubric_prompt:   promptText,\n  rubric_criteria: criteria,\n  ollama_payload:  ollamaPayload\n}}];\n"
+      },
+      "id": "0a4cfb02-a4a1-4caa-a6d0-4d17e330714a",
+      "name": "Build Rubric Evaluation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollama_payload) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "fc82045a-7ebb-43df-a564-a77df8c51b39",
+      "name": "Ollama Gemma4 - Rubric Evaluation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ============================================================\n// Parse Rubric Result\n// Parses Gemma4 rubric response, calculates weighted score.\n// MCQ: correctness-only fallback (no reasoning penalties)\n// Open-ended: full rubric fallback\n// ============================================================\nconst buildData    = $('Build Rubric Evaluation Prompt').first().json;\nconst llmResponse  = $input.first().json;\nconst evalResult   = buildData.evaluation_result;\nconst question     = buildData.question;\nconst criteria     = buildData.rubric_criteria || [];\nconst qType        = question.question_type || 'mcq';\nconst isMcq        = (qType === 'mcq');\n\nlet rubricResult;\n\ntry {\n  const rawText     = llmResponse.response || '';\n  const cleanedText = rawText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  rubricResult      = JSON.parse(cleanedText);\n\n  if (!rubricResult.rubric_criteria || !Array.isArray(rubricResult.rubric_criteria)) {\n    throw new Error('Missing rubric_criteria array');\n  }\n\n  // Recalculate weighted score from criteria to ensure accuracy\n  let calcWeightedScore = 0;\n  let totalWeight       = 0;\n  for (const c of rubricResult.rubric_criteria) {\n    const weight = Number(c.weight) || 0;\n    const score  = Math.min(100, Math.max(0, Number(c.score) || 0));\n    calcWeightedScore += score * weight;\n    totalWeight       += weight;\n  }\n  if (totalWeight > 0) {\n    rubricResult.weighted_rubric_score = Math.round(calcWeightedScore / totalWeight);\n  }\n\n  // ── MCQ post-parse enforcement ────────────────────────────\n  // Even if Gemma4 returns reasoning fields for MCQ, override them\n  if (isMcq) {\n    const mcqScore = evalResult.is_correct ? 100 : 0;\n    // Force correctness-only score for MCQ\n    rubricResult.weighted_rubric_score = mcqScore;\n    rubricResult.reasoning_quality     = 'N/A - MCQ does not require reasoning';\n    rubricResult.authenticity_flag     = 'N/A - MCQ';\n    // Override any reasoning-based criteria scores Gemma4 may have added\n    if (rubricResult.rubric_criteria) {\n      rubricResult.rubric_criteria = rubricResult.rubric_criteria.map(c => {\n        if (c.criterion !== 'correctness') return null; // strip non-correctness criteria\n        return { ...c, score: mcqScore, weight: 1.0 };\n      }).filter(Boolean);\n      // Ensure correctness criterion exists\n      if (rubricResult.rubric_criteria.length === 0) {\n        rubricResult.rubric_criteria = [{\n          criterion: 'correctness',\n          score:     mcqScore,\n          weight:    1.0,\n          evidence:  evalResult.is_correct ? 'Correct option selected' : 'Incorrect option selected',\n          feedback:  evalResult.is_correct ? 'Correct.' : `Wrong. Correct was ${question.correct_answer}.`\n        }];\n      }\n    }\n  }\n\n} catch(e) {\n\n  if (isMcq) {\n    // ── MCQ fallback: correctness ONLY, zero reasoning ──────\n    const mcqScore = evalResult.is_correct ? 100 : 0;\n    rubricResult = {\n      rubric_criteria: [{\n        criterion: 'correctness',\n        score:     mcqScore,\n        weight:    1.0,\n        evidence:  evalResult.is_correct\n          ? `Learner selected the correct option.`\n          : `Learner selected wrong option. Correct was ${question.correct_answer}.`,\n        feedback:  evalResult.is_correct\n          ? 'Correct answer selected.'\n          : `Incorrect. The correct answer is ${question.correct_answer}.`\n      }],\n      weighted_rubric_score:    mcqScore,\n      performance_level:        mcqScore === 100 ? 'Excellent' : 'Needs_Improvement',\n      strongest_area:           'correctness',\n      weakest_area:             mcqScore === 100 ? 'None' : 'correctness',\n      reasoning_quality:        'N/A - MCQ does not require reasoning',\n      authenticity_flag:        'N/A - MCQ',\n      rubric_summary:           evalResult.is_correct\n        ? `Learner correctly answered this MCQ question on ${question.topic}.`\n        : `Learner selected the wrong option for this MCQ question on ${question.topic}.`,\n      strengths_observed:       evalResult.is_correct ? 'Correct option selected.' : 'Attempted the question.',\n      weaknesses_observed:      evalResult.is_correct ? 'None' : `Selected wrong option. Correct was ${question.correct_answer}.`,\n      concept_misunderstanding: evalResult.is_correct ? null : `May need to review the concept: ${question.topic}`,\n      improvement_roadmap:      evalResult.is_correct\n        ? 'Continue to the next question.'\n        : `Review ${question.topic} and understand why option ${question.correct_answer} is correct.`,\n      _rubric_fallback: true\n    };\n\n  } else {\n    // ── Open-ended fallback: full rubric from evaluation ────\n    const baseScore = evalResult.is_correct ? 80 : 20;\n    const fallbackCriteria = criteria.map(c => ({\n      criterion: c.criterion,\n      score:     evalResult.is_correct\n        ? Math.min(100, baseScore + Math.round(c.weight * 20))\n        : Math.max(0,   20         - Math.round(c.weight * 10)),\n      weight:   c.weight,\n      evidence: evalResult.is_correct\n        ? `Based on correct answer: ${evalResult.what_is_correct || 'Answer was correct'}`\n        : `Based on incorrect answer: ${evalResult.what_is_wrong || 'Answer was wrong'}`,\n      feedback: evalResult.is_correct\n        ? `Good performance on ${c.criterion}`\n        : `Needs improvement in ${c.criterion}`\n    }));\n\n    let fallbackWeighted = 0;\n    for (const c of fallbackCriteria) { fallbackWeighted += c.score * c.weight; }\n\n    rubricResult = {\n      rubric_criteria:          fallbackCriteria,\n      weighted_rubric_score:    Math.round(fallbackWeighted),\n      performance_level:        evalResult.is_correct ? 'Good' : 'Needs_Improvement',\n      strongest_area:           evalResult.is_correct ? (criteria[0]?.criterion || 'correctness') : 'None identified',\n      weakest_area:             evalResult.is_correct ? 'None identified' : (criteria[criteria.length-1]?.criterion || 'correctness'),\n      reasoning_quality:        evalResult.is_correct ? 'Surface' : 'Minimal',\n      authenticity_flag:        'Unclear',\n      rubric_summary:           evalResult.is_correct\n        ? `The learner answered correctly on this ${question.topic} question.`\n        : `The learner answered incorrectly on this ${question.topic} question and needs further practice.`,\n      strengths_observed:       evalResult.what_is_correct || 'Attempted the question',\n      weaknesses_observed:      evalResult.what_is_wrong   || 'Answer did not match expected',\n      concept_misunderstanding: null,\n      improvement_roadmap:      `Review the core concepts of ${question.topic} and practice similar ${qType} questions at ${question.difficulty} difficulty.`,\n      _rubric_fallback:         true\n    };\n  }\n}\n\n// Clamp weighted_rubric_score to 0-100\nrubricResult.weighted_rubric_score = Math.min(100, Math.max(0, rubricResult.weighted_rubric_score || 0));\n\n// Performance level from score if missing\nif (!rubricResult.performance_level) {\n  const s = rubricResult.weighted_rubric_score;\n  rubricResult.performance_level =\n    s >= 90 ? 'Excellent' :\n    s >= 75 ? 'Good' :\n    s >= 60 ? 'Satisfactory' :\n    s >= 40 ? 'Needs_Improvement' : 'Poor';\n}\n\nreturn [{ json: { ...buildData, rubric_evaluation: rubricResult }}];\n"
+      },
+      "id": "00ceead1-eb17-4ac1-b74a-5dac17ace37b",
+      "name": "Parse Rubric Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        576
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Start Session": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Mastery Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate Mastery Profile": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Save Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Save Session": {
+      "main": [
+        [
+          {
+            "node": "Prepare Initial Session Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Question Generation Prompt": {
+      "main": [
+        [
+          {
+            "node": "Ollama Gemma4 - Generate Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Gemma4 - Generate Question": {
+      "main": [
+        [
+          {
+            "node": "Parse Generated Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Generated Question": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Save Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Save Question": {
+      "main": [
+        [
+          {
+            "node": "Respond - Session Started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Submit Answer": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Fetch Session State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Extract Session Data": {
+      "main": [
+        [
+          {
+            "node": "Build Evaluation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evaluation Prompt": {
+      "main": [
+        [
+          {
+            "node": "IF - MCQ or Open Answer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - MCQ or Open Answer?": {
+      "main": [
+        [
+          {
+            "node": "MCQ Direct Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ollama Gemma4 - Evaluate Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCQ Direct Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Merge Evaluation Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Gemma4 - Evaluate Answer": {
+      "main": [
+        [
+          {
+            "node": "Parse Evaluation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Evaluation Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Evaluation Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Evaluation Paths": {
+      "main": [
+        [
+          {
+            "node": "Build Rubric Evaluation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Mastery Score": {
+      "main": [
+        [
+          {
+            "node": "Build Feedback Generation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Feedback Generation Prompt": {
+      "main": [
+        [
+          {
+            "node": "Ollama Gemma4 - Generate Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Gemma4 - Generate Feedback": {
+      "main": [
+        [
+          {
+            "node": "Parse Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Feedback": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Save Answer & Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Save Answer & Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Session Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Log Session Update": {
+      "main": [
+        [
+          {
+            "node": "Restore Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Next Question": {
+      "main": [
+        [
+          {
+            "node": "IF - Session Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Session Complete?": {
+      "main": [
+        [
+          {
+            "node": "Ollama Gemma4 - Generate Next Question",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Session Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Gemma4 - Generate Next Question": {
+      "main": [
+        [
+          {
+            "node": "Parse Next Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Next Question": {
+      "main": [
+        [
+          {
+            "node": "Ensure Next Question Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Session Summary": {
+      "main": [
+        [
+          {
+            "node": "Build Feedback Report Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge - With or Without Next Question": {
+      "main": [
+        [
+          {
+            "node": "Respond - Answer Result with Next Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Feedback Report Prompt": {
+      "main": [
+        [
+          {
+            "node": "Ollama Gemma4 - Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Gemma4 - Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Parse Feedback Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Feedback Report": {
+      "main": [
+        [
+          {
+            "node": "Prepare Save Feedback Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Save Feedback Report": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Save Feedback Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Save Feedback Report": {
+      "main": [
+        [
+          {
+            "node": "Restore Feedback Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Session Update": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Log Session Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Save Next Question": {
+      "main": [
+        [
+          {
+            "node": "Restore Next Question Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Next Question Data": {
+      "main": [
+        [
+          {
+            "node": "Merge - With or Without Next Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Feedback Report Data": {
+      "main": [
+        [
+          {
+            "node": "Merge - With or Without Next Question",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Restore Session Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Next Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Next Question Fields": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Save Next Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Fetch Session State": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Fetch Initial Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Fetch Current Question": {
+      "main": [
+        [
+          {
+            "node": "Validate & Extract Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Fetch Initial Session": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Fetch Current Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond - Answer Result with Next Question": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Initial Session Update": {
+      "main": [
+        [
+          {
+            "node": "MongoDB - Save Initial Session Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB - Save Initial Session Update": {
+      "main": [
+        [
+          {
+            "node": "Build Question Generation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Rubric Evaluation Prompt": {
+      "main": [
+        [
+          {
+            "node": "Ollama Gemma4 - Rubric Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Gemma4 - Rubric Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Parse Rubric Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Rubric Result": {
+      "main": [
+        [
+          {
+            "node": "Calculate Mastery Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "34d511e7-c451-4380-a24c-39f098636515",
+  "meta": {
+    "instanceId": "8445de44ff18a5e2f131c2a61fc566f969bdfa62804639457f842ae43f54dfe7"
+  },
+  "id": "IkBbWuphw6GEJsLV",
+  "tags": []
+}

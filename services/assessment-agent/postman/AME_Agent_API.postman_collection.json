@@ -1,0 +1,216 @@
+{
+  "info": {
+    "_postman_id": "5a8e32b1-3273-4b89-8c8e-03381f49cabf",
+    "name": "Mentora AME Agent API",
+    "description": "Collection for Mentora Assessment and Mastery Evaluation (AME) Agent Backend Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Assessment Sessions",
+      "item": [
+        {
+          "name": "Start Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mastery_profile\": {\n    \"overall_mastery_score\": 65,\n    \"knowledge_gaps\": [\n      {\n        \"topic\": \"Recursion\",\n        \"gap_type\": \"FUNDAMENTAL_GAP\",\n        \"misconceptions\": [\"Infinite recursion\", \"Base case missing\"],\n        \"observed_error_patterns\": {\n          \"sandbox\": [\"StackOverflowError\"]\n        }\n      }\n    ]\n  },\n  \"recommendations\": {\n    \"priority_order\": [\"Recursion\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ame/start-session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ame", "start-session"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"SESSION_1715587200000_STU-123\",\n  \"question_id\": \"Q_1715587200000_abc123\",\n  \"answer\": \"B\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ame/submit-answer",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ame", "submit-answer"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Session Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ame/session/:sessionId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ame", "session", ":sessionId"],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All My Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ame/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ame", "sessions"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Questions & Feedback",
+      "item": [
+        {
+          "name": "Get Answered Questions by Topic",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ame/questions?topic=Recursion",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ame", "questions"],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "Recursion"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Feedback Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ame/feedback-report/:sessionId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ame", "feedback-report", ":sessionId"],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5002",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    }
+  ]
+}

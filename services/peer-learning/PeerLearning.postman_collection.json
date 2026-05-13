@@ -1,36 +1,45 @@
 {
   "info": {
     "name": "Peer Learning System",
-    "description": "Complete API collection for the Collaborative Peer Learning & Knowledge Exchange Agent",
+    "description": "Complete API collection for the Collaborative Peer Learning & Knowledge Exchange Agent\n\nCovers all 11 phases:\n  1. Data Ingestion — Import student profiles\n  2. Pair Formation — Hungarian algorithm matching\n  3. Interactive Sessions — LLM-powered questions with Bloom's progression\n  4. Performance Scoring — Learner & teacher evaluation\n  5. Improved Pool — Students who mastered a topic\n  6. Waiting Queue — Notification system for teacher availability\n  7. Group Sessions — 3-student collaborative learning\n  8. Teacher Gap Resolution — Teachers improve their own gaps\n  9. Question Bank — Persistent question storage & analytics\n  10. Verification — Certified mastery\n  11. Completion — Full mastery report",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "1.0.0"
+    "version": "2.0.0"
   },
   "variable": [
     { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
-    { "key": "access_token", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5ZTdkNWI0MTI4MjQxZWYxMWY1ZjQxZCIsInN0dWRlbnRfaWQiOiJTVFVfMTc3NjgwMTIwNDI5OF8zMjYyIiwicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3Nzc3OTIxODYsImV4cCI6MTc3ODM5Njk4Nn0.__Gm_FDt_VEiLDRv3SROi_W_gjzBIsxe4mTp7g9m5Ww", "type": "string" },
-    { "key": "student_id", "value": "STU_1776801204298_3262", "type": "string" },
+    { "key": "access_token", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InN0dWRlbnQtMSIsInN0dWRlbnRfaWQiOiJTVFUtMjAyNi0wMDAxIiwicm9sZSI6InN0dWRlbnQiLCJpYXQiOjk5OTk5OTk5OTksImV4cCI6OTk5OTk5OTk5OX0.fake-signature", "type": "string" },
+    { "key": "student_id", "value": "STU-2026-0001", "type": "string" },
     { "key": "session_id", "value": "PS-REPLACE_ME", "type": "string" },
     { "key": "group_session_id", "value": "GS-REPLACE_ME", "type": "string" },
     { "key": "notification_id", "value": "N-REPLACE_ME", "type": "string" },
     { "key": "question_id", "value": "Q-REPLACE_ME", "type": "string" },
-    { "key": "topic_id", "value": "CS101-REC", "type": "string" }
+    { "key": "topic_id", "value": "CS101-REC", "type": "string" },
+    { "key": "topic_name", "value": "Recursion", "type": "string" }
   ],
   "item": [
     {
-      "name": "Health",
+      "name": "🔍 Health",
       "item": [
         {
           "name": "Health Check",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/health",
-            "description": "Check system health: DB connection, LLM model"
+            "description": "Check system health: DB connection status, LLM model, and app version."
+          }
+        },
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/",
+            "description": "Root endpoint showing system name and links to docs/health."
           }
         }
       ]
     },
     {
-      "name": "Students",
+      "name": "📥 Phase 1 — Students",
       "item": [
         {
           "name": "Import Students",
@@ -43,9 +52,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"students\": [\n    {\n      \"student_id\": \"STU-2026-0001\",\n      \"analysis_timestamp\": \"2026-04-09T08:00:00Z\",\n      \"data_sources\": { \"github\": \"available\", \"sandbox\": \"available\", \"quizzes\": \"available\" },\n      \"mastery_profile\": {\n        \"overall_mastery_score\": 45,\n        \"knowledge_gaps\": [\n          { \"topic\": \"Recursion\", \"topic_id\": \"CS101-REC\", \"gap_type\": \"FUNDAMENTAL_GAP\", \"confidence\": 0.9, \"mastery_score\": 20.0 },\n          { \"topic\": \"Binary Search Trees\", \"topic_id\": \"CS101-BST\", \"gap_type\": \"PARTIAL_GAP\", \"confidence\": 0.7, \"mastery_score\": 45.0 }\n        ],\n        \"strengths\": [\n          { \"topic\": \"Loops\", \"topic_id\": \"CS101-LOOP\", \"confidence\": 0.9, \"mastery_level\": \"proficient\", \"can_teach_others\": true }\n        ]\n      }\n    },\n    {\n      \"student_id\": \"STU-2026-0002\",\n      \"analysis_timestamp\": \"2026-04-09T08:00:00Z\",\n      \"data_sources\": { \"github\": \"available\", \"sandbox\": \"available\", \"quizzes\": \"available\" },\n      \"mastery_profile\": {\n        \"overall_mastery_score\": 80,\n        \"knowledge_gaps\": [\n          { \"topic\": \"Loops\", \"topic_id\": \"CS101-LOOP\", \"gap_type\": \"PARTIAL_GAP\", \"confidence\": 0.6, \"mastery_score\": 50.0 }\n        ],\n        \"strengths\": [\n          { \"topic\": \"Recursion\", \"topic_id\": \"CS101-REC\", \"confidence\": 0.95, \"mastery_level\": \"advanced\", \"can_teach_others\": true },\n          { \"topic\": \"Binary Search Trees\", \"topic_id\": \"CS101-BST\", \"confidence\": 0.85, \"mastery_level\": \"proficient\", \"can_teach_others\": true }\n        ]\n      }\n    }\n  ]\n}"
+              "raw": "{\n  \"students\": [\n    {\n      \"student_id\": \"STU-2026-0001\",\n      \"analysis_timestamp\": \"2026-04-09T08:00:00Z\",\n      \"data_sources\": { \"github\": \"available\", \"sandbox\": \"available\", \"quizzes\": \"available\" },\n      \"mastery_profile\": {\n        \"overall_mastery_score\": 45,\n        \"knowledge_gaps\": [\n          { \"topic\": \"Recursion\", \"topic_id\": \"CS101-REC\", \"gap_type\": \"FUNDAMENTAL_GAP\", \"confidence\": 0.9, \"mastery_score\": 20.0 },\n          { \"topic\": \"Binary Search Trees\", \"topic_id\": \"CS101-BST\", \"gap_type\": \"PARTIAL_GAP\", \"confidence\": 0.7, \"mastery_score\": 45.0 }\n        ],\n        \"strengths\": [\n          { \"topic\": \"Loops\", \"topic_id\": \"CS101-LOOP\", \"confidence\": 0.9, \"mastery_level\": \"proficient\", \"can_teach_others\": true }\n        ]\n      }\n    },\n    {\n      \"student_id\": \"STU-2026-0002\",\n      \"analysis_timestamp\": \"2026-04-09T08:00:00Z\",\n      \"data_sources\": { \"github\": \"available\", \"sandbox\": \"available\", \"quizzes\": \"available\" },\n      \"mastery_profile\": {\n        \"overall_mastery_score\": 80,\n        \"knowledge_gaps\": [\n          { \"topic\": \"Loops\", \"topic_id\": \"CS101-LOOP\", \"gap_type\": \"PARTIAL_GAP\", \"confidence\": 0.6, \"mastery_score\": 50.0 }\n        ],\n        \"strengths\": [\n          { \"topic\": \"Recursion\", \"topic_id\": \"CS101-REC\", \"confidence\": 0.95, \"mastery_level\": \"advanced\", \"can_teach_others\": true },\n          { \"topic\": \"Binary Search Trees\", \"topic_id\": \"CS101-BST\", \"confidence\": 0.85, \"mastery_level\": \"proficient\", \"can_teach_others\": true }\n        ]\n      }\n    },\n    {\n      \"student_id\": \"STU-2026-0003\",\n      \"analysis_timestamp\": \"2026-04-09T08:00:00Z\",\n      \"data_sources\": { \"github\": \"available\", \"sandbox\": \"available\", \"quizzes\": \"available\" },\n      \"mastery_profile\": {\n        \"overall_mastery_score\": 35,\n        \"knowledge_gaps\": [\n          { \"topic\": \"Recursion\", \"topic_id\": \"CS101-REC\", \"gap_type\": \"FUNDAMENTAL_GAP\", \"confidence\": 0.85, \"mastery_score\": 15.0 }\n        ],\n        \"strengths\": []\n      }\n    },\n    {\n      \"student_id\": \"STU-2026-0004\",\n      \"analysis_timestamp\": \"2026-04-09T08:00:00Z\",\n      \"data_sources\": { \"github\": \"available\", \"sandbox\": \"available\", \"quizzes\": \"available\" },\n      \"mastery_profile\": {\n        \"overall_mastery_score\": 55,\n        \"knowledge_gaps\": [\n          { \"topic\": \"Recursion\", \"topic_id\": \"CS101-REC\", \"gap_type\": \"PARTIAL_GAP\", \"confidence\": 0.75, \"mastery_score\": 40.0 }\n        ],\n        \"strengths\": [\n          { \"topic\": \"Binary Search Trees\", \"topic_id\": \"CS101-BST\", \"confidence\": 0.8, \"mastery_level\": \"proficient\", \"can_teach_others\": true }\n        ]\n      }\n    }\n  ]\n}"
             },
-            "description": "Phase 1: Import student data from JSON. Sorts gaps FUNDAMENTAL first."
+            "description": "Phase 1: Import student data from JSON. Accepts raw array or {students: [...]}.\nSorts gaps: FUNDAMENTAL_GAP first, by confidence descending.\nSets current_weak_topic to the first sorted gap."
           }
         },
         {
@@ -65,60 +74,60 @@
           }
         },
         {
-          "name": "Get Student History",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/students/{{student_id}}/history",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
           "name": "Get Student Weaknesses",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/students/{{student_id}}/weaknesses",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Sorted knowledge gaps for a student (FUNDAMENTAL_GAP first)."
+          }
+        },
+        {
+          "name": "Get Student History",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/students/{{student_id}}/history",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Full session history: pair_sessions, group_sessions, improved/mastered topics."
           }
         }
       ]
     },
     {
-      "name": "Sessions",
+      "name": "🤝 Phase 2 — Pairing & Sessions",
       "item": [
         {
-          "name": "Preview Best Teacher",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/sessions/match/{{student_id}}",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Preview best teacher for student's current weak topic (no session created)"
-          }
-        },
-        {
-          "name": "Confirm Session (Create)",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/sessions/match/{{student_id}}/confirm",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Create a confirmed pair session with best available teacher"
-          }
-        },
-        {
-          "name": "Batch Pair All Topics",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/sessions/batch/all-topics",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Run Hungarian algorithm matching for ALL topics simultaneously"
-          }
-        },
-        {
-          "name": "Run Full Pairing",
+          "name": "Batch Pair All Topics (Hungarian)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/sessions/pair/run",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Run the full system-wide pairing algorithm. Pairs all students and queues unmatched ones."
+            "description": "Run the full Hungarian algorithm matching for ALL topics.\n\nInternally:\n1. Loads all free students + waiting queue\n2. For each topic: builds cost matrix via compatibility scores, runs linear_sum_assignment\n3. Creates pair sessions for optimal matches\n4. Matches remaining new students with waiting queue\n5. Auto-queues unmatched students\n6. Saves batch_pairing_record"
+          }
+        },
+        {
+          "name": "Match Me (Individual)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/sessions/pair/match-me",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"access_token\": null\n}"
+            },
+            "description": "Individual matching for the authenticated user.\nOptionally pass an access_token to refresh student data from a URL.\nUses atomic findOneAndUpdate to prevent race conditions."
+          }
+        },
+        {
+          "name": "My Pairing Status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/sessions/pair/my-status",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Returns: 'in_pair_session', 'in_group_session', 'waiting', or 'idle'."
           }
         },
         {
@@ -127,7 +136,7 @@
             "method": "GET",
             "url": "{{base_url}}/api/sessions/pair/all",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Returns every pair session saved in the DB."
+            "description": "All pair sessions in DB — active, completed, abandoned — newest first."
           }
         },
         {
@@ -136,7 +145,7 @@
             "method": "GET",
             "url": "{{base_url}}/api/sessions/pair/waiting-queue",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Returns all students currently in the waiting queue."
+            "description": "Students waiting for a teacher, sorted by priority score descending."
           }
         },
         {
@@ -148,33 +157,38 @@
           }
         },
         {
-          "name": "My Pairing Status",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/sessions/pair/my-status",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Get the authenticated user's current pairing status. Returns: 'in_pair_session', 'in_group_session', 'waiting', or 'idle'."
-          }
-        },
-        {
           "name": "Get Session Details",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/sessions/{{session_id}}",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "❓ Phase 3 — Interactive Session",
+      "item": [
         {
-          "name": "Start/Generate Question",
+          "name": "Start Question (Manual)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/sessions/{{session_id}}/start-question",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Generate next Bloom's taxonomy question via gemma4"
+            "description": "Generate next Bloom's taxonomy question via gemma4 for a specific session ID."
           }
         },
         {
-          "name": "Submit Answer",
+          "name": "Start Question (Auto)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/sessions/my/start-question",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Auto-resolve the authenticated learner's active session and generate the next question.\nNo session_id needed."
+          }
+        },
+        {
+          "name": "Submit Answer (Manual)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/sessions/{{session_id}}/answer",
@@ -184,8 +198,25 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"answer\": \"A recursive function calls itself with a smaller problem until reaching the base case.\",\n  \"time_taken_seconds\": 45\n}"
-            }
+              "raw": "{\n  \"answer\": \"Recursion is a technique where a function calls itself with a smaller subproblem until reaching a base case. For example, factorial: f(n) = n * f(n-1), base case f(0) = 1.\",\n  \"time_taken_seconds\": 45\n}"
+            },
+            "description": "Submit answer for a specific session. Evaluated via LLM, updates mastery score dynamically."
+          }
+        },
+        {
+          "name": "Submit Answer (Auto)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/sessions/my/answer",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answer\": \"A recursive function calls itself with a smaller subproblem until reaching a base case.\",\n  \"time_taken_seconds\": 30\n}"
+            },
+            "description": "Auto-resolve the authenticated learner's active session and submit answer.\nNo session_id needed."
           }
         },
         {
@@ -200,22 +231,8 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question_id\": \"{{question_id}}\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Ask Teacher for Help",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/sessions/{{session_id}}/ask-teacher",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{access_token}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"message\": \"I don't understand why the base case is needed.\",\n  \"sandbox_code\": \"def factorial(n):\\n    return n * factorial(n-1)\"\n}"
-            }
+            },
+            "description": "Request a hint for the current question. Max 3 hints per session.\nHints are progressive: subtle → specific → almost-solution."
           }
         },
         {
@@ -224,13 +241,111 @@
             "method": "POST",
             "url": "{{base_url}}/api/sessions/{{session_id}}/complete",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
-            "description": "Manually complete session and calculate scores. Triggers Phase 5 if mastered."
+            "description": "Phase 4: Complete session and calculate scores.\n\nLearner outcomes:\n  ≥85% → MASTERED → enters improved pool (Phase 5)\n  50-84% → CONTINUE\n  <50% → REGROUP\n\nTeacher score:\n  <50% → NEEDS_IMPROVEMENT → teacher's own gaps marked (Phase 8)"
           }
         }
       ]
     },
     {
-      "name": "Group Sessions",
+      "name": "📊 Phase 4-5 — Performance & Pools",
+      "item": [
+        {
+          "name": "Get Student Performance",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/performance/{{student_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Overall performance summary: mastery scores, sessions count, avg scores."
+          }
+        },
+        {
+          "name": "Get Topic Performance",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/performance/{{student_id}}/topic/{{topic_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Performance history for a specific student-topic pair."
+          }
+        },
+        {
+          "name": "Get Completion Report",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/performance/{{student_id}}/completion",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Phase 11: Full completion report — initial vs final mastery, topics mastered, sessions completed."
+          }
+        },
+        {
+          "name": "Create Topic Pool",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/pools/{{topic_id}}/create",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          },
+          "description": "Create or verify an improved pool entry for a topic."
+        },
+        {
+          "name": "Get All Pools",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/pools/all",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Aggregated pool info for all topics: student count, avg mastery."
+          }
+        },
+        {
+          "name": "Get Pool Students",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/pools/{{topic_id}}/students",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "All students in the improved pool for a specific topic."
+          }
+        }
+      ]
+    },
+    {
+      "name": "⏳ Phase 6 — Notifications & Queue",
+      "item": [
+        {
+          "name": "Get My Notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/notifications",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Retrieve all notifications for the authenticated student, newest first."
+          }
+        },
+        {
+          "name": "Accept Notification (Join Session)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/notifications/{{notification_id}}/accept",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Accept a pairing notification. If teacher: activates session immediately.\nReturns session_id for redirect to live room."
+          }
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/notifications/{{notification_id}}/read",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Mark All Notifications Read",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/notifications/read-all",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Phase 7 — Group Sessions",
       "item": [
         {
           "name": "Form Group Session",
@@ -243,9 +358,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"topic_id\": \"CS101-REC\"\n}"
+              "raw": "{\n  \"topic_id\": \"{{topic_id}}\"\n}"
             },
-            "description": "Phase 7: Form a group of 3 from improved pool. Requires >= 3 students."
+            "description": "Form a group session from improved pool. Requires >= 3 students.\nAssigns roles: EXPLAINER (highest mastery), SOLVER (middle), REVIEWER (lowest).\nGenerates collaborative problem via gemma4."
           }
         },
         {
@@ -268,118 +383,17 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"student_id\": \"{{student_id}}\",\n  \"task_completion_score\": 85,\n  \"collaboration_score\": 90,\n  \"communication_score\": 80\n}"
-            }
+            },
+            "description": "Submit role scores for a group session.\nWhen all 3 members submit: computes avg, checks verification criteria.\nScore ≥90% → increments consecutive counter.\nScore <50% → back to pair programming."
           }
         }
       ]
     },
     {
-      "name": "Topic Pools",
+      "name": "📚 Phase 9 — Question Bank",
       "item": [
         {
-          "name": "Create Topic Pool",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/pools/{{topic_id}}/create",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Get All Pools",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/pools/all",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Get Pool Students",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/pools/{{topic_id}}/students",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        }
-      ]
-    },
-    {
-      "name": "Notifications & Queue",
-      "item": [
-        {
-          "name": "Add to Waiting Queue",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/waiting/add",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{access_token}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"student_id\": \"{{student_id}}\",\n  \"topic_id\": \"CS101-REC\",\n  \"topic_name\": \"Recursion\",\n  \"gap_type\": \"FUNDAMENTAL_GAP\",\n  \"attempts\": 0\n}"
-            }
-          }
-        },
-        {
-          "name": "Get Student Notifications",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/notifications/{{student_id}}",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Accept Notification",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/notifications/{{notification_id}}/accept",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Cancel Notification",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/notifications/{{notification_id}}/cancel",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        }
-      ]
-    },
-    {
-      "name": "Performance",
-      "item": [
-        {
-          "name": "Get Student Performance",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/performance/{{student_id}}",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Get Topic Performance",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/performance/{{student_id}}/topic/{{topic_id}}",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        },
-        {
-          "name": "Get Completion Report",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/performance/{{student_id}}/completion",
-            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
-          }
-        }
-      ]
-    },
-    {
-      "name": "Questions",
-      "item": [
-        {
-          "name": "Generate Question",
+          "name": "Generate Question (Manual)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/questions/generate",
@@ -389,12 +403,13 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"topic_id\": \"CS101-REC\",\n  \"topic_name\": \"Recursion\",\n  \"bloom_level\": 1,\n  \"current_mastery\": 20.0,\n  \"misconception\": \"FUNDAMENTAL_GAP\",\n  \"session_id\": \"{{session_id}}\",\n  \"session_type\": \"pair\"\n}"
-            }
+              "raw": "{\n  \"topic_id\": \"{{topic_id}}\",\n  \"topic_name\": \"{{topic_name}}\",\n  \"bloom_level\": 1,\n  \"current_mastery\": 20.0,\n  \"misconception\": \"FUNDAMENTAL_GAP\",\n  \"session_id\": \"{{session_id}}\",\n  \"session_type\": \"pair\"\n}"
+            },
+            "description": "Manually generate a Bloom's taxonomy question via gemma4 for any topic."
           }
         },
         {
-          "name": "Evaluate Answer",
+          "name": "Evaluate Answer (Manual)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/questions/evaluate",
@@ -405,7 +420,8 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question_id\": \"{{question_id}}\",\n  \"student_answer\": \"Recursion is when a function calls itself until a base case is reached.\"\n}"
-            }
+            },
+            "description": "Manually evaluate a student answer against a question's expected answer via LLM."
           }
         },
         {
@@ -413,28 +429,104 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/questions/bank/{{topic_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "All stored questions for a topic with analytics (success rate, avg hints, usage count)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🟢 Live Room",
+      "item": [
+        {
+          "name": "Get Live Room",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/live-room/{{session_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Get live room details for a session. Creates room if it doesn't exist."
+          }
+        },
+        {
+          "name": "My Live Room (Auto)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/live-room/my/room",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Auto-resolve authenticated user's active session and get/create the live room."
+          }
+        },
+        {
+          "name": "Check Session Ready",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/live-room/{{session_id}}/ready",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Check if a session is ready to join (scheduled time elapsed, status is active)."
+          }
+        },
+        {
+          "name": "Join Live Room",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/live-room/{{session_id}}/join",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Join a live room. Marks participant as online."
+          }
+        },
+        {
+          "name": "Leave Live Room",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/live-room/{{session_id}}/leave",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Leave a live room. Marks participant as offline."
+          }
+        },
+        {
+          "name": "Close Live Room",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/live-room/{{session_id}}/close",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Close a live room permanently."
+          }
+        },
+        {
+          "name": "Get Screen Share State",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/live-room/{{session_id}}/screen-share",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Get Room Members",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/live-room/{{session_id}}/members",
             "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
           }
         }
       ]
     },
     {
-      "name": "WebSocket Examples",
+      "name": "🔌 WebSocket Examples",
       "item": [
         {
-          "name": "Pair Session Chat (WS)",
+          "name": "Pair Session (WS)",
           "request": {
             "method": "GET",
             "url": "ws://localhost:8000/ws/session/{{session_id}}?student_id={{student_id}}&role=learner&token={{access_token}}",
-            "description": "WebSocket for real-time pair session chat, sandbox sync, and voice signaling.\nSend JSON: {\"type\": \"chat\", \"message\": \"Hello teacher!\"}\nOr: {\"type\": \"sandbox_update\", \"code\": \"def hello(): pass\", \"language\": \"python\"}\nOr: {\"type\": \"voice_signal\", \"signal_type\": \"offer\", \"signal_data\": {...}, \"target_student_id\": \"STU-XXX\"}"
+            "description": "WebSocket for pair session real-time collaboration.\n\nMessage types:\n  {\"type\": \"chat\", \"message\": \"Hello!\"}\n  {\"type\": \"sandbox_update\", \"code\": \"def hello(): pass\", \"language\": \"python\", \"cursor_position\": 10}\n  {\"type\": \"voice_signal\", \"signal_type\": \"offer\", \"signal_data\": {...}, \"target_student_id\": \"STU-XXX\"}\n  {\"type\": \"typing\", \"is_typing\": true}\n  {\"type\": \"hint_request\", \"question_id\": \"Q-XXX\"}\n  {\"type\": \"ping\"}"
           }
         },
         {
-          "name": "Group Session Chat (WS)",
+          "name": "Group Session (WS)",
           "request": {
             "method": "GET",
             "url": "ws://localhost:8000/ws/group/{{group_session_id}}?student_id={{student_id}}&role=EXPLAINER&token={{access_token}}",
-            "description": "WebSocket for 3-student group session collaboration."
+            "description": "WebSocket for 3-student group session.\n\nAdditional message type:\n  {\"type\": \"role_action\", \"action\": \"explaining\", \"content\": \"Here's how recursion works...\"}"
           }
         },
         {
@@ -442,7 +534,15 @@
           "request": {
             "method": "GET",
             "url": "ws://localhost:8000/ws/notifications/{{student_id}}?token={{access_token}}",
-            "description": "WebSocket for real-time push notifications when a teacher becomes available."
+            "description": "WebSocket for real-time push notifications.\nReceives: pairing_success, queue_entry, no_teachers_available, knowledge_gap_completed."
+          }
+        },
+        {
+          "name": "Live Room (WS)",
+          "request": {
+            "method": "GET",
+            "url": "ws://localhost:8000/api/live-room/ws/{{session_id}}?student_id={{student_id}}&token={{access_token}}",
+            "description": "Full live room WebSocket with all features.\n\nAdditional message types:\n  {\"type\": \"screen_share\", \"signal_type\": \"started\"}\n  {\"type\": \"whiteboard\", \"action_type\": \"draw\", \"data\": {\"x\": 100, \"y\": 200, \"color\": \"#000\"}}\n  {\"type\": \"whiteboard_clear\"}\n  {\"type\": \"question_update\", \"question_id\": \"Q-XXX\", \"status\": \"answered\"}\n  {\"type\": \"session_action\", \"action\": \"complete\"}\n  {\"type\": \"presence\", \"status\": \"online\"}"
           }
         }
       ]

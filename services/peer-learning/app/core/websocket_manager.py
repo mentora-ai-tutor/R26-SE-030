@@ -28,6 +28,14 @@ class ConnectionManager:
         self.meta[websocket] = {"student_id": student_id, "room_id": room_id, "role": role}
         logger.info(f"WS connected: student={student_id} room={room_id}")
 
+        # Send welcome to the connecting user with their role
+        await self.send_personal(websocket, {
+            "type": "welcome",
+            "student_id": student_id,
+            "role": role,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+
         # Notify others in the room
         await self.broadcast(
             room_id=room_id,

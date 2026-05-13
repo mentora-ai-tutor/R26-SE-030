@@ -1,9 +1,10 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from loguru import logger
 from app.core.database import get_db
 from app.core.websocket_manager import manager
+from app.core.config import settings
 from app.utils.helpers import generate_notification_id
 
 async def send_pairing_notification(
@@ -11,31 +12,43 @@ async def send_pairing_notification(
     session_id: str, 
     topic_name: str, 
     role: str, 
-    peer_id: str
+    peer_id: str,
+    scheduled_at: Optional[datetime] = None
 ) -> str:
     """
-    Phase 4 & 5: Notify student that they have been paired for a session.
+    Notify student that they have been paired for a session.
+    Includes scheduled start time and a "join_session" action button.
     Saves to DB and broadcasts via WebSocket.
     """
     db = get_db()
     notification_id = generate_notification_id()
+
+    action_label = "Join Session" if role == "teacher" else "View Session"
     
     doc = {
         "notification_id": notification_id,
         "student_id": student_id,
         "type": "pairing_success",
-        "message": f"Your peer learning session for {topic_name} is starting! You are paired as {role}.",
+        "action": "join_session",
+        "action_label": action_label,
+        "message": (
+            f"Your peer learning session for {topic_name} is scheduled! "
+            f"You are paired as {role}. "
+            f"Session starts at {scheduled_at.strftime('%H:%M')} UTC." if scheduled_at
+            else f"Your peer learning session for {topic_name} is starting! You are paired as {role}."
+        ),
         "session_id": session_id,
         "topic_name": topic_name,
         "role": role,
         "peer_id": peer_id,
+        "scheduled_at": scheduled_at.isoformat() if scheduled_at else None,
         "created_at": datetime.utcnow(),
         "status": "unread"
     }
     
     try:
         await db.notifications.insert_one(doc)
-        logger.info(f"Pairing notification {notification_id} sent to {student_id}")
+        logger.info(f"Pairing notification {notification_id} sent to {student_id} (scheduled: {scheduled_at})")
         
         # Broadcast via WebSocket
         await manager.broadcast(f"notif_{student_id}", {
@@ -45,6 +58,9 @@ async def send_pairing_notification(
             "topic_name": topic_name,
             "role": role,
             "peer_id": peer_id,
+            "action": "join_session",
+            "action_label": action_label,
+            "scheduled_at": scheduled_at.isoformat() if scheduled_at else None,
             "message": doc["message"]
         })
         return notification_id

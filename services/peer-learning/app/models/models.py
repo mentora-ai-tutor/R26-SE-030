@@ -19,6 +19,7 @@ class MasteryLevel(str, Enum):
 
 class SessionStatus(str, Enum):
     ACTIVE = "active"
+    SCHEDULED = "scheduled"
     COMPLETED = "completed"
     ABANDONED = "abandoned"
     WAITING = "waiting"
@@ -131,7 +132,9 @@ class PairSession(BaseModel):
     topic_id: str
     topic_name: str
     pairing_type: PairingType = PairingType.ONE_WAY
-    status: SessionStatus = SessionStatus.ACTIVE
+    status: SessionStatus = SessionStatus.SCHEDULED
+    scheduled_at: Optional[datetime] = None
+    quiz_available: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None
     questions_asked: int = 0
@@ -294,3 +297,30 @@ class CompletionReport(BaseModel):
     topics_can_teach: List[str]
     total_time_seconds: Optional[int]
     completion_date: datetime
+
+
+# ─── Live Room Models ──────────────────────────────────────────────────────────
+
+class RoomParticipant(BaseModel):
+    student_id: str
+    role: str
+    joined_at: datetime = Field(default_factory=datetime.utcnow)
+    is_online: bool = True
+
+
+class WhiteboardAction(BaseModel):
+    action_type: str
+    data: Dict[str, Any]
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LiveRoomState(BaseModel):
+    room_id: str
+    session_id: str
+    participants: List[RoomParticipant] = []
+    shared_code: Optional[str] = None
+    shared_language: str = "python"
+    whiteboard_actions: List[WhiteboardAction] = []
+    status: str = "active"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

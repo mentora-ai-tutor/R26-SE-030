@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set, Tuple
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from loguru import logger
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.models import PairingType, SessionStatus
 
 from app.utils.helpers import (
@@ -12,6 +13,7 @@ from app.utils.helpers import (
     generate_session_id,
     generate_batch_id,
     generate_queue_id,
+    generate_notification_id,
     sort_knowledge_gaps,
 )
 from app.services.notification_service import send_pairing_notification, send_queue_notification
@@ -251,11 +253,13 @@ async def run_full_pairing() -> Dict[str, Any]:
             })
             await send_pairing_notification(
                 student_id=learner["student_id"], session_id=s["session_id"],
-                topic_name=topic_name, role="learner", peer_id=teacher["student_id"]
+                topic_name=topic_name, role="learner", peer_id=teacher["student_id"],
+                scheduled_at=s.get("scheduled_at")
             )
             await send_pairing_notification(
                 student_id=teacher["student_id"], session_id=s["session_id"],
-                topic_name=topic_name, role="teacher", peer_id=learner["student_id"]
+                topic_name=topic_name, role="teacher", peer_id=learner["student_id"],
+                scheduled_at=s.get("scheduled_at")
             )
 
     # ─── STEP 2: Match remaining new students with waiting queue ─────────────
@@ -319,11 +323,13 @@ async def run_full_pairing() -> Dict[str, Any]:
                 })
                 await send_pairing_notification(
                     student_id=q_sid, session_id=s["session_id"],
-                    topic_name=topic_name, role="learner", peer_id=new_sid
+                    topic_name=topic_name, role="learner", peer_id=new_sid,
+                    scheduled_at=s.get("scheduled_at")
                 )
                 await send_pairing_notification(
                     student_id=new_sid, session_id=s["session_id"],
-                    topic_name=topic_name, role="teacher", peer_id=q_sid
+                    topic_name=topic_name, role="teacher", peer_id=q_sid,
+                    scheduled_at=s.get("scheduled_at")
                 )
                 break
 
@@ -377,11 +383,13 @@ async def run_full_pairing() -> Dict[str, Any]:
                 })
                 await send_pairing_notification(
                     student_id=new_sid, session_id=s["session_id"],
-                    topic_name=topic_name, role="learner", peer_id=q_sid
+                    topic_name=topic_name, role="learner", peer_id=q_sid,
+                    scheduled_at=s.get("scheduled_at")
                 )
                 await send_pairing_notification(
                     student_id=q_sid, session_id=s["session_id"],
-                    topic_name=topic_name, role="teacher", peer_id=new_sid
+                    topic_name=topic_name, role="teacher", peer_id=new_sid,
+                    scheduled_at=s.get("scheduled_at")
                 )
                 break
 
@@ -610,8 +618,9 @@ async def _create_pair_session(
     topic_name: str,
     pairing_type: PairingType,
     learner_initial_mastery: float = 0.0,
+    scheduled_at: Optional[datetime] = None,
 ) -> Optional[Dict]:
-    """Create and persist a pair session."""
+    """Create and persist a pair session with a scheduled start time."""
     if await _active_session_exists(learner_id, topic_id):
         logger.warning(
             f"Duplicate skipped: active session already exists for "
@@ -619,6 +628,10 @@ async def _create_pair_session(
         )
         return None
     db = get_db()
+
+    if scheduled_at is None:
+        scheduled_at = datetime.utcnow() + timedelta(seconds=settings.session_scheduled_delay_seconds)
+
     session_id = generate_session_id()
     doc = {
         "session_id": session_id,
@@ -627,7 +640,9 @@ async def _create_pair_session(
         "topic_id": topic_id,
         "topic_name": topic_name,
         "pairing_type": pairing_type.value,
-        "status": SessionStatus.ACTIVE.value,
+        "status": SessionStatus.SCHEDULED.value,
+        "scheduled_at": scheduled_at,
+        "quiz_available": False,
         "created_at": datetime.utcnow(),
         "completed_at": None,
         "questions_asked": 0,
@@ -648,7 +663,7 @@ async def _create_pair_session(
     doc.pop("_id", None)
     logger.info(
         f"Session {session_id}: {teacher_id} -> {learner_id} "
-        f"[{topic_name}] ({pairing_type.value})"
+        f"[{topic_name}] ({pairing_type.value}) scheduled at {scheduled_at}"
     )
     return doc
 
@@ -895,6 +910,7 @@ async def match_student_and_create_session(student_id: str):
     )
 
     # ── Create the pair session ───────────────────────────────────────────────
+    scheduled_at = datetime.utcnow() + timedelta(seconds=settings.session_scheduled_delay_seconds)
     session_doc = {
         "session_id": session_id,
         "teacher_id": reserved_teacher["student_id"],
@@ -902,7 +918,9 @@ async def match_student_and_create_session(student_id: str):
         "topic_id": topic_id,
         "topic_name": topic_name,
         "pairing_type": PairingType.ONE_WAY.value,
-        "status": SessionStatus.ACTIVE.value,
+        "status": SessionStatus.SCHEDULED.value,
+        "scheduled_at": scheduled_at,
+        "quiz_available": False,
         "created_at": datetime.utcnow(),
         "completed_at": None,
         "questions_asked": 0,
@@ -932,18 +950,27 @@ async def match_student_and_create_session(student_id: str):
     )
 
     # ── Send notifications (idempotent upsert to prevent duplicates) ──────────
+    action_label_map = {"learner": "View Session", "teacher": "Join Session"}
     for notif_student_id, role, peer_id in [
         (student_id, "learner", reserved_teacher["student_id"]),
         (reserved_teacher["student_id"], "teacher", student_id),
     ]:
         notif_doc = {
+            "notification_id": generate_notification_id(),
             "student_id": notif_student_id,
             "type": "pairing_success",
+            "action": "join_session",
+            "action_label": action_label_map[role],
             "session_id": session_id,
             "topic_name": topic_name,
             "role": role,
             "peer_id": peer_id,
-            "message": f"Your peer learning session for {topic_name} is starting! You are paired as {role}.",
+            "scheduled_at": scheduled_at.isoformat() if scheduled_at else None,
+            "message": (
+                f"Your peer learning session for {topic_name} is scheduled! "
+                f"You are paired as {role}. "
+                f"Session starts at {scheduled_at.strftime('%H:%M')} UTC."
+            ),
             "created_at": datetime.utcnow(),
             "status": "unread",
         }

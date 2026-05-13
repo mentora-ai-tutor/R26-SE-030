@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     group_session_mastery_threshold: int = 90
     verification_consecutive_sessions: int = 3
     improved_pool_group_trigger: int = 3
+    session_scheduled_delay_seconds: int = 0
 
     class Config:
         env_file = ".env"

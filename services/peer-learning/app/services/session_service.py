@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from loguru import logger
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.models import SessionStatus
 from app.services.question_service import (
     generate_and_save_question,
@@ -18,13 +19,48 @@ from app.utils.helpers import (
 )
 
 
+async def activate_session_if_scheduled(session_id: str) -> bool:
+    """Transition session from SCHEDULED to ACTIVE if scheduled_at has passed."""
+    db = get_db()
+    session = await db.pair_sessions.find_one({"session_id": session_id}, {"_id": 0})
+    if not session:
+        return False
+    if session.get("status") != SessionStatus.SCHEDULED.value:
+        return session.get("status") == SessionStatus.ACTIVE.value
+
+    scheduled_at = session.get("scheduled_at")
+    if scheduled_at and scheduled_at <= datetime.utcnow():
+        await db.pair_sessions.update_one(
+            {"session_id": session_id},
+            {
+                "$set": {
+                    "status": SessionStatus.ACTIVE.value,
+                    "quiz_available": True,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
+        logger.info(f"Session {session_id} activated from SCHEDULED at {datetime.utcnow()}")
+        return True
+
+    return False
+
+
 async def get_active_session_for_learner(learner_id: str) -> Optional[Dict]:
     """Return the active pair session where this student is the learner."""
     db = get_db()
-    return await db.pair_sessions.find_one(
-        {"learner_id": learner_id, "status": SessionStatus.ACTIVE.value},
+    session = await db.pair_sessions.find_one(
+        {"learner_id": learner_id, "status": {"$in": [SessionStatus.ACTIVE.value, SessionStatus.SCHEDULED.value]}},
         {"_id": 0},
     )
+    if session and session.get("status") == SessionStatus.SCHEDULED.value:
+        activated = await activate_session_if_scheduled(session["session_id"])
+        if not activated:
+            return None
+        session = await db.pair_sessions.find_one(
+            {"session_id": session["session_id"]}, {"_id": 0}
+        )
+    return session
 
 
 async def get_session(session_id: str) -> Optional[Dict]:
@@ -43,7 +79,16 @@ async def start_session_question(session_id: str) -> Optional[Dict]:
     """Generate the first or next question for a session."""
     db = get_db()
     session = await db.pair_sessions.find_one({"session_id": session_id})
-    if not session or session["status"] != SessionStatus.ACTIVE.value:
+    if not session:
+        return None
+
+    if session["status"] == SessionStatus.SCHEDULED.value:
+        activated = await activate_session_if_scheduled(session_id)
+        if not activated:
+            return None
+        session = await db.pair_sessions.find_one({"session_id": session_id})
+
+    if session["status"] != SessionStatus.ACTIVE.value:
         return None
 
     # Find the learner's gap details for misconception info

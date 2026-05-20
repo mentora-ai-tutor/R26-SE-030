@@ -9,7 +9,7 @@ import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from urllib.parse import quote
 
 import httpx
@@ -66,7 +66,7 @@ SKIP_FILENAMES = {
 class RepoError(BaseModel):
     severity: Literal["low", "medium", "high"]
     file: str = Field(..., max_length=260)
-    line: int | None = Field(default=None, ge=1)
+    line: Optional[int] = Field(default=None, ge=1)
     why: str = Field(..., max_length=240)
     fix_hint: str = Field(..., max_length=240)
 
@@ -86,26 +86,26 @@ class RepoSummary(BaseModel):
     fork: bool = False
     archived: bool = False
     size: int = 0
-    language: str | None = None
+    language: Optional[str] = None
     default_branch: str = "main"
-    html_url: str | None = None
-    description: str | None = None
-    updated_at: str | None = None
+    html_url: Optional[str] = None
+    description: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class ReviewRepoResult(BaseModel):
     full_name: str
     status: Literal["queued", "running", "done", "error"]
-    review: RepoReview | None = None
-    error: str | None = None
+    review: Optional[RepoReview] = None
+    error: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class StudentContext:
     id: str
     student_id: str
-    name: str | None = None
-    email: str | None = None
+    name: Optional[str] = None
+    email: Optional[str] = None
 
 
 @dataclass(frozen=True)

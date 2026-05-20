@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/github-review", tags=["github-review"])
 
 
 class ReviewTopFiveRequest(BaseModel):
-    repos: list[str] | None = Field(
+    repos: Optional[list[str]] = Field(
         default=None,
         description="Optional selected repository full_names. If omitted, the deterministic top five are used.",
         max_length=MAX_REPOS,
@@ -33,14 +33,14 @@ class ReReviewRequest(BaseModel):
     repo: str = Field(..., min_length=1, max_length=260)
 
 
-async def _auth_context(authorization: str | None):
+async def _auth_context(authorization: Optional[str]):
     student = await verify_student_from_authorization(authorization)
     credential = await get_student_github_credential(student)
     return student, credential
 
 
 @router.post("/select-repos")
-async def select_repos(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+async def select_repos(authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
     """
     Return eligible GitHub repositories and the deterministic five-repo selection.
 
@@ -57,8 +57,8 @@ async def select_repos(authorization: str | None = Header(default=None)) -> dict
 @router.post("/review-top-5")
 async def review_top_five(
     background_tasks: BackgroundTasks,
-    payload: ReviewTopFiveRequest | None = None,
-    authorization: str | None = Header(default=None),
+    payload: Optional[ReviewTopFiveRequest] = None,
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     """
     Start a review for up to five repositories and persist one RepoReviewJob
@@ -83,7 +83,7 @@ async def review_top_five(
 @router.get("/status/{job_id}")
 async def review_status(
     job_id: str,
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     student = await verify_student_from_authorization(authorization)
     if not ObjectId.is_valid(job_id):
@@ -102,7 +102,7 @@ async def review_status(
 @router.post("/re-review")
 async def re_review(
     payload: ReReviewRequest,
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     student, credential = await _auth_context(authorization)
     job = await run_single_repo_rereview(

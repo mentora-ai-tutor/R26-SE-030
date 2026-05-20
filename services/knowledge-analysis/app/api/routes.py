@@ -1,15 +1,33 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from app.models.schemas import LearnerInput
 from app.services.pipeline import run_full_pipeline
+from app.services.mastery_profile_store import save_mastery_profile
 from app.services.quiz_engine import generate_quiz
 
 router = APIRouter()
 
 
 @router.post("/analyze")
-def analyze(data: LearnerInput) -> dict:
-    return run_full_pipeline(data)
+async def analyze(data: LearnerInput) -> dict:
+    result = run_full_pipeline(data)
+    try:
+        saved_profile = await save_mastery_profile(
+            result["final_output"],
+            raw_analysis_payload=result.get("pipeline", {}),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Mastery profile could not be saved: {exc}",
+        ) from exc
+
+    result["persistence"] = {
+        "saved": True,
+        "profile_id": saved_profile.get("profile_id"),
+        "latest_profile_url": f"/api/v1/mastery-profiles/{data.student_id}/latest",
+    }
+    return result
 
 
 @router.post("/quiz/generate")

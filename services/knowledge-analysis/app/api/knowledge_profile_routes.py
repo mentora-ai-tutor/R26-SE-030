@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Header
@@ -20,17 +20,17 @@ class SandboxAttemptRequest(BaseModel):
     challenge_id: str = Field(..., min_length=1, max_length=80)
     title: str = Field(..., min_length=1, max_length=140)
     topic: str = Field(..., min_length=1, max_length=80)
-    difficulty: str | None = Field(default=None, max_length=80)
+    difficulty: Optional[str] = Field(default=None, max_length=80)
     code: str = Field(..., min_length=1, max_length=30_000)
-    stdin: str | None = Field(default=None, max_length=5_000)
+    stdin: Optional[str] = Field(default=None, max_length=5_000)
     expected_output: str = Field(..., max_length=5_000)
-    output: str | None = Field(default=None, max_length=20_000)
-    error: str | None = Field(default=None, max_length=20_000)
+    output: Optional[str] = Field(default=None, max_length=20_000)
+    error: Optional[str] = Field(default=None, max_length=20_000)
     success: bool
     passed: bool
     attempt_number: int = Field(..., ge=1)
-    runtime_ms: int | None = Field(default=None, ge=0)
-    review_job_id: str | None = Field(default=None, max_length=80)
+    runtime_ms: Optional[int] = Field(default=None, ge=0)
+    review_job_id: Optional[str] = Field(default=None, max_length=80)
 
 
 def _utcnow() -> datetime:
@@ -49,7 +49,7 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _serialize_attempt(doc: dict[str, Any] | None) -> dict[str, Any] | None:
+def _serialize_attempt(doc: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     if not doc:
         return None
     out = _json_safe(doc)
@@ -174,7 +174,7 @@ def _timeline(
 @router.post("/sandbox-attempts")
 async def save_sandbox_attempt(
     payload: SandboxAttemptRequest,
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     student = await verify_student_from_authorization(authorization)
     await _ensure_profile_indexes()
@@ -199,7 +199,7 @@ async def save_sandbox_attempt(
 
 @router.get("/me")
 async def get_my_knowledge_profile(
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     student = await verify_student_from_authorization(authorization)
     await _ensure_profile_indexes()

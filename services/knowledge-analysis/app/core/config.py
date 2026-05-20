@@ -1,7 +1,8 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 APP_NAME = os.getenv("APP_NAME", "KAA - Knowledge Analysis Agent")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")

@@ -6,6 +6,7 @@ from app.api.github_analysis_routes import router as github_analysis_router
 from app.api.github_fetch_analyze_routes import router as github_fetch_analyze_router
 from app.api.github_review_routes import router as github_review_router
 from app.api.knowledge_profile_routes import router as knowledge_profile_router
+from app.api.mastery_profile_routes import router as mastery_profile_router
 from app.core.config import APP_NAME, APP_VERSION, CORS_ORIGINS
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
@@ -23,3 +24,4 @@ app.include_router(github_analysis_router)
 app.include_router(github_fetch_analyze_router)
 app.include_router(github_review_router)
 app.include_router(knowledge_profile_router)
+app.include_router(mastery_profile_router)

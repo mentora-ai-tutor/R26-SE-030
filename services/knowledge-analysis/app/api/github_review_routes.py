@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
@@ -8,9 +8,11 @@ from pydantic import BaseModel, Field
 
 from app.db.database import get_database
 from app.services.github_review_service import (
+    LLM_CHOICES,
     MAX_REPOS,
     build_repo_selection,
     get_student_github_credential,
+    ollama_available,
     process_review_job,
     run_single_repo_rereview,
     serialize_job,
@@ -20,6 +22,8 @@ from app.services.github_review_service import (
 
 router = APIRouter(prefix="/api/v1/github-review", tags=["github-review"])
 
+LlmChoice = Literal["gemini", "ollama"]
+
 
 class ReviewTopFiveRequest(BaseModel):
     repos: Optional[list[str]] = Field(
@@ -27,16 +31,40 @@ class ReviewTopFiveRequest(BaseModel):
         description="Optional selected repository full_names. If omitted, the deterministic top five are used.",
         max_length=MAX_REPOS,
     )
+    llm: LlmChoice = Field(
+        default="gemini",
+        description="Which LLM engine to run the review with. 'ollama' pins to the local model.",
+    )
 
 
 class ReReviewRequest(BaseModel):
     repo: str = Field(..., min_length=1, max_length=260)
+    llm: LlmChoice = Field(default="gemini")
 
 
 async def _auth_context(authorization: Optional[str]):
     student = await verify_student_from_authorization(authorization)
     credential = await get_student_github_credential(student)
     return student, credential
+
+
+@router.get("/llm-options")
+async def llm_options() -> dict[str, Any]:
+    """
+    Report which LLM engines the review UI may offer.
+
+    Gemini is always available (it is the managed default). Ollama is only
+    offered when the configured local server actually answers a health check,
+    so the frontend can disable it instead of letting a review error out.
+    """
+    return {
+        "status": "success",
+        "data": {
+            "providers": list(LLM_CHOICES),
+            "default": "gemini",
+            "ollama_available": await ollama_available(),
+        },
+    }
 
 
 @router.post("/select-repos")
@@ -66,16 +94,19 @@ async def review_top_five(
     /status/{job_id}.
     """
     student, credential = await _auth_context(authorization)
+    llm_choice = payload.llm if payload else "gemini"
     job, selected = await start_review_job(
         student=student,
         credential=credential,
         selected_full_names=payload.repos if payload else None,
+        llm_choice=llm_choice,
     )
     background_tasks.add_task(
         process_review_job,
         job_id=job["job_id"],
         credential=credential,
         selected_repos=selected,
+        llm_choice=llm_choice,
     )
     return {"status": "success", "data": job}
 
@@ -109,5 +140,6 @@ async def re_review(
         student=student,
         credential=credential,
         repo_full_name=payload.repo,
+        llm_choice=payload.llm,
     )
     return {"status": "success", "data": job}

@@ -15,6 +15,24 @@ WEIGHTS = {"sandbox": 0.40, "forensic": 0.30, "quiz": 0.30}
 
 MASTERY_PROFILE_SCHEMA_VERSION = "kaa-lmg-v1.0"
 
+# --- Adaptive Java quiz (Skill Check panel + sandbox ladder) ---
+QUIZ_SCHEMA_VERSION = "kaa-quiz-v1.0"
+# Difficulty rungs, ordered easy -> hard. The adaptive engine climbs a rung on a
+# correct answer and steps down on a wrong one, so every student "goes simple to
+# hard" at their own pace.
+QUIZ_DIFFICULTY_ORDER = ["easy", "medium", "hard"]
+# Questions served per session before it auto-completes.
+QUIZ_DEFAULT_MAX_QUESTIONS = 6
+# Default Java topics for a profile-only (no-repo) skill check.
+QUIZ_DEFAULT_TOPICS = [
+    "Loops",
+    "Arrays",
+    "OOP",
+    "Recursion",
+    "Collections",
+    "Exception Handling",
+]
+
 TOPIC_CATALOG = {
     "Loops": {
         "topic_id": "CS101-LOOP",

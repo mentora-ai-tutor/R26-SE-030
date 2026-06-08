@@ -1,0 +1,642 @@
+{
+  "schema_version": "kaa-lmg-v1.0",
+  "student_id": "STU-2026-0428",
+  "session_id": "8f2a1c34-5e6b-4d7a-9c11-2b3e4f5a6d7c",
+  "analysis_timestamp": "2026-03-18T14:30:00Z",
+  "data_sources": {
+    "github": "available",
+    "sandbox": "available",
+    "quizzes": "available"
+  },
+  "mastery_profile": {
+    "overall_mastery_score": 58.0,
+    "knowledge_gaps": [
+      {
+        "topic": "Binary Search Trees",
+        "topic_id": "CS201-BST",
+        "gap_type": "FUNDAMENTAL_GAP",
+        "confidence": 0.91,
+        "mastery_score": 30.0,
+        "weak_subskills": [
+          {
+            "subskill": "BST insertion and search",
+            "subskill_id": "CS201-BST-SEARCH",
+            "status": "weak",
+            "evidence": "quiz score is 15.0; sandbox score is 50.0; observed logical errors",
+            "recommended_content_focus": "Trace comparisons from root to leaf."
+          },
+          {
+            "subskill": "BST deletion cases",
+            "subskill_id": "CS201-BST-DELETE",
+            "status": "weak",
+            "evidence": "quiz score is 15.0; sandbox score is 50.0; observed logical errors",
+            "recommended_content_focus": "Practice leaf, one-child, and two-child deletion separately."
+          }
+        ],
+        "known_subskills": [
+          {
+            "subskill": "tree traversal order",
+            "subskill_id": "CS201-BST-TRAVERSE",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          }
+        ],
+        "misconceptions": [
+          "does not preserve the left-less/right-greater invariant",
+          "cannot handle deletion for nodes with two children",
+          "answers conceptual questions incorrectly",
+          "submitted correct-looking code but needs independent understanding verification"
+        ],
+        "observed_error_patterns": {
+          "github": [
+            "low forensic confidence for incremental learning",
+            "authorship-risk signal from commit or editing pattern"
+          ],
+          "sandbox": [
+            "low sandbox success signal",
+            "logical errors during implementation"
+          ],
+          "quizzes": [
+            "low quiz correctness for this topic",
+            "major conceptual misunderstanding signal"
+          ]
+        },
+        "evidence_summary": "Binary Search Trees mastery is 30.0/100. Quiz signal 15.0/100. Sandbox signal 50.0/100. GitHub forensic signal 6.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+        "prerequisite_topics": [
+          "Recursion",
+          "Trees",
+          "References"
+        ],
+        "related_topics": [
+          "AVL Trees",
+          "Hash Tables"
+        ],
+        "suggested_intervention": {
+          "primary": "interactive_tutorial",
+          "secondary": [
+            "step_by_step_practice",
+            "debugging_exercise"
+          ],
+          "difficulty_level": "beginner",
+          "estimated_time_minutes": 90,
+          "learning_objectives": [
+            "Improve BST insertion and search through traceable examples and independent practice.",
+            "Improve BST deletion cases through traceable examples and independent practice."
+          ]
+        }
+      },
+      {
+        "topic": "Recursion",
+        "topic_id": "CS101-REC",
+        "gap_type": "FUNDAMENTAL_GAP",
+        "confidence": 0.91,
+        "mastery_score": 41.0,
+        "weak_subskills": [
+          {
+            "subskill": "base case identification",
+            "subskill_id": "CS101-REC-BASE",
+            "status": "weak",
+            "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+            "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+          },
+          {
+            "subskill": "stack frame tracing",
+            "subskill_id": "CS101-REC-STACK",
+            "status": "weak",
+            "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+            "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+          }
+        ],
+        "known_subskills": [
+          {
+            "subskill": "recursive return composition",
+            "subskill_id": "CS101-REC-RETURN",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          }
+        ],
+        "misconceptions": [
+          "treats the base case as optional or secondary",
+          "cannot explain how recursive calls return",
+          "answers conceptual questions incorrectly",
+          "submitted correct-looking code but needs independent understanding verification"
+        ],
+        "observed_error_patterns": {
+          "github": [
+            "low forensic confidence for incremental learning",
+            "authorship-risk signal from commit or editing pattern"
+          ],
+          "sandbox": [
+            "low sandbox success signal",
+            "logical errors during implementation",
+            "runtime failures during execution"
+          ],
+          "quizzes": [
+            "low quiz correctness for this topic",
+            "major conceptual misunderstanding signal"
+          ]
+        },
+        "evidence_summary": "Recursion mastery is 41.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 30.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+        "prerequisite_topics": [
+          "Loops",
+          "Functions",
+          "Call Stack"
+        ],
+        "related_topics": [
+          "Tree Traversal",
+          "Divide and Conquer"
+        ],
+        "suggested_intervention": {
+          "primary": "interactive_tutorial",
+          "secondary": [
+            "step_by_step_practice",
+            "debugging_exercise"
+          ],
+          "difficulty_level": "beginner",
+          "estimated_time_minutes": 90,
+          "learning_objectives": [
+            "Improve base case identification through traceable examples and independent practice.",
+            "Improve stack frame tracing through traceable examples and independent practice."
+          ]
+        }
+      },
+      {
+        "topic": "Exception Handling",
+        "topic_id": "CS102-EXC",
+        "gap_type": "PARTIAL_GAP",
+        "confidence": 0.91,
+        "mastery_score": 60.0,
+        "weak_subskills": [
+          {
+            "subskill": "checked versus unchecked exceptions",
+            "subskill_id": "CS102-EXC-CHECKED",
+            "status": "weak",
+            "evidence": "quiz score is 60.0; sandbox score is 67.0; observed logical errors",
+            "recommended_content_focus": "Compare compile-time handling requirements."
+          },
+          {
+            "subskill": "try-catch-finally control flow",
+            "subskill_id": "CS102-EXC-FLOW",
+            "status": "weak",
+            "evidence": "quiz score is 60.0; sandbox score is 67.0; observed logical errors",
+            "recommended_content_focus": "Trace execution through try, catch, and finally blocks."
+          }
+        ],
+        "known_subskills": [],
+        "misconceptions": [
+          "confuses checked and unchecked exception rules",
+          "does not predict which block executes after an exception"
+        ],
+        "observed_error_patterns": {
+          "github": [],
+          "sandbox": [
+            "low sandbox success signal",
+            "logical errors during implementation"
+          ],
+          "quizzes": [
+            "low quiz correctness for this topic"
+          ]
+        },
+        "evidence_summary": "Exception Handling mastery is 60.0/100. Quiz signal 60.0/100. Sandbox signal 67.0/100. GitHub forensic signal 60.0/100.",
+        "prerequisite_topics": [
+          "Control Flow",
+          "Methods"
+        ],
+        "related_topics": [
+          "File I/O",
+          "Logging"
+        ],
+        "suggested_intervention": {
+          "primary": "step_by_step_practice",
+          "secondary": [
+            "targeted_quiz",
+            "debugging_exercise"
+          ],
+          "difficulty_level": "intermediate",
+          "estimated_time_minutes": 60,
+          "learning_objectives": [
+            "Improve checked versus unchecked exceptions through traceable examples and independent practice.",
+            "Improve try-catch-finally control flow through traceable examples and independent practice."
+          ]
+        }
+      }
+    ],
+    "strengths": [
+      {
+        "topic": "Loops",
+        "topic_id": "CS101-LOOP",
+        "confidence": 0.85,
+        "mastery_score": 95.0,
+        "mastery_level": "advanced",
+        "evidence_summary": "Loops is currently a strength with mastery 95.0/100. Quiz signal 95.0/100 and sandbox signal 90.0/100. GitHub forensic signal 80.0/100.",
+        "known_subskills": [
+          {
+            "subskill": "basic loop syntax",
+            "subskill_id": "CS101-LOOP-BASIC",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          },
+          {
+            "subskill": "nested loops",
+            "subskill_id": "CS101-LOOP-NESTED",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          },
+          {
+            "subskill": "loop boundary conditions",
+            "subskill_id": "CS101-LOOP-BOUNDARY",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          }
+        ],
+        "can_teach_others": true
+      },
+      {
+        "topic": "File I/O",
+        "topic_id": "CS102-FILE",
+        "confidence": 0.85,
+        "mastery_score": 92.0,
+        "mastery_level": "advanced",
+        "evidence_summary": "File I/O is currently a strength with mastery 92.0/100. Quiz signal 90.0/100 and sandbox signal 92.0/100. GitHub forensic signal 94.0/100.",
+        "known_subskills": [
+          {
+            "subskill": "file read/write flow",
+            "subskill_id": "CS102-FILE-RW",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          },
+          {
+            "subskill": "file exception handling",
+            "subskill_id": "CS102-FILE-EXC",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          }
+        ],
+        "can_teach_others": true
+      }
+    ]
+  },
+  "recommendations": {
+    "priority_order": [
+      "Binary Search Trees",
+      "Recursion",
+      "Exception Handling"
+    ],
+    "general_advice": "Generate learning materials from weak_subskills before broad topic summaries.",
+    "for_instructor": "Verify the highest-priority gap with a short live task before marking mastery. Use high-confidence strengths for peer-learning matching where can_teach_others is true."
+  },
+  "overall_mastery_score": 58.0,
+  "knowledge_gaps": [
+    {
+      "topic": "Binary Search Trees",
+      "topic_id": "CS201-BST",
+      "gap_type": "FUNDAMENTAL_GAP",
+      "confidence": 0.91,
+      "mastery_score": 30.0,
+      "weak_subskills": [
+        {
+          "subskill": "BST insertion and search",
+          "subskill_id": "CS201-BST-SEARCH",
+          "status": "weak",
+          "evidence": "quiz score is 15.0; sandbox score is 50.0; observed logical errors",
+          "recommended_content_focus": "Trace comparisons from root to leaf."
+        },
+        {
+          "subskill": "BST deletion cases",
+          "subskill_id": "CS201-BST-DELETE",
+          "status": "weak",
+          "evidence": "quiz score is 15.0; sandbox score is 50.0; observed logical errors",
+          "recommended_content_focus": "Practice leaf, one-child, and two-child deletion separately."
+        }
+      ],
+      "known_subskills": [
+        {
+          "subskill": "tree traversal order",
+          "subskill_id": "CS201-BST-TRAVERSE",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        }
+      ],
+      "misconceptions": [
+        "does not preserve the left-less/right-greater invariant",
+        "cannot handle deletion for nodes with two children",
+        "answers conceptual questions incorrectly",
+        "submitted correct-looking code but needs independent understanding verification"
+      ],
+      "observed_error_patterns": {
+        "github": [
+          "low forensic confidence for incremental learning",
+          "authorship-risk signal from commit or editing pattern"
+        ],
+        "sandbox": [
+          "low sandbox success signal",
+          "logical errors during implementation"
+        ],
+        "quizzes": [
+          "low quiz correctness for this topic",
+          "major conceptual misunderstanding signal"
+        ]
+      },
+      "evidence_summary": "Binary Search Trees mastery is 30.0/100. Quiz signal 15.0/100. Sandbox signal 50.0/100. GitHub forensic signal 6.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+      "prerequisite_topics": [
+        "Recursion",
+        "Trees",
+        "References"
+      ],
+      "related_topics": [
+        "AVL Trees",
+        "Hash Tables"
+      ],
+      "suggested_intervention": {
+        "primary": "interactive_tutorial",
+        "secondary": [
+          "step_by_step_practice",
+          "debugging_exercise"
+        ],
+        "difficulty_level": "beginner",
+        "estimated_time_minutes": 90,
+        "learning_objectives": [
+          "Improve BST insertion and search through traceable examples and independent practice.",
+          "Improve BST deletion cases through traceable examples and independent practice."
+        ]
+      }
+    },
+    {
+      "topic": "Recursion",
+      "topic_id": "CS101-REC",
+      "gap_type": "FUNDAMENTAL_GAP",
+      "confidence": 0.91,
+      "mastery_score": 41.0,
+      "weak_subskills": [
+        {
+          "subskill": "base case identification",
+          "subskill_id": "CS101-REC-BASE",
+          "status": "weak",
+          "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+          "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+        },
+        {
+          "subskill": "stack frame tracing",
+          "subskill_id": "CS101-REC-STACK",
+          "status": "weak",
+          "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+          "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+        }
+      ],
+      "known_subskills": [
+        {
+          "subskill": "recursive return composition",
+          "subskill_id": "CS101-REC-RETURN",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        }
+      ],
+      "misconceptions": [
+        "treats the base case as optional or secondary",
+        "cannot explain how recursive calls return",
+        "answers conceptual questions incorrectly",
+        "submitted correct-looking code but needs independent understanding verification"
+      ],
+      "observed_error_patterns": {
+        "github": [
+          "low forensic confidence for incremental learning",
+          "authorship-risk signal from commit or editing pattern"
+        ],
+        "sandbox": [
+          "low sandbox success signal",
+          "logical errors during implementation",
+          "runtime failures during execution"
+        ],
+        "quizzes": [
+          "low quiz correctness for this topic",
+          "major conceptual misunderstanding signal"
+        ]
+      },
+      "evidence_summary": "Recursion mastery is 41.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 30.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+      "prerequisite_topics": [
+        "Loops",
+        "Functions",
+        "Call Stack"
+      ],
+      "related_topics": [
+        "Tree Traversal",
+        "Divide and Conquer"
+      ],
+      "suggested_intervention": {
+        "primary": "interactive_tutorial",
+        "secondary": [
+          "step_by_step_practice",
+          "debugging_exercise"
+        ],
+        "difficulty_level": "beginner",
+        "estimated_time_minutes": 90,
+        "learning_objectives": [
+          "Improve base case identification through traceable examples and independent practice.",
+          "Improve stack frame tracing through traceable examples and independent practice."
+        ]
+      }
+    },
+    {
+      "topic": "Exception Handling",
+      "topic_id": "CS102-EXC",
+      "gap_type": "PARTIAL_GAP",
+      "confidence": 0.91,
+      "mastery_score": 60.0,
+      "weak_subskills": [
+        {
+          "subskill": "checked versus unchecked exceptions",
+          "subskill_id": "CS102-EXC-CHECKED",
+          "status": "weak",
+          "evidence": "quiz score is 60.0; sandbox score is 67.0; observed logical errors",
+          "recommended_content_focus": "Compare compile-time handling requirements."
+        },
+        {
+          "subskill": "try-catch-finally control flow",
+          "subskill_id": "CS102-EXC-FLOW",
+          "status": "weak",
+          "evidence": "quiz score is 60.0; sandbox score is 67.0; observed logical errors",
+          "recommended_content_focus": "Trace execution through try, catch, and finally blocks."
+        }
+      ],
+      "known_subskills": [],
+      "misconceptions": [
+        "confuses checked and unchecked exception rules",
+        "does not predict which block executes after an exception"
+      ],
+      "observed_error_patterns": {
+        "github": [],
+        "sandbox": [
+          "low sandbox success signal",
+          "logical errors during implementation"
+        ],
+        "quizzes": [
+          "low quiz correctness for this topic"
+        ]
+      },
+      "evidence_summary": "Exception Handling mastery is 60.0/100. Quiz signal 60.0/100. Sandbox signal 67.0/100. GitHub forensic signal 60.0/100.",
+      "prerequisite_topics": [
+        "Control Flow",
+        "Methods"
+      ],
+      "related_topics": [
+        "File I/O",
+        "Logging"
+      ],
+      "suggested_intervention": {
+        "primary": "step_by_step_practice",
+        "secondary": [
+          "targeted_quiz",
+          "debugging_exercise"
+        ],
+        "difficulty_level": "intermediate",
+        "estimated_time_minutes": 60,
+        "learning_objectives": [
+          "Improve checked versus unchecked exceptions through traceable examples and independent practice.",
+          "Improve try-catch-finally control flow through traceable examples and independent practice."
+        ]
+      }
+    }
+  ],
+  "strengths": [
+    {
+      "topic": "Loops",
+      "topic_id": "CS101-LOOP",
+      "confidence": 0.85,
+      "mastery_score": 95.0,
+      "mastery_level": "advanced",
+      "evidence_summary": "Loops is currently a strength with mastery 95.0/100. Quiz signal 95.0/100 and sandbox signal 90.0/100. GitHub forensic signal 80.0/100.",
+      "known_subskills": [
+        {
+          "subskill": "basic loop syntax",
+          "subskill_id": "CS101-LOOP-BASIC",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        },
+        {
+          "subskill": "nested loops",
+          "subskill_id": "CS101-LOOP-NESTED",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        },
+        {
+          "subskill": "loop boundary conditions",
+          "subskill_id": "CS101-LOOP-BOUNDARY",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        }
+      ],
+      "can_teach_others": true
+    },
+    {
+      "topic": "File I/O",
+      "topic_id": "CS102-FILE",
+      "confidence": 0.85,
+      "mastery_score": 92.0,
+      "mastery_level": "advanced",
+      "evidence_summary": "File I/O is currently a strength with mastery 92.0/100. Quiz signal 90.0/100 and sandbox signal 92.0/100. GitHub forensic signal 94.0/100.",
+      "known_subskills": [
+        {
+          "subskill": "file read/write flow",
+          "subskill_id": "CS102-FILE-RW",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        },
+        {
+          "subskill": "file exception handling",
+          "subskill_id": "CS102-FILE-EXC",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        }
+      ],
+      "can_teach_others": true
+    }
+  ],
+  "gap_topic_ids": [
+    "CS201-BST",
+    "CS101-REC",
+    "CS102-EXC"
+  ],
+  "raw_analysis_payload": {
+    "mode": "full",
+    "topic_scores": {
+      "Loops": {
+        "mastery_score": 0.95,
+        "quiz_score": 0.95,
+        "sandbox_score": 0.9,
+        "forensic_score": 0.8
+      },
+      "Recursion": {
+        "mastery_score": 0.41,
+        "quiz_score": 0.2,
+        "sandbox_score": 0.0,
+        "forensic_score": 0.3
+      },
+      "Binary Search Trees": {
+        "mastery_score": 0.3,
+        "quiz_score": 0.15,
+        "sandbox_score": 0.5,
+        "forensic_score": 0.06
+      },
+      "Exception Handling": {
+        "mastery_score": 0.6,
+        "quiz_score": 0.6,
+        "sandbox_score": 0.67,
+        "forensic_score": 0.6
+      },
+      "File I/O": {
+        "mastery_score": 0.92,
+        "quiz_score": 0.9,
+        "sandbox_score": 0.92,
+        "forensic_score": 0.94
+      }
+    },
+    "weak_topics": [
+      "Recursion",
+      "Binary Search Trees"
+    ],
+    "medium_topics": [
+      "Exception Handling"
+    ],
+    "strong_topics": [
+      "Loops",
+      "File I/O"
+    ],
+    "misconception_clusters": {
+      "AI_Dependency": [
+        "Recursion",
+        "Binary Search Trees"
+      ]
+    },
+    "error_frequency": {
+      "Recursion": {
+        "logical": 0.8,
+        "runtime": 0.3
+      },
+      "Binary Search Trees": {
+        "logical": 0.5
+      },
+      "Exception Handling": {
+        "logical": 0.3
+      }
+    },
+    "validation": {
+      "data_quality": "high",
+      "confidence": 0.85,
+      "warnings": []
+    }
+  }
+}

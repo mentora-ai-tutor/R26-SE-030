@@ -12,3 +12,6 @@ MONGODB_DB = os.getenv("MONGODB_DB", "knowledge_analysis")
 USER_SERVICE_INTERNAL_URL = os.getenv("USER_SERVICE_INTERNAL_URL", "http://localhost:3001").rstrip("/")
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "")
 GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+# AI execution engine used to VERIFY generated sandbox challenges (run the reference
+# solution and capture its real stdout as the authoritative expected output).
+AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:5010").rstrip("/")

@@ -23,8 +23,8 @@ from app.services.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
-# Strip optional ```json fences, plus leading/trailing prose. Llama models
-# don't have proper JSON mode so we have to be defensive.
+# Strip optional ```json fences, plus leading/trailing prose. Schema mode should
+# avoid these, but keeping this parser makes older Ollama builds safer.
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
 
@@ -55,7 +55,8 @@ class OllamaProvider(LLMClient):
         tools: Optional[list[Any]] = None,
         temperature: float = 0.4,
     ) -> dict[str, Any]:
-        # Inject schema into the prompt — Ollama has no response_schema knob.
+        # Include the schema both in the prompt and in Ollama's structured output
+        # format. The prompt helps older models; format enforces JSON shape.
         schema_str = json.dumps(schema.model_json_schema(), indent=2)
         full_prompt = (
             f"Return ONLY a JSON object that validates the schema below. "
@@ -68,6 +69,7 @@ class OllamaProvider(LLMClient):
                 prompt=full_prompt,
                 stream=False,
                 temperature=temperature,
+                response_format=schema.model_json_schema(),
             )
         except Exception as e:
             raise LLMTransientError(f"Ollama call failed: {e}") from e

@@ -1,0 +1,994 @@
+{
+  "schema_version": "kaa-lmg-v1.0",
+  "student_id": "STU-2026-0428",
+  "session_id": "626e0d28-f608-4615-8d3b-5209e0de486b",
+  "analysis_timestamp": "2026-05-24T11:34:35.876010Z",
+  "data_sources": {
+    "github": "available",
+    "sandbox": "available",
+    "quizzes": "available"
+  },
+  "mastery_profile": {
+    "overall_mastery_score": 36.5,
+    "knowledge_gaps": [
+      {
+        "topic": "Recursion",
+        "topic_id": "CS101-REC",
+        "gap_type": "FUNDAMENTAL_GAP",
+        "confidence": 0.99,
+        "mastery_score": 6.0,
+        "weak_subskills": [
+          {
+            "subskill": "base case identification",
+            "subskill_id": "CS101-REC-BASE",
+            "status": "weak",
+            "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+            "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+          },
+          {
+            "subskill": "stack frame tracing",
+            "subskill_id": "CS101-REC-STACK",
+            "status": "weak",
+            "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+            "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+          }
+        ],
+        "known_subskills": [
+          {
+            "subskill": "recursive return composition",
+            "subskill_id": "CS101-REC-RETURN",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          }
+        ],
+        "misconceptions": [
+          "treats the base case as optional or secondary",
+          "cannot explain how recursive calls return",
+          "answers conceptual questions incorrectly",
+          "submitted correct-looking code but needs independent understanding verification"
+        ],
+        "observed_error_patterns": {
+          "github": [
+            "low forensic confidence for incremental learning",
+            "authorship-risk signal from commit or editing pattern"
+          ],
+          "sandbox": [
+            "low sandbox success signal",
+            "logical errors during implementation",
+            "runtime failures during execution"
+          ],
+          "quizzes": [
+            "low quiz correctness for this topic",
+            "major conceptual misunderstanding signal"
+          ]
+        },
+        "evidence_summary": "Recursion mastery is 6.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 0.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+        "prerequisite_topics": [
+          "Loops",
+          "Functions",
+          "Call Stack"
+        ],
+        "related_topics": [
+          "Tree Traversal",
+          "Divide and Conquer"
+        ],
+        "suggested_intervention": {
+          "primary": "interactive_tutorial",
+          "secondary": [
+            "step_by_step_practice",
+            "debugging_exercise"
+          ],
+          "difficulty_level": "beginner",
+          "estimated_time_minutes": 90,
+          "learning_objectives": [
+            "Improve base case identification through traceable examples and independent practice.",
+            "Improve stack frame tracing through traceable examples and independent practice."
+          ]
+        }
+      }
+    ],
+    "strengths": [
+      {
+        "topic": "Loops",
+        "topic_id": "CS101-LOOP",
+        "confidence": 0.95,
+        "mastery_score": 67.0,
+        "mastery_level": "proficient",
+        "evidence_summary": "Loops is currently a strength with mastery 67.0/100. Quiz signal 90.0/100 and sandbox signal 100.0/100. GitHub forensic signal 0.0/100.",
+        "known_subskills": [
+          {
+            "subskill": "basic loop syntax",
+            "subskill_id": "CS101-LOOP-BASIC",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          },
+          {
+            "subskill": "nested loops",
+            "subskill_id": "CS101-LOOP-NESTED",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          },
+          {
+            "subskill": "loop boundary conditions",
+            "subskill_id": "CS101-LOOP-BOUNDARY",
+            "status": "mastered",
+            "evidence": "No major weakness detected for this subskill in the available signals.",
+            "recommended_content_focus": null
+          }
+        ],
+        "can_teach_others": false
+      }
+    ]
+  },
+  "recommendations": {
+    "priority_order": [
+      "Recursion"
+    ],
+    "general_advice": "Generate learning materials from weak_subskills before broad topic summaries.",
+    "for_instructor": "Verify the highest-priority gap with a short live task before marking mastery. Use high-confidence strengths for peer-learning matching where can_teach_others is true."
+  },
+  "overall_mastery_score": 36.5,
+  "knowledge_gaps": [
+    {
+      "topic": "Recursion",
+      "topic_id": "CS101-REC",
+      "gap_type": "FUNDAMENTAL_GAP",
+      "confidence": 0.99,
+      "mastery_score": 6.0,
+      "weak_subskills": [
+        {
+          "subskill": "base case identification",
+          "subskill_id": "CS101-REC-BASE",
+          "status": "weak",
+          "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+          "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+        },
+        {
+          "subskill": "stack frame tracing",
+          "subskill_id": "CS101-REC-STACK",
+          "status": "weak",
+          "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+          "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+        }
+      ],
+      "known_subskills": [
+        {
+          "subskill": "recursive return composition",
+          "subskill_id": "CS101-REC-RETURN",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        }
+      ],
+      "misconceptions": [
+        "treats the base case as optional or secondary",
+        "cannot explain how recursive calls return",
+        "answers conceptual questions incorrectly",
+        "submitted correct-looking code but needs independent understanding verification"
+      ],
+      "observed_error_patterns": {
+        "github": [
+          "low forensic confidence for incremental learning",
+          "authorship-risk signal from commit or editing pattern"
+        ],
+        "sandbox": [
+          "low sandbox success signal",
+          "logical errors during implementation",
+          "runtime failures during execution"
+        ],
+        "quizzes": [
+          "low quiz correctness for this topic",
+          "major conceptual misunderstanding signal"
+        ]
+      },
+      "evidence_summary": "Recursion mastery is 6.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 0.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+      "prerequisite_topics": [
+        "Loops",
+        "Functions",
+        "Call Stack"
+      ],
+      "related_topics": [
+        "Tree Traversal",
+        "Divide and Conquer"
+      ],
+      "suggested_intervention": {
+        "primary": "interactive_tutorial",
+        "secondary": [
+          "step_by_step_practice",
+          "debugging_exercise"
+        ],
+        "difficulty_level": "beginner",
+        "estimated_time_minutes": 90,
+        "learning_objectives": [
+          "Improve base case identification through traceable examples and independent practice.",
+          "Improve stack frame tracing through traceable examples and independent practice."
+        ]
+      }
+    }
+  ],
+  "strengths": [
+    {
+      "topic": "Loops",
+      "topic_id": "CS101-LOOP",
+      "confidence": 0.95,
+      "mastery_score": 67.0,
+      "mastery_level": "proficient",
+      "evidence_summary": "Loops is currently a strength with mastery 67.0/100. Quiz signal 90.0/100 and sandbox signal 100.0/100. GitHub forensic signal 0.0/100.",
+      "known_subskills": [
+        {
+          "subskill": "basic loop syntax",
+          "subskill_id": "CS101-LOOP-BASIC",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        },
+        {
+          "subskill": "nested loops",
+          "subskill_id": "CS101-LOOP-NESTED",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        },
+        {
+          "subskill": "loop boundary conditions",
+          "subskill_id": "CS101-LOOP-BOUNDARY",
+          "status": "mastered",
+          "evidence": "No major weakness detected for this subskill in the available signals.",
+          "recommended_content_focus": null
+        }
+      ],
+      "can_teach_others": false
+    }
+  ],
+  "gap_topic_ids": [
+    "CS101-REC"
+  ],
+  "raw_analysis_payload": {
+    "step1_ingestion": {
+      "student_id": "STU-2026-0428",
+      "mode": "full",
+      "quiz_count": 2,
+      "sandbox_count": 2,
+      "commit_count": 2,
+      "ingested_at": "2026-05-24T11:34:35.876218"
+    },
+    "step2_preprocessing": {
+      "quiz_topics": [
+        "Loops",
+        "Recursion"
+      ],
+      "sandbox_topics": [
+        "Loops",
+        "Recursion"
+      ]
+    },
+    "step3_features": {
+      "Loops": [
+        "correctness_rate",
+        "avg_time_per_q",
+        "retry_rate",
+        "syntax_error_rate",
+        "logical_error_rate",
+        "runtime_error_rate",
+        "compile_ratio",
+        "correction_latency",
+        "burst_score",
+        "big_bang_ratio",
+        "avg_granularity",
+        "avg_refactor_freq"
+      ],
+      "Recursion": [
+        "correctness_rate",
+        "avg_time_per_q",
+        "retry_rate",
+        "syntax_error_rate",
+        "logical_error_rate",
+        "runtime_error_rate",
+        "compile_ratio",
+        "correction_latency",
+        "burst_score",
+        "big_bang_ratio",
+        "avg_granularity",
+        "avg_refactor_freq"
+      ]
+    },
+    "step4_analysis": {
+      "Loops": [
+        "Big-Bang commit pattern - incremental development absent",
+        "Coarse diff granularity - AI-generated bulk code suspected",
+        "Low refactoring frequency - no iterative improvement observed"
+      ],
+      "Recursion": [
+        "Low quiz correctness - possible conceptual gap",
+        "High logical error rate in sandbox",
+        "Keystroke burst anomaly - possible AI injection detected",
+        "Sub-human correction speed - AI-assisted fix suspected",
+        "Big-Bang commit pattern - incremental development absent",
+        "Coarse diff granularity - AI-generated bulk code suspected",
+        "Low refactoring frequency - no iterative improvement observed"
+      ]
+    },
+    "step5_mode": "full",
+    "step6_clusters": {
+      "AI_Dependency": [
+        "Loops",
+        "Recursion"
+      ],
+      "Conceptual_Gap": [],
+      "Syntax_Weakness": [],
+      "Strong_Performance": []
+    },
+    "step7_scores": {
+      "Loops": 0.67,
+      "Recursion": 0.06
+    },
+    "step8_profile_summary": {
+      "weak": [
+        "Recursion"
+      ],
+      "medium": [
+        "Loops"
+      ],
+      "strong": []
+    },
+    "step9_validation": {
+      "valid": true,
+      "confidence": 0.95,
+      "warnings": [
+        "Sparse quiz data - profile confidence may be limited"
+      ]
+    },
+    "step10_output": {
+      "schema_version": "kaa-lmg-v1.0",
+      "student_id": "STU-2026-0428",
+      "session_id": "4278fcf1-5dc0-45ee-805d-72c3ef4fd25b",
+      "analysis_timestamp": "2026-05-24T11:34:35.876266Z",
+      "data_sources": {
+        "github": "available",
+        "sandbox": "available",
+        "quizzes": "available"
+      },
+      "mastery_profile": {
+        "overall_mastery_score": 36.5,
+        "knowledge_gaps": [
+          {
+            "topic": "Recursion",
+            "topic_id": "CS101-REC",
+            "gap_type": "FUNDAMENTAL_GAP",
+            "confidence": 0.99,
+            "mastery_score": 6.0,
+            "weak_subskills": [
+              {
+                "subskill": "base case identification",
+                "subskill_id": "CS101-REC-BASE",
+                "status": "weak",
+                "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+                "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+              },
+              {
+                "subskill": "stack frame tracing",
+                "subskill_id": "CS101-REC-STACK",
+                "status": "weak",
+                "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+                "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+              }
+            ],
+            "known_subskills": [
+              {
+                "subskill": "recursive return composition",
+                "subskill_id": "CS101-REC-RETURN",
+                "status": "mastered",
+                "evidence": "No major weakness detected for this subskill in the available signals.",
+                "recommended_content_focus": null
+              }
+            ],
+            "misconceptions": [
+              "treats the base case as optional or secondary",
+              "cannot explain how recursive calls return",
+              "answers conceptual questions incorrectly",
+              "submitted correct-looking code but needs independent understanding verification"
+            ],
+            "observed_error_patterns": {
+              "github": [
+                "low forensic confidence for incremental learning",
+                "authorship-risk signal from commit or editing pattern"
+              ],
+              "sandbox": [
+                "low sandbox success signal",
+                "logical errors during implementation",
+                "runtime failures during execution"
+              ],
+              "quizzes": [
+                "low quiz correctness for this topic",
+                "major conceptual misunderstanding signal"
+              ]
+            },
+            "evidence_summary": "Recursion mastery is 6.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 0.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+            "prerequisite_topics": [
+              "Loops",
+              "Functions",
+              "Call Stack"
+            ],
+            "related_topics": [
+              "Tree Traversal",
+              "Divide and Conquer"
+            ],
+            "suggested_intervention": {
+              "primary": "interactive_tutorial",
+              "secondary": [
+                "step_by_step_practice",
+                "debugging_exercise"
+              ],
+              "difficulty_level": "beginner",
+              "estimated_time_minutes": 90,
+              "learning_objectives": [
+                "Improve base case identification through traceable examples and independent practice.",
+                "Improve stack frame tracing through traceable examples and independent practice."
+              ]
+            }
+          }
+        ],
+        "strengths": [
+          {
+            "topic": "Loops",
+            "topic_id": "CS101-LOOP",
+            "confidence": 0.95,
+            "mastery_score": 67.0,
+            "mastery_level": "proficient",
+            "evidence_summary": "Loops is currently a strength with mastery 67.0/100. Quiz signal 90.0/100 and sandbox signal 100.0/100. GitHub forensic signal 0.0/100.",
+            "known_subskills": [
+              {
+                "subskill": "basic loop syntax",
+                "subskill_id": "CS101-LOOP-BASIC",
+                "status": "mastered",
+                "evidence": "No major weakness detected for this subskill in the available signals.",
+                "recommended_content_focus": null
+              },
+              {
+                "subskill": "nested loops",
+                "subskill_id": "CS101-LOOP-NESTED",
+                "status": "mastered",
+                "evidence": "No major weakness detected for this subskill in the available signals.",
+                "recommended_content_focus": null
+              },
+              {
+                "subskill": "loop boundary conditions",
+                "subskill_id": "CS101-LOOP-BOUNDARY",
+                "status": "mastered",
+                "evidence": "No major weakness detected for this subskill in the available signals.",
+                "recommended_content_focus": null
+              }
+            ],
+            "can_teach_others": false
+          }
+        ]
+      },
+      "recommendations": {
+        "priority_order": [
+          "Recursion"
+        ],
+        "general_advice": "Generate learning materials from weak_subskills before broad topic summaries.",
+        "for_instructor": "Verify the highest-priority gap with a short live task before marking mastery. Use high-confidence strengths for peer-learning matching where can_teach_others is true."
+      },
+      "overall_mastery_score": 36.5,
+      "knowledge_gaps": [
+        {
+          "topic": "Recursion",
+          "topic_id": "CS101-REC",
+          "gap_type": "FUNDAMENTAL_GAP",
+          "confidence": 0.99,
+          "mastery_score": 6.0,
+          "weak_subskills": [
+            {
+              "subskill": "base case identification",
+              "subskill_id": "CS101-REC-BASE",
+              "status": "weak",
+              "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+              "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+            },
+            {
+              "subskill": "stack frame tracing",
+              "subskill_id": "CS101-REC-STACK",
+              "status": "weak",
+              "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+              "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+            }
+          ],
+          "known_subskills": [
+            {
+              "subskill": "recursive return composition",
+              "subskill_id": "CS101-REC-RETURN",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            }
+          ],
+          "misconceptions": [
+            "treats the base case as optional or secondary",
+            "cannot explain how recursive calls return",
+            "answers conceptual questions incorrectly",
+            "submitted correct-looking code but needs independent understanding verification"
+          ],
+          "observed_error_patterns": {
+            "github": [
+              "low forensic confidence for incremental learning",
+              "authorship-risk signal from commit or editing pattern"
+            ],
+            "sandbox": [
+              "low sandbox success signal",
+              "logical errors during implementation",
+              "runtime failures during execution"
+            ],
+            "quizzes": [
+              "low quiz correctness for this topic",
+              "major conceptual misunderstanding signal"
+            ]
+          },
+          "evidence_summary": "Recursion mastery is 6.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 0.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+          "prerequisite_topics": [
+            "Loops",
+            "Functions",
+            "Call Stack"
+          ],
+          "related_topics": [
+            "Tree Traversal",
+            "Divide and Conquer"
+          ],
+          "suggested_intervention": {
+            "primary": "interactive_tutorial",
+            "secondary": [
+              "step_by_step_practice",
+              "debugging_exercise"
+            ],
+            "difficulty_level": "beginner",
+            "estimated_time_minutes": 90,
+            "learning_objectives": [
+              "Improve base case identification through traceable examples and independent practice.",
+              "Improve stack frame tracing through traceable examples and independent practice."
+            ]
+          }
+        }
+      ],
+      "strengths": [
+        {
+          "topic": "Loops",
+          "topic_id": "CS101-LOOP",
+          "confidence": 0.95,
+          "mastery_score": 67.0,
+          "mastery_level": "proficient",
+          "evidence_summary": "Loops is currently a strength with mastery 67.0/100. Quiz signal 90.0/100 and sandbox signal 100.0/100. GitHub forensic signal 0.0/100.",
+          "known_subskills": [
+            {
+              "subskill": "basic loop syntax",
+              "subskill_id": "CS101-LOOP-BASIC",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            },
+            {
+              "subskill": "nested loops",
+              "subskill_id": "CS101-LOOP-NESTED",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            },
+            {
+              "subskill": "loop boundary conditions",
+              "subskill_id": "CS101-LOOP-BOUNDARY",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            }
+          ],
+          "can_teach_others": false
+        }
+      ],
+      "gap_topic_ids": [
+        "CS101-REC"
+      ],
+      "raw_analysis_payload": {
+        "mode": "full",
+        "topic_scores": {
+          "Loops": {
+            "mastery_score": 0.67,
+            "quiz_score": 0.9,
+            "sandbox_score": 1.0,
+            "forensic_score": 0.0,
+            "priority_rank": 2
+          },
+          "Recursion": {
+            "mastery_score": 0.06,
+            "quiz_score": 0.2,
+            "sandbox_score": 0,
+            "forensic_score": 0.0,
+            "priority_rank": 1
+          }
+        },
+        "weak_topics": [
+          "Recursion"
+        ],
+        "medium_topics": [
+          "Loops"
+        ],
+        "strong_topics": [],
+        "misconception_clusters": {
+          "AI_Dependency": [
+            "Loops",
+            "Recursion"
+          ],
+          "Conceptual_Gap": [],
+          "Syntax_Weakness": [],
+          "Strong_Performance": []
+        },
+        "error_frequency": {
+          "Loops": {
+            "syntax": 0.2,
+            "logical": 0.0,
+            "runtime": 0.0
+          },
+          "Recursion": {
+            "syntax": 0.167,
+            "logical": 0.667,
+            "runtime": 0.667
+          }
+        },
+        "validation": {
+          "valid": true,
+          "confidence": 0.95,
+          "warnings": [
+            "Sparse quiz data - profile confidence may be limited"
+          ]
+        }
+      },
+      "legacy_summary": {
+        "schema_version": "kaa-v1.0",
+        "student_id": "STU-2026-0428",
+        "mode": "full",
+        "overall_mastery": 0.365,
+        "ai_dependency": true,
+        "validation": {
+          "confidence": 0.95,
+          "warnings": [
+            "Sparse quiz data - profile confidence may be limited"
+          ]
+        },
+        "mastery_profile": {
+          "weak": [
+            "Recursion"
+          ],
+          "medium": [
+            "Loops"
+          ],
+          "strong": []
+        },
+        "topic_scores": {
+          "Loops": {
+            "mastery": 0.67,
+            "priority": 2,
+            "quiz": 0.9,
+            "sandbox": 1.0,
+            "forensic": 0.0
+          },
+          "Recursion": {
+            "mastery": 0.06,
+            "priority": 1,
+            "quiz": 0.2,
+            "sandbox": 0,
+            "forensic": 0.0
+          }
+        },
+        "misconception_clusters": {
+          "AI_Dependency": [
+            "Loops",
+            "Recursion"
+          ],
+          "Conceptual_Gap": [],
+          "Syntax_Weakness": [],
+          "Strong_Performance": []
+        },
+        "error_distribution": {
+          "Loops": {
+            "syntax": 0.2,
+            "logical": 0.0,
+            "runtime": 0.0
+          },
+          "Recursion": {
+            "syntax": 0.167,
+            "logical": 0.667,
+            "runtime": 0.667
+          }
+        },
+        "pipeline_steps_completed": 10,
+        "ready_for_downstream": true,
+        "generated_at": "2026-05-24T11:34:35.876266Z"
+      },
+      "pipeline_steps_completed": 10,
+      "ready_for_downstream": true,
+      "generated_at": "2026-05-24T11:34:35.876266Z"
+    }
+  },
+  "legacy_summary": {
+    "schema_version": "kaa-v1.0",
+    "student_id": "STU-2026-0428",
+    "mode": "full",
+    "overall_mastery": 0.365,
+    "ai_dependency": true,
+    "validation": {
+      "confidence": 0.95,
+      "warnings": [
+        "Sparse quiz data - profile confidence may be limited"
+      ]
+    },
+    "mastery_profile": {
+      "weak": [
+        "Recursion"
+      ],
+      "medium": [
+        "Loops"
+      ],
+      "strong": []
+    },
+    "topic_scores": {
+      "Loops": {
+        "mastery": 0.67,
+        "priority": 2,
+        "quiz": 0.9,
+        "sandbox": 1.0,
+        "forensic": 0.0
+      },
+      "Recursion": {
+        "mastery": 0.06,
+        "priority": 1,
+        "quiz": 0.2,
+        "sandbox": 0,
+        "forensic": 0.0
+      }
+    },
+    "misconception_clusters": {
+      "AI_Dependency": [
+        "Loops",
+        "Recursion"
+      ],
+      "Conceptual_Gap": [],
+      "Syntax_Weakness": [],
+      "Strong_Performance": []
+    },
+    "error_distribution": {
+      "Loops": {
+        "syntax": 0.2,
+        "logical": 0.0,
+        "runtime": 0.0
+      },
+      "Recursion": {
+        "syntax": 0.167,
+        "logical": 0.667,
+        "runtime": 0.667
+      }
+    },
+    "pipeline_steps_completed": 10,
+    "ready_for_downstream": true,
+    "generated_at": "2026-05-24T11:34:35.876010Z"
+  },
+  "pipeline_steps_completed": 10,
+  "ready_for_downstream": true,
+  "generated_at": "2026-05-24T11:34:35.876010Z",
+  "diagnostic_report": {
+    "schema_version": "kaa-forensic-report-v1.0",
+    "student_id": "STU-2026-0428",
+    "session_id": "626e0d28-f608-4615-8d3b-5209e0de486b",
+    "analysis_timestamp": "2026-05-24T11:34:35.876010Z",
+    "mode": "full",
+    "data_sources": {
+      "github": "available",
+      "sandbox": "available",
+      "quizzes": "available"
+    },
+    "github_forensics": {
+      "status": "AVAILABLE",
+      "commits_sampled": 2,
+      "is_partial_history": true,
+      "history_note": "Metrics derive from the most recent commits fetched for review context (~10 per repo), not the repository's full lifetime. commits_sampled is a lower bound; a deeper paginated collector is required for true total_commits.",
+      "commit_pattern_classification": "BIG_BANG",
+      "commit_pattern_breakdown": {
+        "incremental_percent": 0.0,
+        "big_bang_percent": 50.0,
+        "erratic_percent": 50.0
+      },
+      "commit_size_analysis": {
+        "small_commits_percent": 0.0,
+        "medium_commits_percent": 50.0,
+        "large_commits_percent": 50.0
+      },
+      "refactoring_velocity_avg": 0.25,
+      "avg_diff_granularity": 0.175,
+      "authorship_risk": {
+        "flag": true,
+        "topics": [
+          "Loops",
+          "Recursion"
+        ],
+        "basis": "big-bang commits + low diff granularity correlated with weak sandbox/quiz signal",
+        "note": "Topic-level signal only. KAA does not perform file-level AI-probability detection."
+      }
+    },
+    "sandbox_telemetry": {
+      "status": "AVAILABLE",
+      "total_sessions": 2,
+      "avg_success_ratio": 0.5,
+      "avg_error_correction_latency_seconds": 10.9,
+      "keystroke_burst_detections": 1,
+      "topic_performance": [
+        {
+          "topic": "Loops",
+          "compile_attempts": 5,
+          "success_ratio": 1.0,
+          "time_to_success_seconds": 120.0,
+          "error_correction_latency_seconds": 20.0,
+          "error_patterns": [
+            "syntax errors"
+          ],
+          "notes": null
+        },
+        {
+          "topic": "Recursion",
+          "compile_attempts": 6,
+          "success_ratio": 0,
+          "time_to_success_seconds": 45.0,
+          "error_correction_latency_seconds": 1.8,
+          "error_patterns": [
+            "syntax errors",
+            "logical errors",
+            "runtime errors"
+          ],
+          "notes": "High keystroke burst with very fast error correction \u2014 possible paste-in, verify authorship."
+        }
+      ]
+    },
+    "adaptive_quiz_results": {
+      "status": "AVAILABLE",
+      "total_quizzes_taken": 2,
+      "avg_score": 55.0,
+      "topic_scores": [
+        {
+          "topic": "Loops",
+          "score": 90.0,
+          "questions_asked": 10,
+          "avg_time_seconds": 15.0,
+          "retry_count": 0
+        },
+        {
+          "topic": "Recursion",
+          "score": 20.0,
+          "questions_asked": 10,
+          "avg_time_seconds": 40.0,
+          "retry_count": 5
+        }
+      ]
+    },
+    "synthesized_mastery_profile": {
+      "overall_mastery_score": 36.5,
+      "knowledge_gaps": [
+        {
+          "topic": "Recursion",
+          "topic_id": "CS101-REC",
+          "gap_type": "FUNDAMENTAL_GAP",
+          "confidence": 0.99,
+          "mastery_score": 6.0,
+          "weak_subskills": [
+            {
+              "subskill": "base case identification",
+              "subskill_id": "CS101-REC-BASE",
+              "status": "weak",
+              "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+              "recommended_content_focus": "Practice identifying stopping conditions before writing code."
+            },
+            {
+              "subskill": "stack frame tracing",
+              "subskill_id": "CS101-REC-STACK",
+              "status": "weak",
+              "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical, runtime errors",
+              "recommended_content_focus": "Trace call frames, return values, and recursion depth."
+            }
+          ],
+          "known_subskills": [
+            {
+              "subskill": "recursive return composition",
+              "subskill_id": "CS101-REC-RETURN",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            }
+          ],
+          "misconceptions": [
+            "treats the base case as optional or secondary",
+            "cannot explain how recursive calls return",
+            "answers conceptual questions incorrectly",
+            "submitted correct-looking code but needs independent understanding verification"
+          ],
+          "observed_error_patterns": {
+            "github": [
+              "low forensic confidence for incremental learning",
+              "authorship-risk signal from commit or editing pattern"
+            ],
+            "sandbox": [
+              "low sandbox success signal",
+              "logical errors during implementation",
+              "runtime failures during execution"
+            ],
+            "quizzes": [
+              "low quiz correctness for this topic",
+              "major conceptual misunderstanding signal"
+            ]
+          },
+          "evidence_summary": "Recursion mastery is 6.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 0.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+          "prerequisite_topics": [
+            "Loops",
+            "Functions",
+            "Call Stack"
+          ],
+          "related_topics": [
+            "Tree Traversal",
+            "Divide and Conquer"
+          ],
+          "suggested_intervention": {
+            "primary": "interactive_tutorial",
+            "secondary": [
+              "step_by_step_practice",
+              "debugging_exercise"
+            ],
+            "difficulty_level": "beginner",
+            "estimated_time_minutes": 90,
+            "learning_objectives": [
+              "Improve base case identification through traceable examples and independent practice.",
+              "Improve stack frame tracing through traceable examples and independent practice."
+            ]
+          }
+        }
+      ],
+      "strengths": [
+        {
+          "topic": "Loops",
+          "topic_id": "CS101-LOOP",
+          "confidence": 0.95,
+          "mastery_score": 67.0,
+          "mastery_level": "proficient",
+          "evidence_summary": "Loops is currently a strength with mastery 67.0/100. Quiz signal 90.0/100 and sandbox signal 100.0/100. GitHub forensic signal 0.0/100.",
+          "known_subskills": [
+            {
+              "subskill": "basic loop syntax",
+              "subskill_id": "CS101-LOOP-BASIC",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            },
+            {
+              "subskill": "nested loops",
+              "subskill_id": "CS101-LOOP-NESTED",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            },
+            {
+              "subskill": "loop boundary conditions",
+              "subskill_id": "CS101-LOOP-BOUNDARY",
+              "status": "mastered",
+              "evidence": "No major weakness detected for this subskill in the available signals.",
+              "recommended_content_focus": null
+            }
+          ],
+          "can_teach_others": false
+        }
+      ]
+    },
+    "recommendations": {
+      "priority_order": [
+        "Recursion"
+      ],
+      "general_advice": "Generate learning materials from weak_subskills before broad topic summaries.",
+      "for_instructor": "Verify the highest-priority gap with a short live task before marking mastery. Use high-confidence strengths for peer-learning matching where can_teach_others is true."
+    }
+  }
+}

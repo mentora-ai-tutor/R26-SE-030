@@ -29,11 +29,13 @@ async def ensure_mastery_profile_indexes() -> None:
     await db.mastery_profiles.create_index([("student_id", 1), ("created_at", -1)])
     await db.mastery_profiles.create_index([("gap_topic_ids", 1)])
     await db.mastery_profiles.create_index([("schema_version", 1)])
+    await db.mastery_profiles.create_index([("session_id", 1)])
 
 
 def build_mastery_profile_document(
     canonical_payload: dict[str, Any],
     raw_analysis_payload: Optional[dict[str, Any]] = None,
+    diagnostic_report: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     mastery_profile = canonical_payload.get("mastery_profile") or {}
     knowledge_gaps = mastery_profile.get("knowledge_gaps") or canonical_payload.get("knowledge_gaps") or []
@@ -63,6 +65,8 @@ def build_mastery_profile_document(
             "updated_at": now,
         }
     )
+    if diagnostic_report is not None:
+        doc["diagnostic_report"] = diagnostic_report
     return doc
 
 
@@ -81,6 +85,7 @@ def canonical_profile_from_document(doc: Optional[dict[str, Any]]) -> Optional[d
         "profile_id": safe_doc.get("_id"),
         "schema_version": safe_doc.get("schema_version"),
         "student_id": safe_doc.get("student_id"),
+        "session_id": safe_doc.get("session_id"),
         "analysis_timestamp": safe_doc.get("analysis_timestamp"),
         "data_sources": safe_doc.get("data_sources", {}),
         "mastery_profile": mastery_profile,
@@ -93,6 +98,7 @@ def canonical_profile_from_document(doc: Optional[dict[str, Any]]) -> Optional[d
             for gap in mastery_profile.get("knowledge_gaps", [])
             if gap.get("topic_id")
         ],
+        "diagnostic_report": safe_doc.get("diagnostic_report"),
         "created_at": safe_doc.get("created_at"),
         "updated_at": safe_doc.get("updated_at"),
     }
@@ -101,9 +107,11 @@ def canonical_profile_from_document(doc: Optional[dict[str, Any]]) -> Optional[d
 async def save_mastery_profile(
     canonical_payload: dict[str, Any],
     raw_analysis_payload: Optional[dict[str, Any]] = None,
+    diagnostic_report: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    await ensure_mastery_profile_indexes()
-    doc = build_mastery_profile_document(canonical_payload, raw_analysis_payload)
+    doc = build_mastery_profile_document(
+        canonical_payload, raw_analysis_payload, diagnostic_report
+    )
     db = get_database()
     result = await db.mastery_profiles.insert_one(doc)
     saved = await db.mastery_profiles.find_one({"_id": result.inserted_id})
@@ -111,7 +119,6 @@ async def save_mastery_profile(
 
 
 async def get_latest_mastery_profile(student_id: str) -> Optional[dict[str, Any]]:
-    await ensure_mastery_profile_indexes()
     db = get_database()
     doc = await db.mastery_profiles.find_one(
         {"student_id": student_id},

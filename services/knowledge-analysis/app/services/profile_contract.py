@@ -79,6 +79,7 @@ def build_canonical_mastery_output(profile: dict[str, Any], validation: dict[str
     payload = {
         "schema_version": MASTERY_PROFILE_SCHEMA_VERSION,
         "student_id": profile["student_id"],
+        "session_id": profile.get("session_id"),
         "analysis_timestamp": profile["generated_at"],
         "data_sources": data_sources,
         "mastery_profile": {

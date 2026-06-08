@@ -94,6 +94,7 @@ class MasteryProfilePayload(BaseModel):
 class CanonicalMasteryOutput(BaseModel):
     schema_version: str
     student_id: str
+    session_id: Optional[str] = None
     analysis_timestamp: str
     data_sources: dict[str, str]
     mastery_profile: MasteryProfilePayload

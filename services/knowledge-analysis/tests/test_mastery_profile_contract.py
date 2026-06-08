@@ -99,6 +99,8 @@ def test_full_mode_output_contains_lmg_ready_gap_contract() -> None:
     output = run_full_pipeline(_input_with_github())["final_output"]
 
     assert output["schema_version"] == "kaa-lmg-v1.0"
+    assert output["session_id"]
+    assert output["analysis_timestamp"].endswith("Z")
     assert output["data_sources"]["github"] == "available"
     assert output["mastery_profile"]["knowledge_gaps"] == output["knowledge_gaps"]
     assert output["gap_topic_ids"] == [gap["topic_id"] for gap in output["knowledge_gaps"]]

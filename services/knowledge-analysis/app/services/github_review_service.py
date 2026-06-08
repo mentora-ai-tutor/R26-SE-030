@@ -31,6 +31,44 @@ MAX_FILE_BYTES = 6_000
 MAX_BUNDLE_BYTES = 128_000
 MAX_TREE_PATHS = 160
 PER_REPO_TIMEOUT_SECONDS = 75
+# Local Ollama (often CPU-only in a container) is far slower than Vertex, so the
+# pinned-Ollama path gets a longer budget before we declare a per-repo timeout.
+OLLAMA_PER_REPO_TIMEOUT_SECONDS = 300
+
+LLM_CHOICES = ("gemini", "ollama")
+DEFAULT_LLM_CHOICE = "gemini"
+
+
+def normalize_llm_choice(value: str | None) -> str:
+    """Coerce an incoming LLM choice to a supported value (defaults to gemini)."""
+    choice = (value or DEFAULT_LLM_CHOICE).strip().lower()
+    return choice if choice in LLM_CHOICES else DEFAULT_LLM_CHOICE
+
+
+async def ollama_available() -> bool:
+    """Report whether Ollama can actually serve a review right now.
+
+    Lets the frontend disable the Ollama option unless the server is up AND the
+    configured model is pulled — otherwise a student could start a review that
+    only errors out (e.g. while the one-shot model pull is still running).
+    """
+    from app.services.llm import config as llm_cfg
+
+    base = llm_cfg.OLLAMA_URL.rstrip("/")
+    want = (llm_cfg.OLLAMA_MODEL or "").split(":", 1)[0].lower()
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base}/api/tags")
+        if resp.status_code != 200:
+            return False
+        models = resp.json().get("models") or []
+        return any(
+            (m.get("name") or m.get("model") or "").split(":", 1)[0].lower() == want
+            for m in models
+        )
+    except Exception as exc:  # noqa: BLE001 - probe failures just mean "unavailable"
+        logger.info("Ollama availability probe failed: %s", exc)
+        return False
 
 SOURCE_EXT_PRIORITY = {
     ".java": 0,
@@ -98,6 +136,9 @@ class ReviewRepoResult(BaseModel):
     status: Literal["queued", "running", "done", "error"]
     review: Optional[RepoReview] = None
     error: Optional[str] = None
+    # Engine that actually produced this result. With a "gemini" request the
+    # router may fall back, so this can differ from the requested choice.
+    llm_choice: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -489,7 +530,11 @@ def _review_prompt(bundle: str) -> str:
     )
 
 
-async def review_repo(github: GithubApiClient, repo: RepoSummary) -> ReviewRepoResult:
+async def review_repo(
+    github: GithubApiClient,
+    repo: RepoSummary,
+    llm_choice: str = "gemini",
+) -> ReviewRepoResult:
     try:
         bundle = await github.repo_bundle(repo)
         if not bundle.strip():
@@ -499,21 +544,29 @@ async def review_repo(github: GithubApiClient, repo: RepoSummary) -> ReviewRepoR
                 error="Repository bundle is empty",
             )
 
+        # "ollama" pins to the local lane (no Gemini fallback); "gemini"/None
+        # uses the normal tiered chain (which can still fall back to Ollama).
+        force_provider = "ollama" if llm_choice == "ollama" else None
         raw = await get_router().generate_json(
             prompt=_review_prompt(bundle),
             schema=RepoReview,
             task=Task.REPO_REVIEW,
             temperature=0.2,
+            force_provider=force_provider,
         )
         review = RepoReview.model_validate(raw)
         if review.repo != repo.full_name:
             review = review.model_copy(update={"repo": repo.full_name})
-        return ReviewRepoResult(full_name=repo.full_name, status="done", review=review)
+        return ReviewRepoResult(
+            full_name=repo.full_name, status="done", review=review, llm_choice=llm_choice
+        )
     except LLMAuthError:
         raise
     except Exception as exc:  # noqa: BLE001 - per-repo failures should not kill the whole job
         logger.exception("Repo review failed for %s", repo.full_name)
-        return ReviewRepoResult(full_name=repo.full_name, status="error", error=str(exc))
+        return ReviewRepoResult(
+            full_name=repo.full_name, status="error", error=str(exc), llm_choice=llm_choice
+        )
 
 
 async def ensure_review_indexes() -> None:
@@ -543,7 +596,9 @@ async def start_review_job(
     student: StudentContext,
     credential: GithubCredential,
     selected_full_names: list[str] | None,
+    llm_choice: str = DEFAULT_LLM_CHOICE,
 ) -> tuple[dict[str, Any], list[RepoSummary]]:
+    llm_choice = normalize_llm_choice(llm_choice)
     await ensure_review_indexes()
     db = get_database()
     github = GithubApiClient(credential.access_token)
@@ -581,8 +636,15 @@ async def start_review_job(
             "gh_login": credential.gh_login,
             "seed_version": SEED_VERSION,
             "status": "running",
+            "llm_choice": llm_choice,
             "repos": [
-                {"full_name": repo.full_name, "status": "queued", "review": None, "error": None}
+                {
+                    "full_name": repo.full_name,
+                    "status": "queued",
+                    "review": None,
+                    "error": None,
+                    "llm_choice": None,
+                }
                 for repo in selected
             ],
             "created_at": now,
@@ -600,11 +662,16 @@ async def process_review_job(
     job_id: str | ObjectId,
     credential: GithubCredential,
     selected_repos: list[RepoSummary],
+    llm_choice: str = DEFAULT_LLM_CHOICE,
 ) -> dict[str, Any]:
     await ensure_review_indexes()
     db = get_database()
     job_object_id = ObjectId(job_id) if isinstance(job_id, str) else job_id
     github = GithubApiClient(credential.access_token)
+    llm_choice = normalize_llm_choice(llm_choice)
+    per_repo_timeout = (
+        OLLAMA_PER_REPO_TIMEOUT_SECONDS if llm_choice == "ollama" else PER_REPO_TIMEOUT_SECONDS
+    )
 
     try:
         semaphore = asyncio.Semaphore(3)
@@ -622,14 +689,15 @@ async def process_review_job(
                 )
                 try:
                     result = await asyncio.wait_for(
-                        review_repo(github, repo),
-                        timeout=PER_REPO_TIMEOUT_SECONDS,
+                        review_repo(github, repo, llm_choice=llm_choice),
+                        timeout=per_repo_timeout,
                     )
                 except asyncio.TimeoutError:
                     result = ReviewRepoResult(
                         full_name=repo.full_name,
                         status="error",
-                        error=f"Review timed out after {PER_REPO_TIMEOUT_SECONDS}s",
+                        error=f"Review timed out after {per_repo_timeout}s",
+                        llm_choice=llm_choice,
                     )
 
                 await db.repo_review_jobs.update_one(
@@ -639,6 +707,7 @@ async def process_review_job(
                             "repos.$.status": result.status,
                             "repos.$.review": result.review.model_dump() if result.review else None,
                             "repos.$.error": result.error,
+                            "repos.$.llm_choice": result.llm_choice,
                             "repos.$.finished_at": _utcnow(),
                             "updated_at": _utcnow(),
                         }
@@ -708,16 +777,19 @@ async def run_review_job(
     student: StudentContext,
     credential: GithubCredential,
     selected_full_names: list[str] | None,
+    llm_choice: str = DEFAULT_LLM_CHOICE,
 ) -> dict[str, Any]:
     job, selected = await start_review_job(
         student=student,
         credential=credential,
         selected_full_names=selected_full_names,
+        llm_choice=llm_choice,
     )
     return await process_review_job(
         job_id=job["job_id"],
         credential=credential,
         selected_repos=selected,
+        llm_choice=llm_choice,
     )
 
 
@@ -726,9 +798,11 @@ async def run_single_repo_rereview(
     student: StudentContext,
     credential: GithubCredential,
     repo_full_name: str,
+    llm_choice: str = DEFAULT_LLM_CHOICE,
 ) -> dict[str, Any]:
     return await run_review_job(
         student=student,
         credential=credential,
         selected_full_names=[repo_full_name],
+        llm_choice=llm_choice,
     )

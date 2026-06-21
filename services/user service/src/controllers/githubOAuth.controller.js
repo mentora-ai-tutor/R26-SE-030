@@ -8,6 +8,16 @@ const ghClient = require('../utils/ghClient');
 
 const AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 
+const githubConfigReady = () =>
+  Boolean(config.github.clientId && config.github.clientSecret && config.github.callbackUrl);
+
+const noStore = (res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  return res;
+};
+
 const escapeForJsString = (s) =>
   String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '\\u003c');
 
@@ -32,8 +42,14 @@ const renderCallbackHtml = ({ payload }) => {
 </body></html>`;
 };
 
-const start = async (req, res, next) => {
+const start = async (req, res, _next) => {
   try {
+    noStore(res);
+
+    if (!githubConfigReady()) {
+      return sendError(res, 'GitHub OAuth is not configured', 503, 'GITHUB_OAUTH_NOT_CONFIGURED');
+    }
+
     const studentId = req.student._id.toString();
     const state = ghState.sign(studentId);
     const params = new URLSearchParams({
@@ -54,7 +70,7 @@ const start = async (req, res, next) => {
 const callback = async (req, res, _next) => {
   const { code, state, error: ghError, error_description: ghErrorDesc } = req.query;
   const respondHtml = (payload, statusCode = 200) =>
-    res.status(statusCode).type('html').send(renderCallbackHtml({ payload }));
+    noStore(res).status(statusCode).type('html').send(renderCallbackHtml({ payload }));
 
   if (ghError) {
     logger.warn('github oauth callback returned error:', ghError, ghErrorDesc);
@@ -146,24 +162,46 @@ const callback = async (req, res, _next) => {
 };
 
 const status = async (req, res, _next) => {
-  const gh = req.student.github;
-  if (!gh || !gh.linked) {
+  noStore(res);
+
+  const studentId = req.student._id.toString();
+  const gh = req.student.github || {};
+  let cred = gh.credential_ref
+    ? await GithubCredential.findById(gh.credential_ref).select('scopes gh_login linked_at')
+    : null;
+
+  if (!cred) {
+    cred = await GithubCredential.findOne({ student_id: studentId }).select('scopes gh_login linked_at');
+  }
+
+  if (!cred) {
     return sendSuccess(res, { linked: false }, 'GitHub link status retrieved');
   }
-  const cred = gh.credential_ref
-    ? await GithubCredential.findById(gh.credential_ref).select('scopes')
-    : null;
+
+  if (!gh.linked || String(gh.credential_ref || '') !== String(cred._id)) {
+    Student.findByIdAndUpdate(studentId, {
+      github: {
+        linked: true,
+        gh_login: cred.gh_login,
+        linked_at: cred.linked_at,
+        credential_ref: cred._id,
+      },
+    }).catch((err) => logger.warn('Failed to repair github link status:', err.message));
+  }
+
   return sendSuccess(res, {
     linked: true,
-    gh_login: gh.gh_login,
-    linked_at: gh.linked_at,
-    scopes: cred ? cred.scopes : [],
+    gh_login: gh.gh_login || cred.gh_login,
+    linked_at: gh.linked_at || cred.linked_at,
+    scopes: cred.scopes,
   }, 'GitHub link status retrieved');
 };
 
-const unlink = async (req, res, next) => {
+const unlink = async (req, res, _next) => {
   try {
-    const studentId = req.student._id;
+    noStore(res);
+
+    const studentId = req.student._id.toString();
     const cred = await GithubCredential.findOne({ student_id: studentId });
     if (!cred) {
       await Student.findByIdAndUpdate(studentId, {

@@ -1,4 +1,5 @@
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 
 
 def step8_build_profile(student_id: str, scored: dict, clusters: dict, mode_result: dict, features: dict) -> dict:
@@ -18,6 +19,7 @@ def step8_build_profile(student_id: str, scored: dict, clusters: dict, mode_resu
 
     return {
         "student_id": student_id,
+        "session_id": str(uuid.uuid4()),
         "mode": mode_result["mode"],
         "overall_mastery": overall,
         "weak_topics": weak,
@@ -27,5 +29,5 @@ def step8_build_profile(student_id: str, scored: dict, clusters: dict, mode_resu
         "error_frequency": error_dist,
         "topic_scores": scored,
         "ai_dependency_flag": len(clusters.get("AI_Dependency", [])) > 0,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }

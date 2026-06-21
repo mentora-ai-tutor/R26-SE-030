@@ -170,7 +170,7 @@ const getGithubCredential = async (req, res, next) => {
     const { studentId } = req.params;
 
     let studentObjectId = studentId;
-    if (!studentId.match(/^[0-9a-fA-F]{24}$/)) {
+    if (!/^[0-9a-fA-F]{24}$/.test(studentId)) {
       const student = await Student.findOne({ student_id: studentId, is_deleted: false }).select('_id');
       if (!student) {
         return sendError(res, 'Student not found', 404, 'STUDENT_NOT_FOUND');

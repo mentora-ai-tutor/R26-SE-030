@@ -1,7 +1,8 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 APP_NAME = os.getenv("APP_NAME", "KAA - Knowledge Analysis Agent")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
@@ -11,3 +12,15 @@ MONGODB_DB = os.getenv("MONGODB_DB", "knowledge_analysis")
 USER_SERVICE_INTERNAL_URL = os.getenv("USER_SERVICE_INTERNAL_URL", "http://localhost:3001").rstrip("/")
 INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY", "")
 GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+# AI execution engine used to VERIFY generated sandbox challenges (run the reference
+# solution and capture its real stdout as the authoritative expected output).
+AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:5010").rstrip("/")
+
+
+def _flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
+
+
+# Career-fit prediction (hand-made NumPy model + LLM narrative). Default ON so the
+# wired-in endpoint works out of the box; set FEATURE_CAREER_PREDICTION=false to disable.
+FEATURE_CAREER_PREDICTION = _flag("FEATURE_CAREER_PREDICTION", "true")

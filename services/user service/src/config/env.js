@@ -55,7 +55,7 @@ const config = {
     clientSecret: process.env.GH_CLIENT_SECRET,
     scope: process.env.GH_OAUTH_SCOPE,
     callbackUrl: process.env.GH_OAUTH_CALLBACK_URL,
-    // KEK is derived from JWT_REFRESH_SECRET via HKDF — no separate secret to manage.
+    // KEK is derived from JWT_REFRESH_SECRET via HKDF. No separate token key to manage.
     // Buffer.from(secret) -> IKM; empty salt; "gh-kek" info; 32 bytes for AES-256.
     tokenKek: Buffer.from(
       crypto.hkdfSync(

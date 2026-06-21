@@ -43,6 +43,7 @@ class Task(str, Enum):
     QUESTION_GEN         = "question_gen"
     SHORT_CODE_GRADE     = "short_code_grade"
     AGENTIC_TOOL_CALL    = "agentic_tool_call"
+    CAREER_NARRATIVE     = "career_narrative"
     PROBE                = "probe"
 
 
@@ -65,6 +66,7 @@ TASK_TIER_MAP: dict[Task, tuple[str, str]] = {
     Task.QUESTION_GEN:      ("tier2",  "low"),
     Task.SHORT_CODE_GRADE:  ("tier1",  "medium"),
     Task.AGENTIC_TOOL_CALL: ("tier0t", "high"),
+    Task.CAREER_NARRATIVE:  ("tier2",  "low"),
     Task.PROBE:             ("tier0",  "minimal"),
 }
 
@@ -116,6 +118,7 @@ class LLMRouter:
         tools: Optional[list[Any]] = None,
         temperature: float = 0.4,
         thinking: Optional[str] = None,
+        force_provider: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run a JSON-mode generation against the tier chain for `task`.
 
@@ -123,10 +126,25 @@ class LLMRouter:
           - 1 retry on transient error
           - 1 schema-repair pass on schema error
           - on permanent or auth (auth bubbles): demote and continue.
+
+        `force_provider` lets a caller pin the engine for this one request:
+          - "ollama": run ONLY the local tier3 lane (no Gemini fallback). If
+            tier3 is dead/unconfigured this raises — strict by design.
+          - "gemini" / None: normal tiered chain (which may still fall through
+            to tier3 as the offline floor).
         """
         primary, default_think = TASK_TIER_MAP[task]
         thinking = thinking or default_think
-        chain = self._walk(primary, need_tools=bool(tools))
+
+        if force_provider == "ollama":
+            spec = self.tiers.get("tier3")
+            if not spec or self._is_dead("tier3"):
+                raise LLMError(
+                    "Ollama (tier3) is not available; cannot honor force_provider='ollama'"
+                )
+            chain = [spec]
+        else:
+            chain = self._walk(primary, need_tools=bool(tools))
         if not chain:
             raise LLMError(f"No live tiers available for task={task.value}")
 

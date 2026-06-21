@@ -1,5 +1,13 @@
 const Joi = require('joi');
 
+const subskillSchema = Joi.object({
+  subskill: Joi.string().required(),
+  subskill_id: Joi.string().required(),
+  status: Joi.string().valid('weak', 'mastered').required(),
+  evidence: Joi.string().allow('', null).optional(),
+  recommended_content_focus: Joi.string().allow('', null).optional(),
+});
+
 const knowledgeGapSchema = Joi.object({
   topic: Joi.string().required(),
   topic_id: Joi.string().required(),
@@ -7,6 +15,9 @@ const knowledgeGapSchema = Joi.object({
     .valid('FUNDAMENTAL_GAP', 'PARTIAL_GAP', 'SURFACE_GAP')
     .required(),
   confidence: Joi.number().min(0).max(1).optional(),
+  mastery_score: Joi.number().min(0).max(100).optional(),
+  weak_subskills: Joi.array().items(subskillSchema).optional(),
+  known_subskills: Joi.array().items(subskillSchema).optional(),
   misconceptions: Joi.array().items(Joi.string()).optional(),
   observed_error_patterns: Joi.object().optional(),
   evidence_summary: Joi.string().optional(),
@@ -21,13 +32,16 @@ const strengthItemSchema = Joi.alternatives().try(
     topic: Joi.string().required(),
     topic_id: Joi.string().required(),
     confidence: Joi.number().min(0).max(1).optional(),
+    mastery_score: Joi.number().min(0).max(100).optional(),
     mastery_level: Joi.string().optional(),
     evidence_summary: Joi.string().optional(),
+    known_subskills: Joi.array().items(subskillSchema).optional(),
     can_teach_others: Joi.boolean().optional(),
   })
 );
 
 const masterySubmitSchema = Joi.object({
+  schema_version: Joi.string().optional(),
   student_id: Joi.string().required(),
   analysis_timestamp: Joi.string().isoDate().optional(),
   mastery_profile: Joi.object({
@@ -35,6 +49,8 @@ const masterySubmitSchema = Joi.object({
     knowledge_gaps: Joi.array().min(1).items(knowledgeGapSchema).required(),
     strengths: Joi.array().items(strengthItemSchema).optional(),
   }).required(),
+  gap_topic_ids: Joi.array().items(Joi.string()).optional(),
+  raw_analysis_payload: Joi.object().optional(),
   recommendations: Joi.object().optional(),
   data_sources: Joi.object().optional(),
 });

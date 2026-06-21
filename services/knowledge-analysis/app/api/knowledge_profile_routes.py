@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Header
@@ -20,17 +20,17 @@ class SandboxAttemptRequest(BaseModel):
     challenge_id: str = Field(..., min_length=1, max_length=80)
     title: str = Field(..., min_length=1, max_length=140)
     topic: str = Field(..., min_length=1, max_length=80)
-    difficulty: str | None = Field(default=None, max_length=80)
+    difficulty: Optional[str] = Field(default=None, max_length=80)
     code: str = Field(..., min_length=1, max_length=30_000)
-    stdin: str | None = Field(default=None, max_length=5_000)
+    stdin: Optional[str] = Field(default=None, max_length=5_000)
     expected_output: str = Field(..., max_length=5_000)
-    output: str | None = Field(default=None, max_length=20_000)
-    error: str | None = Field(default=None, max_length=20_000)
+    output: Optional[str] = Field(default=None, max_length=20_000)
+    error: Optional[str] = Field(default=None, max_length=20_000)
     success: bool
     passed: bool
     attempt_number: int = Field(..., ge=1)
-    runtime_ms: int | None = Field(default=None, ge=0)
-    review_job_id: str | None = Field(default=None, max_length=80)
+    runtime_ms: Optional[int] = Field(default=None, ge=0)
+    review_job_id: Optional[str] = Field(default=None, max_length=80)
 
 
 def _utcnow() -> datetime:
@@ -49,7 +49,7 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _serialize_attempt(doc: dict[str, Any] | None) -> dict[str, Any] | None:
+def _serialize_attempt(doc: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     if not doc:
         return None
     out = _json_safe(doc)
@@ -58,7 +58,7 @@ def _serialize_attempt(doc: dict[str, Any] | None) -> dict[str, Any] | None:
     return out
 
 
-async def _ensure_profile_indexes() -> None:
+async def ensure_knowledge_profile_indexes() -> None:
     db = get_database()
     await db.sandbox_attempts.create_index([("student_id", 1), ("created_at", -1)])
     await db.sandbox_attempts.create_index([("student_id", 1), ("challenge_id", 1)])
@@ -134,11 +134,80 @@ def _sandbox_stats(attempts: list[dict[str, Any]], total_attempts: int) -> dict[
     }
 
 
+def _serialize_quiz_result(doc: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    if not doc:
+        return None
+    out = _json_safe(doc)
+    if "_id" in out:
+        out["result_id"] = out.pop("_id")
+    return out
+
+
+def _quiz_stats(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate completed-quiz outcomes for the profile (results are newest-first)."""
+    if not results:
+        return {
+            "total_quizzes": 0,
+            "avg_score": 0.0,
+            "best_score": 0.0,
+            "latest_score": 0.0,
+            "questions_answered": 0,
+            "questions_correct": 0,
+            "topic_mastery": [],
+        }
+
+    scores = [float(r.get("score_percent", 0) or 0) for r in results]
+    questions_answered = sum(int(r.get("total", 0) or 0) for r in results)
+    questions_correct = sum(int(r.get("correct", 0) or 0) for r in results)
+
+    topic_agg: dict[str, dict[str, Any]] = {}
+    for result in results:
+        for tp in result.get("topic_performance", []):
+            topic = tp.get("topic", "Unknown")
+            bucket = topic_agg.setdefault(topic, {"topic": topic, "correct": 0, "total": 0})
+            bucket["correct"] += int(tp.get("correct", 0) or 0)
+            bucket["total"] += int(tp.get("total", 0) or 0)
+
+    topic_mastery = [
+        {
+            **bucket,
+            "accuracy_percent": round(bucket["correct"] / bucket["total"] * 100, 1)
+            if bucket["total"]
+            else 0.0,
+        }
+        for bucket in topic_agg.values()
+    ]
+    topic_mastery.sort(key=lambda t: t["accuracy_percent"])  # weakest first
+
+    return {
+        "total_quizzes": len(results),
+        "avg_score": round(sum(scores) / len(scores), 1),
+        "best_score": round(max(scores), 1),
+        "latest_score": round(scores[0], 1),  # results are sorted newest-first
+        "questions_answered": questions_answered,
+        "questions_correct": questions_correct,
+        "topic_mastery": topic_mastery,
+    }
+
+
 def _timeline(
     review_jobs: list[dict[str, Any]],
     sandbox_attempts: list[dict[str, Any]],
+    quiz_results: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
+
+    for result in quiz_results or []:
+        score = round(float(result.get("score_percent", 0) or 0))
+        events.append(
+            {
+                "type": "quiz",
+                "id": str(result.get("_id")),
+                "label": f"Quiz: {score}% ({result.get('correct', 0)}/{result.get('total', 0)})",
+                "time": result.get("completed_at") or result.get("created_at"),
+                "status": "completed",
+            }
+        )
 
     for job in review_jobs:
         events.append(
@@ -174,10 +243,9 @@ def _timeline(
 @router.post("/sandbox-attempts")
 async def save_sandbox_attempt(
     payload: SandboxAttemptRequest,
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     student = await verify_student_from_authorization(authorization)
-    await _ensure_profile_indexes()
 
     now = _utcnow()
     doc = payload.model_dump()
@@ -199,10 +267,9 @@ async def save_sandbox_attempt(
 
 @router.get("/me")
 async def get_my_knowledge_profile(
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict[str, Any]:
     student = await verify_student_from_authorization(authorization)
-    await _ensure_profile_indexes()
 
     db = get_database()
     review_jobs = await db.repo_review_jobs.find(
@@ -212,6 +279,9 @@ async def get_my_knowledge_profile(
         {"student_id": student.id}
     ).sort("created_at", -1).limit(20).to_list(length=20)
     total_attempts = await db.sandbox_attempts.count_documents({"student_id": student.id})
+    quiz_results = await db.quiz_results.find(
+        {"student_id": student.id}
+    ).sort("completed_at", -1).limit(8).to_list(length=8)
 
     data = {
         "student_id": student.id,
@@ -219,8 +289,10 @@ async def get_my_knowledge_profile(
         "generated_at": _utcnow().isoformat(),
         "review_summary": _repo_review_stats(review_jobs),
         "sandbox_summary": _sandbox_stats(sandbox_attempts, total_attempts),
+        "quiz_summary": _quiz_stats(quiz_results),
         "latest_reviews": [serialize_job(job) for job in review_jobs],
         "latest_sandbox_attempts": [_serialize_attempt(attempt) for attempt in sandbox_attempts],
-        "timeline": _timeline(review_jobs, sandbox_attempts),
+        "latest_quiz_results": [_serialize_quiz_result(result) for result in quiz_results],
+        "timeline": _timeline(review_jobs, sandbox_attempts, quiz_results),
     }
     return {"status": "success", "data": data}

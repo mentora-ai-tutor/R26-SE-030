@@ -26,6 +26,9 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.39.0
 
+# Career-fit model inference (hand-made NumPy classifier — serving only, no sklearn/torch)
+numpy>=1.26
+
 # LLM providers (Vertex AI Gemini + fallback)
 google-genai>=0.4.0
 google-auth>=2.35.0

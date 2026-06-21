@@ -374,70 +374,137 @@ Total replacement cost: ~180 LOC.
 
 ## 8. Diagnostic JSON Payload — Interoperability Contract
 
-This payload is the **research artefact** for Objective 5. Define once in `app/models/payload.py`. Same structure consumed by Content Agent, Peer Agent, frontend WebSocket, and Mongo history.
+This payload is the **research artefact** for Objective 5 and the contract consumed by the Content Agent (LMG), Peer Agent, frontend WebSocket, and Mongo history.
+
+> **⚠️ Contract authority.** The single source of truth is the Pydantic model **`CanonicalMasteryOutput` in `app/models/schemas.py`**, built by `build_canonical_mastery_output()` in `app/services/profile_contract.py`. This document mirrors that model — if the two ever disagree, the model wins and this section is stale (fix it). The earlier `schema_version: "1.0"` shape (flat `topic_scores` map, `ai_dependency`, `remediation_hints`, `swebok_nodes`) was **superseded**; that data now lives under `raw_analysis_payload` for back-compat (see migration note below).
+
+Current schema version: **`kaa-lmg-v1.0`** (constant `MASTERY_PROFILE_SCHEMA_VERSION` in `core/constants.py`).
 
 ```json
 {
-  "schema_version": "1.0",
-  "student_id": "IT22201232",
-  "session_id": "uuid-v4",
-  "generated_at": "2026-05-04T10:14:22Z",
-  "mode": "full",
+  "schema_version": "kaa-lmg-v1.0",
+  "student_id": "STU-2026-0428",
+  "session_id": "uuid-v4-or-null",
+  "analysis_timestamp": "2026-05-04T10:14:22Z",
+  "data_sources": {
+    "github": "available",
+    "sandbox": "available",
+    "quizzes": "available"
+  },
   "mastery_profile": {
-    "overall": 0.62,
-    "topic_scores": {
-      "Loops": {
-        "mastery": 0.82,
-        "quiz": 0.7,
-        "sandbox": 0.9,
-        "forensic": 0.8,
-        "rank": 1
-      },
-      "Recursion": {
-        "mastery": 0.41,
-        "quiz": 0.2,
-        "sandbox": 0.5,
-        "forensic": 0.6,
-        "rank": 5
+    "overall_mastery_score": 58.0,
+    "knowledge_gaps": [
+      {
+        "topic": "Recursion",
+        "topic_id": "CS101-REC",
+        "gap_type": "FUNDAMENTAL_GAP",
+        "confidence": 0.95,
+        "mastery_score": 41.0,
+        "weak_subskills": [
+          {
+            "subskill": "base case identification",
+            "subskill_id": "CS101-REC-BASE",
+            "status": "weak",
+            "evidence": "quiz score is 20.0; sandbox score is 0.0; observed logical errors",
+            "recommended_content_focus": "Practice spotting the terminating condition before writing the recursive step."
+          }
+        ],
+        "known_subskills": [],
+        "misconceptions": ["base case identification", "stack frame management"],
+        "observed_error_patterns": {
+          "github": ["authorship-risk signal from commit or editing pattern"],
+          "sandbox": ["logical errors during implementation", "runtime failures during execution"],
+          "quizzes": ["low quiz correctness for this topic", "major conceptual misunderstanding signal"]
+        },
+        "evidence_summary": "Recursion mastery is 41.0/100. Quiz signal 20.0/100. Sandbox signal 0.0/100. GitHub forensic signal 30.0/100. Authorship-risk indicators require live verification before treating submitted code as mastery.",
+        "prerequisite_topics": ["Loops", "Functions", "Call Stack"],
+        "related_topics": ["Tree Traversal", "Divide and Conquer"],
+        "suggested_intervention": {
+          "primary": "interactive_tutorial",
+          "secondary": ["step_by_step_practice", "debugging_exercise"],
+          "difficulty_level": "beginner",
+          "estimated_time_minutes": 90,
+          "learning_objectives": ["Improve base case identification through traceable examples and independent practice."]
+        }
       }
-    }
-  },
-  "weak_topics":   ["Recursion", "Algorithms"],
-  "medium_topics": ["OOP"],
-  "strong_topics": ["Loops", "Arrays"],
-  "misconception_clusters": {
-    "AI_Dependency":  ["Algorithms"],
-    "Conceptual_Gap": ["Recursion"]
-  },
-  "ai_dependency": {
-    "flag": true,
-    "confidence_score": 0.84,
-    "evidence": [
-      "Big-Bang commit pattern in repo",
-      "Sub-2s error-correction latency on complex logic"
+    ],
+    "strengths": [
+      {
+        "topic": "Loops",
+        "topic_id": "CS101-LOOP",
+        "confidence": 0.96,
+        "mastery_score": 95.0,
+        "mastery_level": "advanced",
+        "evidence_summary": "Loops is currently a strength with mastery 95.0/100. Quiz signal 95.0/100 and sandbox signal 90.0/100. GitHub forensic signal 80.0/100.",
+        "known_subskills": [],
+        "can_teach_others": true
+      }
     ]
   },
-  "remediation_hints": [
-    {
-      "topic": "Recursion",
-      "type": "tutorial",
-      "priority": 1,
-      "rationale": "Logical-error rate 80%, quiz score 0.2"
-    }
-  ],
-  "swebok_nodes": ["KA-DS-Recursion", "KA-ALG-Sorting"],
-  "validation": {
-    "data_quality": "high",
-    "warnings": []
+  "recommendations": {
+    "priority_order": ["Recursion"],
+    "general_advice": "Generate learning materials from weak_subskills before broad topic summaries.",
+    "for_instructor": "Verify the highest-priority gap with a short live task before marking mastery. Use high-confidence strengths for peer-learning matching where can_teach_others is true."
+  },
+  "overall_mastery_score": 58.0,
+  "knowledge_gaps": ["… same objects as mastery_profile.knowledge_gaps (top-level mirror) …"],
+  "strengths": ["… same objects as mastery_profile.strengths (top-level mirror) …"],
+  "gap_topic_ids": ["CS101-REC"],
+  "raw_analysis_payload": {
+    "mode": "full",
+    "topic_scores": { "Recursion": { "mastery_score": 0.41, "quiz_score": 0.2, "sandbox_score": 0.5, "forensic_score": 0.6 } },
+    "weak_topics": ["Recursion"],
+    "medium_topics": ["OOP"],
+    "strong_topics": ["Loops"],
+    "misconception_clusters": { "AI_Dependency": ["Recursion"] },
+    "error_frequency": { "Recursion": { "logical": 0.8, "runtime": 0.3 } },
+    "validation": { "data_quality": "high", "confidence": 0.85, "warnings": [] }
   }
 }
 ```
 
+When `data_sources.github == "unavailable"` (Mode B / sandbox-only), the shape is **identical**; only `data_sources.github` flips, `observed_error_patterns.github` is `[]`, `evidence_summary` omits the GitHub line, and `confidence` is scaled down (two of three sources available — see `_confidence()`). Downstream consumers must not branch on key presence; the keys are always present.
+
 ### Key contract guarantees
-- `schema_version` — semver, downstream consumers can pin and migrate.
-- `mastery_profile.topic_scores` — keys are stable topic IDs from `core/constants.py`.
-- `ai_dependency.confidence_score` — continuous 0–1 (replaces the original boolean flag in `step8_profile.py`).
-- `swebok_nodes` — stable IDs from the SWEBOK schema (Appendix G).
+- `schema_version` — string `"kaa-lmg-v1.0"`. Consumers pin and migrate on change. **This is not the old `"1.0"`** — a consumer hard-checking `== "1.0"` will (correctly, loudly) reject the current payload.
+- Both `mastery_profile.{overall_mastery_score,knowledge_gaps,strengths}` **and** their top-level mirrors (`overall_mastery_score`, `knowledge_gaps`, `strengths`, `gap_topic_ids`) are emitted. Read either; they reference the same data.
+- All mastery/score fields are **0–100 floats** (`overall_mastery_score`, `mastery_score`). The only **0–1 float** is per-item `confidence`. Do not mix the scales.
+- `gap_type` ∈ `{FUNDAMENTAL_GAP (<50), PARTIAL_GAP (<75), SURFACE_GAP (<85)}`; thresholds in `profile_contract._gap_type()`.
+- `topic_id` / `subskill_id` are stable IDs from `TOPIC_CATALOG` in `core/constants.py` (e.g. `CS101-REC`). These replaced the old `swebok_nodes`.
+- `weak_subskills` is the field LMG should drive content from — it pinpoints *which part* of a topic the student fails ("knows loops, but can't do the off-by-one boundary"), not just the topic.
+- `data_sources`, `observed_error_patterns.{github,sandbox,quizzes}`, and the top-level mirrors are **always present** even when empty — never key-test, default-read.
+
+#### Migration note — old `schema_version: "1.0"` consumers
+The legacy fields were not deleted, only relocated. Map old → new:
+
+| Old `1.0` top-level field | Where it lives now |
+|---|---|
+| `generated_at` | `analysis_timestamp` |
+| `mode` | `raw_analysis_payload.mode` |
+| `mastery_profile.overall` (0–1) | `overall_mastery_score` (0–100) — rescale ×100 |
+| `mastery_profile.topic_scores` | `raw_analysis_payload.topic_scores` |
+| `weak_topics` / `medium_topics` / `strong_topics` | `raw_analysis_payload.*` |
+| `misconception_clusters` | `raw_analysis_payload.misconception_clusters` |
+| `ai_dependency.{flag,confidence_score,evidence}` | folded into per-gap `observed_error_patterns.github` + `misconceptions`; raw signal in `raw_analysis_payload.misconception_clusters.AI_Dependency` |
+| `remediation_hints[]` | `recommendations` + per-gap `suggested_intervention` |
+| `swebok_nodes[]` | per-item `topic_id` / `subskill_id` |
+| `validation` | `raw_analysis_payload.validation` |
+
+A teammate still coded against `1.0` either re-points to the table above or reads everything from `raw_analysis_payload`, which preserves the old signal verbatim.
+
+### 8.1 `diagnostic_report` companion — rich forensic/telemetry view ✅
+
+The canonical contract above is deliberately lean (topic/subskill diagnosis only). For dashboards and instructor review, `/analyze` now **also** builds a richer companion object — `diagnostic_report` — and embeds it in the **same `mastery_profiles` document** (additive; the canonical fields are untouched).
+
+- Built by `build_diagnostic_report(data, final_output)` in `app/services/diagnostic_report.py` (pure reshaping; no LLM, no pipeline-step changes). Its own `schema_version` is `kaa-forensic-report-v1.0`.
+- Sections: `github_forensics` (commit-pattern classification/breakdown, commit-size analysis, refactoring velocity, topic-level `authorship_risk`), `sandbox_telemetry` (per-session success ratio, error patterns, keystroke-burst/paste-in flags), `adaptive_quiz_results` (per-topic scores), `synthesized_mastery_profile` (reuses the canonical `knowledge_gaps`/`strengths` verbatim so the two can never diverge), and `recommendations`.
+- **Persisted** via the optional `diagnostic_report=` arg threaded through `save_mastery_profile()` → `build_mastery_profile_document()`; **exposed** in the `POST /analyze` response and inside `GET /api/v1/mastery-profiles/{id}/latest` (`data.diagnostic_report`).
+- Tests: `tests/test_diagnostic_report.py` (full suite 20 passing). Reference instances + a regenerator live in `docs/examples/`.
+
+**Honest scope (do not overstate to teammates):**
+- GitHub metrics are derived from `LearnerInput.github_commits` passed in the request body. `total_commits` is reported as `commits_sampled` + `is_partial_history: true` — a lower bound, since only ~10 recent commits per repo are fetched.
+- **No file-level AI-probability** is produced; authorship risk is a topic-level signal only.
+- **Not yet bridged to `repo_review_jobs`.** The real repo-review forensics (java level, per-repo findings) live in their own collection and do **not** flow into `diagnostic_report.github_forensics` today — that bridge is unbuilt. See §9.
 
 ---
 
@@ -451,7 +518,7 @@ This payload is the **research artefact** for Objective 5. Define once in `app/m
 | `/knowledge-assist` overview | 🟡 | Mock metrics, hard-coded cards |
 | `/knowledge-assist/sandbox` | 🟡 | Fake log feed, fake integrity score |
 | `/knowledge-assist/forensics` | 🟡 | Hard-coded GitHub timeline |
-| `/knowledge-assist/mastery` | 🟡 | Hard-coded topic scores |
+| `/knowledge-assist/mastery` | 🟡 | Reads **real** saved profile via `GET /api/v1/mastery-profiles/{id}/latest` (free-form student-ID lookup); renders gaps/strengths. `diagnostic_report` arrives in the response but has **no render panel yet** |
 | `/knowledge-assist/assessment` | 🟡 | Static quiz mock |
 | KAA HTTP client | 🔨 | `src/lib/api/kaa.ts` |
 | WebSocket hook | 🔨 | `src/hooks/useKAASocket.ts` |
@@ -460,8 +527,13 @@ This payload is the **research artefact** for Objective 5. Define once in `app/m
 | Module | Status | Notes |
 |---|---|---|
 | FastAPI app entry (`main.py`) | ✅ | |
-| Routes (`api/routes.py`) | ✅ | `/analyze`, `/quiz/generate`, `/health`, `/demo` |
-| GitHub routes | ✅ | Fetch + analyse |
+| Routes (`api/routes.py`) | ✅ | `/analyze` (now also builds + returns `diagnostic_report`), `/quiz/generate`, `/health`, `/demo` |
+| Canonical contract (`profile_contract.py` / `CanonicalMasteryOutput`) | ✅ | Saved to `mastery_profiles`; see §8 |
+| `diagnostic_report` builder (`services/diagnostic_report.py`) | ✅ | Rich forensic/telemetry/quiz companion; embedded in `mastery_profiles`; exposed via `/analyze` + `/…/latest`; see §8.1 |
+| Mastery-profile store (`mastery_profile_store.py`) | ✅ | `save_mastery_profile` / `get_latest_mastery_profile`; `mastery_profiles` collection + indexes |
+| Repo-review → mastery-profile bridge | 🔨 | **Unbuilt.** `repo_review_jobs` forensics do not feed `diagnostic_report.github_forensics` yet (uses request-body commits) |
+| Internal-key auth on KAA read endpoints | 🔨 | KAA *sends* `X-Internal-Key` to user-service but does **not** enforce it on its own routes; `/analyze` + `/…/latest` are open |
+| GitHub routes | ✅ | Fetch + analyse; repo review persists to `repo_review_jobs` |
 | Telemetry route | 🔨 | `api/telemetry.py` |
 | WebSocket route | 🔨 | `api/ws.py` |
 | 10-step pipeline | ✅ | All steps implemented |

@@ -12,9 +12,11 @@ from app.models.career import CareerPrediction
 from app.services.career import featurizer
 from app.services.career.model import load_model, readiness_level
 from app.services.career.narrative import build_narrative
-from app.services.career.store import save_career_prediction
+from app.services.career.store import get_latest_career_prediction, save_career_prediction
 from app.services.mastery_profile_store import get_latest_mastery_profile
 from app.services.quiz_store import get_latest_result
+
+_CACHE_SECONDS = 1800  # re-use an existing prediction if it's under 30 minutes old
 
 CAREER_SCHEMA_VERSION = "kaa-career-v1.0"
 
@@ -44,6 +46,22 @@ def _match_role(target: str, roles: list[str]) -> Optional[str]:
 
 
 async def predict_career(student_id: str, target_role: Optional[str] = None) -> Dict[str, Any]:
+    # Return cached prediction if recent enough and no specific target_role requested
+    if not target_role:
+        cached = await get_latest_career_prediction(student_id)
+        if cached:
+            created_raw = cached.get("created_at")
+            if created_raw:
+                try:
+                    # Strip timezone suffix so fromisoformat always gives a naive datetime
+                    clean = str(created_raw).split("+")[0].rstrip("Z")
+                    created_dt = datetime.fromisoformat(clean)
+                    age_s = (datetime.utcnow() - created_dt).total_seconds()
+                    if age_s < _CACHE_SECONDS:
+                        return cached
+                except (ValueError, TypeError):
+                    pass
+
     profile = await get_latest_mastery_profile(student_id)
     quiz = await get_latest_result(student_id)
 

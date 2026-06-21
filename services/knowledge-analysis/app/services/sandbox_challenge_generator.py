@@ -124,12 +124,15 @@ def _generation_prompt(topics: list[str], count: int) -> str:
     )
 
 
-async def _generate_and_verify(topics: list[str], count: int) -> list[dict[str, Any]]:
+async def _generate_and_verify(
+    topics: list[str], count: int, force_provider: Optional[str] = None
+) -> list[dict[str, Any]]:
     raw = await get_router().generate_json(
         prompt=_generation_prompt(topics, count),
         schema=GeneratedChallengeBatch,
         task=Task.QUESTION_GEN,
         temperature=0.9,  # high temperature -> fresh, varied questions each refresh
+        force_provider=force_provider,
     )
     batch = GeneratedChallengeBatch.model_validate(raw)
     if not batch.challenges:
@@ -170,13 +173,14 @@ async def build_challenge_batch(
     student: Any,
     count: int = 3,
     topics: Optional[list[str]] = None,
+    force_provider: Optional[str] = None,
 ) -> dict[str, Any]:
     """Return ``{"challenges": [...client views...], "source", "degraded"}``."""
     topics = topics or list(SANDBOX_DEFAULT_TOPICS)
 
     generated: list[dict[str, Any]] = []
     try:
-        generated = await _generate_and_verify(topics, count)
+        generated = await _generate_and_verify(topics, count, force_provider=force_provider)
     except Exception as exc:  # any LLM/router/validation failure -> seed fallback
         logger.warning("Sandbox challenge generation failed (%s); using seed bank", exc)
 

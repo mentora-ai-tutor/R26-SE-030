@@ -1,8 +1,9 @@
 """LLM-layer configuration. Read once at import time."""
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 # Vertex AI / Gemini
 GCP_PROJECT  = os.getenv("GCP_PROJECT",  "chapmanvoice")

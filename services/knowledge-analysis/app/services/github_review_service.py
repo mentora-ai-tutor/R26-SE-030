@@ -18,10 +18,16 @@ from bson import ObjectId
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.config import GITHUB_API_URL, INTERNAL_SERVICE_KEY, USER_SERVICE_INTERNAL_URL
+from app.core.config import (
+    FEATURE_CAREER_PREDICTION,
+    GITHUB_API_URL,
+    INTERNAL_SERVICE_KEY,
+    USER_SERVICE_INTERNAL_URL,
+)
 from app.db.database import get_database
 from app.services.llm import Task, get_router
 from app.services.llm.base import LLMAuthError
+from app.services.mastery_from_reviews import rebuild_mastery_profile_from_reviews
 
 logger = logging.getLogger(__name__)
 
@@ -774,7 +780,36 @@ async def process_review_job(
             },
         )
 
-        return serialize_job(await db.repo_review_jobs.find_one({"_id": job_object_id})) or {}
+        final_job = await db.repo_review_jobs.find_one({"_id": job_object_id})
+
+        # Bridge: feed the completed reviews into the canonical mastery profile so the
+        # Mastery page and Career card populate from real GitHub analysis. Best-effort —
+        # a bridge failure must never fail the review job itself.
+        if done_count and final_job:
+            public_student_id = final_job.get("public_student_id")
+            mastery_saved = False
+            try:
+                await rebuild_mastery_profile_from_reviews(
+                    student_object_id=final_job.get("student_id"),
+                    public_student_id=public_student_id,
+                )
+                mastery_saved = True
+            except Exception as exc:  # noqa: BLE001 - non-fatal enrichment step
+                logger.warning("Mastery bridge from reviews failed (non-fatal): %s", exc)
+
+            # With a fresh mastery profile saved, run the career-fit ML model and persist it
+            # to career_predictions so the Career card is populated automatically from the
+            # GitHub-connected flow (not only when a user opens the card). Best-effort.
+            if mastery_saved and FEATURE_CAREER_PREDICTION and public_student_id:
+                try:
+                    # Local import avoids importing the career/LLM stack at module load.
+                    from app.services.career.predictor import predict_career
+
+                    await predict_career(public_student_id)
+                except Exception as exc:  # noqa: BLE001 - non-fatal enrichment step
+                    logger.warning("Career prediction from reviews failed (non-fatal): %s", exc)
+
+        return serialize_job(final_job) or {}
     finally:
         await github.aclose()
 

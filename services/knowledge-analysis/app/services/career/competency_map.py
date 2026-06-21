@@ -29,6 +29,15 @@ TOPIC_TO_AXIS: Dict[str, str] = {
     "Algorithms": "A4", "Recursion": "A4",
     "Exception Handling": "A5", "File I/O": "A5",
     "Threads": "A6",
+    # GitHub-review bridge topic names (app/services/mastery_from_reviews.py) -> same axes,
+    # so a review-derived mastery profile also drives the career model instead of collapsing
+    # every axis to the neutral default. Topics with no measured-axis equivalent (Code Style,
+    # Project Hygiene & Security, Testing, General Code Quality) are intentionally unmapped.
+    "OOP & Class Design": "A2", "Interfaces & Abstraction": "A2", "API & Architecture Design": "A2",
+    "Collections & Data Structures": "A3",
+    "Algorithms & Complexity": "A4",
+    "File I/O & Resources": "A5", "Input Validation & Robustness": "A5",
+    "Concurrency & Threads": "A6",
 }
 
 _NEUTRAL = 0.5  # used when an axis has no evidence

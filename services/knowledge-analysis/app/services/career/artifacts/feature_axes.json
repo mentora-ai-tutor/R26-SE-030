@@ -1,0 +1,22 @@
+{
+  "axes": [
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7",
+    "A8"
+  ],
+  "names": {
+    "A1": "Programming Fundamentals",
+    "A2": "OOP & Design",
+    "A3": "Data Structures",
+    "A4": "Algorithms & Complexity",
+    "A5": "Robustness / Error Handling",
+    "A6": "Concurrency",
+    "A7": "Problem-solving Fluency",
+    "A8": "Independent Authorship"
+  }
+}

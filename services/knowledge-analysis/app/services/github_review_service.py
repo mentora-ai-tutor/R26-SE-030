@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,10 +31,16 @@ MAX_SOURCE_FILES = 12
 MAX_FILE_BYTES = 6_000
 MAX_BUNDLE_BYTES = 128_000
 MAX_TREE_PATHS = 160
-PER_REPO_TIMEOUT_SECONDS = 75
+# Budget for one repo's full router chain (all tier attempts + retries + backoff).
+# high-thinking repo review on gemini-2.5-pro (the effective primary, since the
+# tier0 preview model is ungranted) legitimately runs ~60-90s per call, so 75s
+# was clipping healthy work; 240s leaves room for a slow call plus a fallback.
+# The per-call Gemini SDK timeout (GEMINI_REQUEST_TIMEOUT_SECONDS) caps any
+# single hung generation well under this.
+PER_REPO_TIMEOUT_SECONDS = int(os.getenv("REVIEW_PER_REPO_TIMEOUT_SECONDS", "240"))
 # Local Ollama (often CPU-only in a container) is far slower than Vertex, so the
 # pinned-Ollama path gets a longer budget before we declare a per-repo timeout.
-OLLAMA_PER_REPO_TIMEOUT_SECONDS = 300
+OLLAMA_PER_REPO_TIMEOUT_SECONDS = int(os.getenv("REVIEW_OLLAMA_PER_REPO_TIMEOUT_SECONDS", "360"))
 
 LLM_CHOICES = ("gemini", "ollama")
 DEFAULT_LLM_CHOICE = "gemini"

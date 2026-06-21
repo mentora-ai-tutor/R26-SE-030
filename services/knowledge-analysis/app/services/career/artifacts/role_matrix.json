@@ -1,0 +1,52 @@
+{
+  "Junior Java / Backend Developer": [
+    0.7,
+    0.8,
+    0.72,
+    0.58,
+    0.72,
+    0.5,
+    0.62,
+    0.62
+  ],
+  "General Software Engineer": [
+    0.72,
+    0.72,
+    0.62,
+    0.6,
+    0.62,
+    0.45,
+    0.72,
+    0.62
+  ],
+  "DSA / Algorithms-focused Engineer": [
+    0.8,
+    0.5,
+    0.9,
+    0.95,
+    0.5,
+    0.4,
+    0.88,
+    0.7
+  ],
+  "Systems / Concurrency Engineer": [
+    0.8,
+    0.62,
+    0.72,
+    0.72,
+    0.7,
+    0.95,
+    0.72,
+    0.7
+  ],
+  "QA / Test Automation Engineer": [
+    0.62,
+    0.62,
+    0.52,
+    0.42,
+    0.88,
+    0.32,
+    0.62,
+    0.6
+  ]
+}

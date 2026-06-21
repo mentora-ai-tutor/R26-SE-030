@@ -51,6 +51,21 @@ def _supports_thinking_level(model_id: str) -> bool:
         return False
 
 
+def _build_http_options():
+    """Return HttpOptions carrying a per-request timeout, if the SDK supports it.
+
+    google-genai expresses HttpOptions.timeout in MILLISECONDS. Older builds
+    (we pin only >=0.4.0) may lack the field, so we degrade gracefully and let
+    the outer per-repo asyncio budget remain the only bound.
+    """
+    http_options_cls = getattr(_types, "HttpOptions", None)
+    if http_options_cls is None:
+        return None
+    if "timeout" not in getattr(http_options_cls, "model_fields", {}):
+        return None
+    return http_options_cls(timeout=cfg.GEMINI_REQUEST_TIMEOUT_SECONDS * 1000)
+
+
 def _build_thinking_config(model_id: str, thinking: str):
     """Return a ThinkingConfig compatible with the installed google-genai SDK."""
     if not thinking or not _supports_thinking_level(model_id):
@@ -149,6 +164,9 @@ def _classify_error(exc: Exception) -> Exception:
         or "rate limit" in msg_l
         or "unavailable" in msg_l
         or "deadline" in msg_l
+        or "timed out" in msg_l
+        or "timeout" in msg_l
+        or isinstance(exc, TimeoutError)
     ):
         return LLMTransientError(msg)
 
@@ -196,6 +214,11 @@ class GeminiProvider(LLMClient):
             kwargs["cached_content"] = cached_content
         if tools:
             kwargs["tools"] = tools
+        http_options = _build_http_options()
+        if http_options is not None and "http_options" in getattr(
+            _types.GenerateContentConfig, "model_fields", {}
+        ):
+            kwargs["http_options"] = http_options
 
         try:
             cfg_obj = _types.GenerateContentConfig(**kwargs)

@@ -1,0 +1,11 @@
+# Generated when the notebook/CLI runs locally — not source.
+__pycache__/
+*.pyc
+colab/career_lib.py        # written by the notebook's %%writefile cell at runtime
+colab/career_artifacts/
+colab/career_artifacts.zip
+colab/data/
+figures/
+# Raw datasets are large and fetched on demand; never commit them.
+data/
+*.csv

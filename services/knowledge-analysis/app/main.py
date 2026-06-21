@@ -12,10 +12,12 @@ from app.api.knowledge_profile_routes import (
     ensure_knowledge_profile_indexes,
     router as knowledge_profile_router,
 )
+from app.api.career_routes import router as career_router
 from app.api.mastery_profile_routes import router as mastery_profile_router
 from app.api.quiz_routes import router as quiz_router
 from app.api.sandbox_routes import router as sandbox_router
 from app.core.config import APP_NAME, APP_VERSION, CORS_ORIGINS
+from app.services.career.store import ensure_career_indexes
 from app.services.mastery_profile_store import ensure_mastery_profile_indexes
 from app.services.quiz_store import ensure_quiz_indexes
 from app.services.sandbox_challenge_generator import ensure_sandbox_challenge_indexes
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
         await ensure_knowledge_profile_indexes()
         await ensure_quiz_indexes()
         await ensure_sandbox_challenge_indexes()
+        await ensure_career_indexes()
     except Exception as exc:  # pragma: no cover - startup best effort
         logger.warning("Index creation skipped at startup: %s", exc)
     yield
@@ -55,3 +58,4 @@ app.include_router(knowledge_profile_router)
 app.include_router(mastery_profile_router)
 app.include_router(quiz_router)
 app.include_router(sandbox_router)
+app.include_router(career_router)

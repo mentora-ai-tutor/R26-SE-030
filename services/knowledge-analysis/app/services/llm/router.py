@@ -43,6 +43,7 @@ class Task(str, Enum):
     QUESTION_GEN         = "question_gen"
     SHORT_CODE_GRADE     = "short_code_grade"
     AGENTIC_TOOL_CALL    = "agentic_tool_call"
+    CAREER_NARRATIVE     = "career_narrative"
     PROBE                = "probe"
 
 
@@ -65,6 +66,7 @@ TASK_TIER_MAP: dict[Task, tuple[str, str]] = {
     Task.QUESTION_GEN:      ("tier2",  "low"),
     Task.SHORT_CODE_GRADE:  ("tier1",  "medium"),
     Task.AGENTIC_TOOL_CALL: ("tier0t", "high"),
+    Task.CAREER_NARRATIVE:  ("tier2",  "low"),
     Task.PROBE:             ("tier0",  "minimal"),
 }
 

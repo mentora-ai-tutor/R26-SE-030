@@ -15,3 +15,12 @@ GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com").rstrip("/
 # AI execution engine used to VERIFY generated sandbox challenges (run the reference
 # solution and capture its real stdout as the authoritative expected output).
 AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:5010").rstrip("/")
+
+
+def _flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
+
+
+# Career-fit prediction (hand-made NumPy model + LLM narrative). Default ON so the
+# wired-in endpoint works out of the box; set FEATURE_CAREER_PREDICTION=false to disable.
+FEATURE_CAREER_PREDICTION = _flag("FEATURE_CAREER_PREDICTION", "true")

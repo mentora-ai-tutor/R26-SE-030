@@ -25,6 +25,12 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
 DEAD_TIER_TTL_SECONDS = int(os.getenv("DEAD_TIER_TTL_SECONDS", "600"))
 MAX_RETRIES_PER_TIER  = int(os.getenv("MAX_RETRIES_PER_TIER", "1"))
 
+# Per-call ceiling for a single Gemini generation, in seconds. Kept well under
+# the per-repo review budget so one slow/hung call fails fast enough for the
+# router to still demote to a fallback tier within that budget. High-thinking
+# repo review on gemini-2.5-pro can legitimately run ~60-90s, so this is roomy.
+GEMINI_REQUEST_TIMEOUT_SECONDS = int(os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "120"))
+
 # Context caching
 MIN_CACHE_BYTES = int(os.getenv("MIN_CACHE_BYTES", "32768"))   # 32 KB
 CACHE_TTL_SECS  = int(os.getenv("CACHE_TTL_SECS", "900"))      # 15 min

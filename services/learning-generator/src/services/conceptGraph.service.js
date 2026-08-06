@@ -565,27 +565,34 @@ const augmentGaps = async (knowledgeGaps, strengths, graph, embedderFn, client) 
 
 const computeCoverage = async (studentId, unitCategory) => {
   const nodeQuery = unitCategory ? { category: unitCategory } : {};
-  const totalNodes = await ConceptGraphNode.countDocuments(nodeQuery);
+  const nodes = await ConceptGraphNode.find(nodeQuery).select('concept_id name category bloom_level');
 
-  if (totalNodes === 0) {
-    return { totalNodes: 0, coveredNodes: 0, coveragePct: 0 };
+  if (nodes.length === 0) {
+    return { totalNodes: 0, coveredNodes: 0, coveragePct: 0, covered: [] };
   }
 
-  const conceptIds = await ConceptGraphNode.find(nodeQuery).distinct('concept_id');
+  const conceptIds = nodes.map((n) => n.concept_id);
   const materials = await LearningMaterial.find({
     'structured_material.student_id': studentId,
     'structured_material.topic_id': { $in: conceptIds },
   }).select('structured_material.topic_id');
 
-  const coveredNodes = new Set(
-    materials.map((m) => m.structured_material.topic_id)
-  ).size;
-  const coveragePct = (coveredNodes / totalNodes) * 100;
+  const coveredIds = new Set(materials.map((m) => m.structured_material.topic_id));
+  const covered = nodes
+    .filter((n) => coveredIds.has(n.concept_id))
+    .map((n) => ({
+      concept_id: n.concept_id,
+      name: n.name,
+      category: n.category,
+      bloom_level: n.bloom_level,
+    }));
+  const coveragePct = (covered.length / nodes.length) * 100;
 
   return {
-    totalNodes,
-    coveredNodes,
+    totalNodes: nodes.length,
+    coveredNodes: covered.length,
     coveragePct: Number(coveragePct.toFixed(2)),
+    covered,
   };
 };
 

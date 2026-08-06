@@ -739,7 +739,7 @@ docker compose exec lmg-service node scripts/seedConceptGraph.js
 
 | Route | Page | Description |
 |-------|------|-------------|
-| `/learning-generator` | Overview Dashboard | Hero card with gap/material counts, active generation jobs with live 5s polling, progress stats, knowledge gap cards, sidebar with quick actions/**concept-coverage panel**/module progress/score history/strengths, submit-profile dialog |
+| `/learning-generator` | Overview Dashboard | Hero card with gap/material counts, active generation jobs with live 5s polling, progress stats, knowledge gap cards + **prerequisite-material cards** (concept-graph-injected implicit prerequisites), sidebar with quick actions/**concept-coverage panel**/module progress/score history/strengths, submit-profile dialog |
 | `/learning-generator/knowledge-gaps` | Knowledge Gaps | Detailed gap analysis with summary cards (total/fundamental/partial/surface), filter buttons, expandable cards with evidence, misconceptions, error patterns, prerequisites, interventions |
 | `/learning-generator/materials` | Materials Gallery | Searchable/filterable grid of generated materials with gap type counts, topic search, MaterialCard components linking to workspaces |
 | `/learning-generator/materials/[materialId]` | Material Workspace | Step-by-step guided learning with: learning path sidebar, content renderer (intro → concepts → guide → examples → mistakes → practice → debugging), code editor with execution, AI insight panels, quiz section, progress tracking. Implicit-prerequisite materials show a blue contextual banner (concept name + `prerequisite_reason`) |
@@ -878,13 +878,13 @@ The sidebar (`src/components/dashboard/Sidebar.tsx`) includes a **Material Gener
 ### Tests
 
 ```bash
-# Unit + integration tests (Node's built-in test runner, no extra deps) — 32 passing
+# Unit + integration tests (Node's built-in test runner, no extra deps) — 33 passing
 npm test
 # Concept-graph unit tests (resolution tiers, closure/BFS, parsing)
 # Integration tests (fail-open flow, LLM escalation, empty graph)
 # Seed cycle-detection tests (real seed acyclic + rejection cases)
 # profileJobCounting tests (augmented list → GenerationJob counters, gap_topic_ids,
-#   implicit-gap fields, fail-open counter behaviour)
+#   implicit-gap fields, fail-open counter behaviour, explicit-gap concept_context)
 ```
 
 ### Health Check

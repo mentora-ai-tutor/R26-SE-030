@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const MasteryProfile = require('../models/MasteryProfile');
 const GenerationJob = require('../models/GenerationJob');
 const n8nService = require('../services/n8n.service');
@@ -246,6 +247,43 @@ const getMasteryProfile = async (req, res, next) => {
   }
 };
 
+const getMasteryProfileById = async (req, res, next) => {
+  try {
+    const { profileId } = req.params;
+    const tokenStudentId = req.student.id;
+
+    if (!mongoose.isValidObjectId(profileId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'No mastery profile found for this id',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    const profile = await MasteryProfile.findById(profileId);
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: 'No mastery profile found for this id',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    if (profile.student_id !== tokenStudentId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You can only access your own mastery profile',
+        code: 'FORBIDDEN',
+      });
+    }
+
+    return apiResponse.success(res, profile);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getMasteryHistory = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -293,5 +331,6 @@ const getMasteryHistory = async (req, res, next) => {
 module.exports = {
   submitMasteryProfile,
   getMasteryProfile,
+  getMasteryProfileById,
   getMasteryHistory,
 };

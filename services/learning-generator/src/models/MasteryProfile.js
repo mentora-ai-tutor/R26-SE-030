@@ -21,6 +21,37 @@ const knowledgeGapSchema = new mongoose.Schema({
   prerequisite_topics: [String],
   related_topics: [String],
   suggested_intervention: mongoose.Schema.Types.Mixed,
+  resolved_concept_id: String,
+  resolution_method: {
+    type: String,
+    enum: ['exact', 'alias', 'embedding', 'llm', 'llm_no_match', 'unresolved'],
+  },
+  resolution_confidence: Number,
+  concept_context: mongoose.Schema.Types.Mixed,
+}, { _id: false });
+
+const implicitGapSchema = new mongoose.Schema({
+  concept_id: String,
+  injected: {
+    type: Boolean,
+    default: true,
+  },
+  reason: String,
+}, { _id: false });
+
+const unverifiedPrerequisiteSchema = new mongoose.Schema({
+  concept_id: String,
+  blocks: String,
+}, { _id: false });
+
+const augmentedProfileSchema = new mongoose.Schema({
+  implicit_gaps: [implicitGapSchema],
+  unverified_prerequisites: [unverifiedPrerequisiteSchema],
+  coverage_snapshot: {
+    totalNodes: Number,
+    coveredNodes: Number,
+    coveragePct: Number,
+  },
 }, { _id: false });
 
 const masteryProfileSchema = new mongoose.Schema({
@@ -39,6 +70,7 @@ const masteryProfileSchema = new mongoose.Schema({
     max: 100,
   },
   knowledge_gaps: [knowledgeGapSchema],
+  augmented_profile: augmentedProfileSchema,
   strengths: mongoose.Schema.Types.Mixed,
   recommendations: mongoose.Schema.Types.Mixed,
   data_sources: mongoose.Schema.Types.Mixed,

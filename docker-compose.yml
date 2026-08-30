@@ -12,7 +12,7 @@ services:
       - ./services/user service/.env
     environment:
       PORT: 3001
-      CORS_ORIGIN: http://localhost:3000,http://localhost:3002
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3002,https://mentora.kaweesha.com
 
   # ── Learning Material Generator Service ──
   lmg-service:
@@ -27,7 +27,7 @@ services:
       - ./services/learning-generator/.env
     environment:
       PORT: 3002
-      CORS_ORIGIN: http://localhost:3000,http://localhost:3002
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3002,https://mentora.kaweesha.com
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -48,7 +48,7 @@ services:
       PORT: 5002
       N8N_BASE_URL: http://n8n-container:5678
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000,https://mentora.kaweesha.com
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

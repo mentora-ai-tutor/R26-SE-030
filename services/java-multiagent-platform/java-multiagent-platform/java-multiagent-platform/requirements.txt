@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+pyjwt
+pymongo[srv]
+sqlalchemy
+psycopg2-binary
+langchain
+langchain-openai
+langgraph
+chromadb
+pypdf
+python-dotenv
+websockets
+scikit-learn
+numpy

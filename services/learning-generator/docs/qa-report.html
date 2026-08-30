@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QA Test Report — MENTORA LMG Service</title>
+<style>
+:root{
+  --ink:#16233b; --muted:#5b6b85; --line:#e3e9f2;
+  --bg:#f4f6fb; --panel:#ffffff;
+  --navy:#0f2a52; --navy2:#1d3a6e;
+  --blue:#2563eb; --teal:#0d9488;
+  --green:#16a34a; --green-bg:#eaf7ef; --green-bd:#b8e6c9;
+  --red:#dc2626; --red-bg:#fdecec; --red-bd:#f5c2c2;
+  --amber:#d97706; --amber-bg:#fdf3e3; --amber-bd:#f3d9a8;
+  --gray:#6b7280; --gray-bg:#f0f2f5; --gray-bd:#d6dae1;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink);background:var(--bg);line-height:1.55;font-size:14.5px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px 70px}
+
+/* header band */
+.band{background:linear-gradient(120deg,var(--navy) 0%,var(--navy2) 70%,#2a5a9e 100%);
+  color:#fff;padding:30px 0 0;}
+.band .wrap{padding-bottom:26px}
+.kicker{font-size:12px;letter-spacing:3px;text-transform:uppercase;opacity:.7;font-weight:600}
+h1.doctitle{font-size:27px;margin:6px 0 2px;font-weight:800}
+.docmeta{font-size:13px;opacity:.85}
+.docmeta span{margin-right:20px;display:inline-block}
+.statusrow{margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;font-weight:700;font-size:13px}
+.pill-pass{background:#0e2b18;color:#5ee08a;border:1px solid #2c6b41}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:#2fd575;box-shadow:0 0 0 4px rgba(47,213,117,.18)}
+.docid{font-variant-numeric:tabular-nums}
+
+/* sticky nav */
+nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;gap:4px;align-items:center;padding-top:0;padding-bottom:0;overflow-x:auto}
+nav a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;padding:13px 12px;white-space:nowrap;
+  border-bottom:3px solid transparent}
+nav a:hover{color:var(--navy)}
+nav a.on{border-bottom-color:var(--blue);color:var(--navy)}
+
+/* section */
+section{padding:34px 0 6px}
+.sec-head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.sec-num{background:var(--navy);color:#fff;width:30px;height:30px;border-radius:8px;display:flex;
+  align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:none}
+.sec-title{font-size:20px;font-weight:800;margin:0}
+.sec-sub{color:var(--muted);font-size:13.5px;margin:2px 0 18px 42px}
+h3{font-size:15px;font-weight:700;margin:22px 0 8px}
+
+/* verdict banner */
+.verdict{display:flex;gap:26px;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:24px;flex-wrap:wrap;box-shadow:0 6px 24px rgba(15,42,82,.06)}
+.pass-ring{position:relative;width:130px;height:130px;flex:none}
+.pass-ring svg{transform:rotate(-90deg)}
+.pass-ring .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.pass-ring .c .p{font-size:30px;font-weight:800;color:var(--green);line-height:1}
+.pass-ring .c .l{font-size:11px;color:var(--muted);margin-top:2px}
+.vtext{flex:1;min-width:220px}
+.vtext .t{font-size:19px;font-weight:800;color:var(--green)}
+.vtext .s{color:var(--muted);font-size:13.5px;margin-top:4px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;flex:2;min-width:320px}
+.kpi{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:center}
+.kpi .n{font-size:24px;font-weight:800;line-height:1}
+.kpi .l{font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
+.kpi.g .n{color:var(--green)} .kpi.r .n{color:var(--red)} .kpi.b .n{color:var(--blue)} .kpi.y .n{color:var(--amber)}
+
+/* cards grid */
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:6px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.card .t{font-weight:700;font-size:15px}
+.card .d{color:var(--muted);font-size:13px;margin-top:4px}
+
+/* two col */
+.cols{display:grid;grid-template-columns:1.3fr 1fr;gap:22px;align-items:start}
+@media(max-width:820px){.cols{grid-template-columns:1fr}}
+
+/* tables */
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th{background:#eef2f9;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.5px;
+  text-align:left;padding:11px 14px;font-weight:700;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td code{background:#eef1f7;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.b-open-l{background:var(--gray-bg);color:var(--gray);border:1px solid var(--gray-bd)}
+.b-open-m{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-bd)}
+.b-pass{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd)}
+.b-info{background:var(--gray-bg);color:var(--gray);border:1px solid var(--gray-bd)}
+.b-fix{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd)}
+.b-fail{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bd)}
+
+/* result bars by module */
+.filerow{display:flex;flex-wrap:wrap;gap:12px}
+.fcard{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:14px 16px;flex:1;min-width:300px}
+.fcard .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.fcard .name{font-weight:700;font-size:13.5px;flex:1;word-break:break-word}
+.fcard .layer{font-size:10.5px;color:var(--blue);text-transform:uppercase;letter-spacing:.4px;
+  border:1px solid rgba(37,99,235,.25);background:rgba(37,99,235,.06);padding:2px 8px;border-radius:999px;white-space:nowrap}
+.bar{height:9px;background:#e8edf5;border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.bar>div{height:100%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:99px}
+.fcount{font-size:12.5px;color:var(--muted);margin-top:6px}
+.fcount b{color:var(--ink)}
+
+/* coverage list */
+.covitem{display:flex;align-items:center;gap:14px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:13.5px}
+.covitem:last-child{border-bottom:none}
+.covlabel{flex:1}.covlabel b{display:block;font-size:13.5px}.covlabel span{color:var(--muted);font-size:12.5px}
+.covnum{width:56px;text-align:right;font-weight:700;color:var(--navy)}
+
+/* search */
+.searchbar{display:flex;gap:10px;align-items:center;margin:14px 0}
+.searchbar input{flex:1;min-width:200px;border:1px solid var(--line);background:#fff;padding:10px 14px;
+  border-radius:10px;font-size:14px;outline:none}
+.searchbar input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--muted);padding:6px 12px;
+  border-radius:999px;font-size:12.5px;user-select:none;transition:.15s}
+.chip:hover{color:var(--navy)}
+.chip.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+
+/* results matrix (collapsible files) */
+.file{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fff}
+.fhead{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer}
+.fhead:hover{background:#f8fafd}
+.fname{font-weight:650;flex:1;font-size:13.5px}
+.flayer{font-size:10.5px;color:var(--teal);border:1px solid rgba(13,148,136,.3);background:rgba(13,148,136,.07);
+  padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.mbar{width:120px;height:8px;background:#e8edf5;border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.mbar>div{height:100%;background:linear-gradient(90deg,var(--green),#4ade80)}
+.fcount{font-size:12.5px;color:var(--muted);width:88px;text-align:right;font-variant-numeric:tabular-nums}
+.chev{color:#9aa7bd;transition:.2s;font-size:12px}
+.file.open .chev{transform:rotate(90deg)}
+.tests{display:none;border-top:1px solid var(--line);padding:8px 12px 12px;background:#fcfdff}
+.file.open .tests{display:block}
+.tst{display:flex;gap:10px;align-items:flex-start;padding:6px 8px;border-radius:8px;font-size:13px}
+.tst:hover{background:#f4f7fc}
+.dot{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none}
+.dot.pass{background:var(--green)}
+.dot.fail{background:var(--red)}
+.empty{text-align:center;color:var(--muted);padding:36px 0;font-size:14px}
+
+/* print */
+@media print{
+  body{background:#fff}
+  nav{display:none}
+  .band{background:var(--navy);-webkit-print-color-adjust:exact}
+  section{break-inside:avoid-page}
+  .file,.verdict,.card,table{-webkit-print-color-adjust:exact}
+  .fhead{cursor:default}
+  .tests{display:block!important}
+  .file.open .tests{display:block}
+  a{color:inherit}
+}
+
+/* signoff */
+.signoff{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+@media(max-width:760px){.signoff{grid-template-columns:1fr}}
+.so{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff;text-align:center}
+.so .r{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.so .n{font-weight:700;margin-top:4px}
+.so .dt{color:var(--muted);font-size:12.5px;margin-top:2px}
+.signline{position:relative;margin-top:22px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+
+<div class="band">
+  <div class="wrap">
+    <div class="kicker">Quality Assurance · Test Report</div>
+    <h1 class="doctitle" id="docTitle"></h1>
+    <div class="docmeta">
+      <span>Module: <b>mentora-backend / services / learning-generator</b></span>
+      <span>Report ID: <b class="docid">QA-LMG-2026-08-30</b></span>
+      <span>Date: <b>30 August 2026</b></span>
+      <span>Prepared by: <b>MENTORA QA</b></span>
+    </div>
+    <div class="statusrow">
+      <span class="pill pill-pass"><span class="dot"></span><span id="pillText"></span></span>
+      <span style="opacity:.85;font-size:13px" id="pillSub"></span>
+    </div>
+  </div>
+</div>
+
+<nav><div class="wrap" id="navLinks"></div></nav>
+
+<div class="wrap" id="app"></div>
+
+<script id="data" type="application/json">{"meta": {"docId": "QA-LMG-2026-08-30", "service": "MENTORA Learning Material Generator (LMG) Service", "module": "mentora-backend / services / learning-generator", "date": "30 August 2026", "runner": "Node.js native test runner", "framework": "node:test + node:assert/strict", "command": "npm test", "node": "v25.8.2 (engines: >=20)", "total": 198, "passed": 198, "failed": 0, "files": 17, "duration": 0.67, "tester": "MENTORA QA", "status": "PASS"}, "files": [{"name": "agent.controller.test.js", "layer": "Controller", "pass": 14, "fail": 0, "tests": [["getAgentLogs returns 403 on student mismatch", "pass"], ["getAgentLogs returns paginated logs", "pass"], ["getJobStatus returns 404 when job not found", "pass"], ["getJobStatus returns 403 when job belongs to another student", "pass"], ["getJobStatus returns the job for its owner", "pass"], ["getJobsByStudent returns the student jobs", "pass"], ["getGlobalStats returns global agent stats", "pass"], ["updateJobStatus returns 400 for an invalid status", "pass"], ["updateJobStatus updates a valid status", "pass"], ["completeJob marks the job completed when all materials exist", "pass"], ["completeJob keeps the job processing when fewer materials exist", "pass"], ["retryMaterialGeneration returns 404 when material missing", "pass"], ["retryMaterialGeneration returns 202 and queues a retry", "pass"], ["retryMaterialGeneration returns 503 when n8n offline", "pass"]]}, {"name": "app.integration.test.js", "layer": "API / Integration", "pass": 6, "fail": 0, "tests": [["GET /health returns running service info", "pass"], ["GET /api/materials without token returns 401 AUTH_MISSING", "pass"], ["GET protected route returns 401 AUTH_INVALID when token verification fails", "pass"], ["GET protected route returns 503 when user service is offline", "pass"], ["POST /api/webhooks/n8n/material without secret returns 401", "pass"], ["POST /api/webhooks/n8n/material with invalid secret returns 403", "pass"]]}, {"name": "conceptGraph.integration.test.js", "layer": "Service / Integration", "pass": 5, "fail": 0, "tests": [["resolveGap runs the full three-tier flow and closePrerequisites flags blocking prerequisites", "pass"], ["resolveGap escalates to LLM tier when embedding fails", "pass"], ["resolveGap returns unresolved and never throws when the LLM is down", "pass"], ["resolveGap fails open on an empty graph", "pass"], ["resolveGap does not call the LLM when the graph is empty", "pass"]]}, {"name": "conceptGraph.service.extra.test.js", "layer": "Service", "pass": 18, "fail": 0, "tests": [["bloomToDifficulty maps remember/understand to beginner", "pass"], ["bloomToDifficulty maps apply/analyze to intermediate", "pass"], ["bloomToDifficulty maps evaluate/create (and unknown) to advanced", "pass"], ["buildConceptContext maps prerequisite/related ids to names", "pass"], ["stripFences handles json fences, plain fences and backticks", "pass"], ["findOutermostObject extracts the first balanced object", "pass"], ["extractField parses string, array and object typed JSON fields", "pass"], ["seedGraph upserts nodes and returns a summary", "pass"], ["seedGraph throws when embedding count mismatches nodes", "pass"], ["computeCoverage returns zeroed result when no nodes found", "pass"], ["computeCoverage tallies covered nodes from materials", "pass"], ["resolveLLM returns the matched concept_id on a valid LLM response", "pass"], ["resolveLLM returns llm_no_match when LLM says NO_MATCH", "pass"], ["resolveLLM fails open when the LLM throws", "pass"], ["resolveEmbedding returns null when the embedder throws", "pass"], ["resolveGap short-circuits to unresolved on an empty graph without calling deps", "pass"], ["augmentGaps injects implicit prerequisite gaps and returns effective list", "pass"], ["augmentGaps maps resolved gaps to concept_context and resolution method", "pass"]]}, {"name": "conceptGraph.service.test.js", "layer": "Service", "pass": 18, "fail": 0, "tests": [["resolveExact matches node name exactly, case-insensitively", "pass"], ["resolveExact matches aliases", "pass"], ["resolveExact returns null when nothing matches", "pass"], ["resolveExact returns null for empty topic", "pass"], ["classify returns MASTERED for strengths", "pass"], ["classify returns GAP for resolved gaps", "pass"], ["classify returns UNKNOWN when never assessed", "pass"], ["closePrerequisites flags blocking UNKNOWN prerequisites without injecting them", "pass"], ["closePrerequisites stops walking when a prerequisite is MASTERED", "pass"], ["closePrerequisites walks past explicit GAP prerequisites", "pass"], ["parseConceptIdResponse handles fenced plain identifiers", "pass"], ["parseConceptIdResponse handles JSON objects", "pass"], ["parseConceptIdResponse extracts identifiers from surrounding text", "pass"], ["parseConceptIdResponse returns null for NO_MATCH", "pass"], ["cosineSimilarity computes correct values", "pass"], ["resolveEmbedding returns null below threshold", "pass"], ["resolveEmbedding escalates on ambiguity (top-2 within 0.05)", "pass"], ["resolveEmbedding returns best node above threshold with clear margin", "pass"]]}, {"name": "jobTracker.service.test.js", "layer": "Service", "pass": 9, "fail": 0, "tests": [["syncJobCounters marks job completed when all gaps have materials", "pass"], ["syncJobCounters ignores materials generated before the job was created", "pass"], ["syncJobCounters keeps job processing when fewer materials than total", "pass"], ["updateJobCounters picks the most recent active job and syncs it", "pass"], ["updateJobCounters syncs a failed timeout job when no active job exists", "pass"], ["updateJobCounters returns undefined when no active or matching failed job exists", "pass"], ["resyncActiveJobs processes all active and timeout-failed jobs", "pass"], ["resyncActiveJobs handles per-job errors gracefully", "pass"], ["start/stop lifecycle guards against duplicate start", "pass"]]}, {"name": "material.controller.test.js", "layer": "Controller", "pass": 12, "fail": 0, "tests": [["getMaterialsByStudent returns 403 on student mismatch", "pass"], ["getMaterialsByStudent returns paginated materials", "pass"], ["getMaterialsByStudent honors sort order param", "pass"], ["getMaterialById returns 403 when material belongs to another student", "pass"], ["getMaterialById returns the material for the owner", "pass"], ["getMaterialById returns 404 when not found", "pass"], ["getTopics returns 403 on student mismatch and topics on success", "pass"], ["getMaterialStats returns computed stats", "pass"], ["getMaterialsByTopic returns materials filtered by topic", "pass"], ["deleteMaterial soft-deletes the material for the owner", "pass"], ["deleteMaterial returns 403 when material belongs to another student", "pass"], ["deleteMaterial returns 404 when material missing", "pass"]]}, {"name": "material.service.test.js", "layer": "Service", "pass": 10, "fail": 0, "tests": [["buildMaterialQuery always scopes to student and excludes deleted materials", "pass"], ["buildMaterialQuery adds topic filter when provided", "pass"], ["buildMaterialQuery adds gap_type filter when provided", "pass"], ["buildMaterialQuery adds status filter when provided", "pass"], ["getMaterialStats returns the empty-state shape when there are no materials", "pass"], ["getMaterialStats computes gap-type counts, averages, reviews, retries and latest date", "pass"], ["getGlobalAgentStats returns the empty-state shape when there are no logs", "pass"], ["getGlobalAgentStats computes rates across logs", "pass"], ["formatMaterialForResponse strips __v and returns null for missing material", "pass"], ["getDistinctTopics aggregates topics in descending latest_generated_at order", "pass"]]}, {"name": "middleware.test.js", "layer": "Middleware", "pass": 17, "fail": 0, "tests": [["validate passes a valid body through to next()", "pass"], ["validate returns 400 with details on validation failure", "pass"], ["errorMiddleware returns ServiceError shape with statusCode and fix", "pass"], ["errorMiddleware handles mongoose ValidationError (with errors object)", "pass"], ["errorMiddleware handles CastError", "pass"], ["errorMiddleware handles duplicate key (code 11000)", "pass"], ["errorMiddleware handles JSON body parse errors", "pass"], ["errorMiddleware falls back to 500 internal server error", "pass"], ["notFoundMiddleware returns a 404 route message", "pass"], ["validateWebhookSecret returns 401 when secret missing", "pass"], ["validateWebhookSecret returns 403 when secret wrong", "pass"], ["validateWebhookSecret calls next() on correct secret", "pass"], ["protect returns 401 when Authorization header missing", "pass"], ["protect returns 401 when token empty", "pass"], ["protect populates req.student on valid token", "pass"], ["protect returns 401 when token invalid", "pass"], ["protect returns 503 when user service is offline", "pass"]]}, {"name": "n8n.service.test.js", "layer": "Service", "pass": 14, "fail": 0, "tests": [["triggerMaterialGeneration posts payload and maps success response", "pass"], ["triggerMaterialGeneration maps status failure (not success)", "pass"], ["triggerMaterialGeneration throws N8N_OFFLINE on ECONNREFUSED", "pass"], ["triggerMaterialGeneration throws N8N_TIMEOUT on timeout", "pass"], ["triggerMaterialGeneration throws N8N_GENERATION_FAILED on 500 response", "pass"], ["triggerMaterialGeneration throws N8N_ERROR with response status otherwise", "pass"], ["triggerMaterialGeneration throws N8N_ERROR on unexpected error", "pass"], ["getMaterialsByStudent returns data on success", "pass"], ["getMaterialsByStudent returns [] when n8n is offline", "pass"], ["getMaterialsByStudent returns [] on response error", "pass"], ["checkHealth returns reachable true on 2xx", "pass"], ["checkHealth returns reachable false on error", "pass"], ["getWorkflowStatus returns workflows on success", "pass"], ["getWorkflowStatus fails open on error", "pass"]]}, {"name": "profile.controller.test.js", "layer": "Controller", "pass": 11, "fail": 0, "tests": [["submitMasteryProfile returns 403 when student_id mismatch", "pass"], ["submitMasteryProfile returns 202 with job info on success", "pass"], ["submitMasteryProfile returns 503 with N8N_OFFLINE code when n8n is offline", "pass"], ["submitMasteryProfile returns 202 with timeout message on N8N_TIMEOUT", "pass"], ["submitMasteryProfile continues (fail-open) when the concept graph gate throws", "pass"], ["getMasteryProfile returns 403 on student mismatch", "pass"], ["getMasteryProfile returns 404 when no profile exists", "pass"], ["getMasteryProfile returns the profile on success", "pass"], ["getMasteryProfileById returns 404 for an invalid ObjectId", "pass"], ["getMasteryProfileById returns 403 when profile belongs to another student", "pass"], ["getMasteryHistory returns paginated history", "pass"]]}, {"name": "profileJobCounting.test.js", "layer": "Integration", "pass": 4, "fail": 0, "tests": [["GenerationJob gaps_total/gaps_queued use the augmented list (explicit + implicit), not the raw submitted count", "pass"], ["GenerationJob counters fail open to the raw count when the graph is empty", "pass"], ["explicitly resolved gaps in the n8n payload carry a non-null concept_context (same shape as implicit)", "pass"], ["augmentGaps computes the augmented list in one place (single source of truth)", "pass"]]}, {"name": "progress.controller.test.js", "layer": "Controller", "pass": 10, "fail": 0, "tests": [["getProgressByMaterial returns 404 when material missing", "pass"], ["getProgressByMaterial returns 403 when material belongs to another student", "pass"], ["getProgressByMaterial returns existing progress", "pass"], ["updateProgress creates a new progress doc and adds completed step", "pass"], ["updateProgress prevents duplicate completed steps", "pass"], ["updateProgress marks completed when all steps done", "pass"], ["getProgressByStudent returns enriched progress for the owner", "pass"], ["getProgressStats computes progress percentages", "pass"], ["getCoverage returns coverage with implicit gap details", "pass"], ["seedConceptGraph returns seed summary", "pass"]]}, {"name": "seedCycleDetection.test.js", "layer": "Service", "pass": 6, "fail": 0, "tests": [["the real seed graph is acyclic", "pass"], ["validateGraphAcyclic rejects a cyclic graph", "pass"], ["validateGraphAcyclic rejects a self-loop", "pass"], ["validateGraphAcyclic rejects unknown prerequisite references", "pass"], ["validateGraphAcyclic rejects duplicate concept_ids", "pass"], ["validateGraphAcyclic rejects non-array input", "pass"]]}, {"name": "userService.client.test.js", "layer": "Service", "pass": 17, "fail": 0, "tests": [["verifyToken returns valid student when user service says valid", "pass"], ["verifyToken returns invalid when user service says invalid", "pass"], ["verifyToken throws USER_SERVICE_OFFLINE on connection refused", "pass"], ["verifyToken throws AUTH_FAILED on 401 response", "pass"], ["verifyToken throws USER_SERVICE_ERROR on 500 response", "pass"], ["verifyToken throws USER_SERVICE_TIMEOUT on timeout", "pass"], ["verifyToken throws USER_SERVICE_ERROR on unexpected error", "pass"], ["getStudent returns data on success", "pass"], ["getStudent throws USER_SERVICE_OFFLINE on connection refused", "pass"], ["getStudent throws USER_SERVICE_ERROR on response error", "pass"], ["getStudent rethrows unexpected errors", "pass"], ["updateStudentStats patches stats and returns data on success", "pass"], ["updateStudentStats returns null on connection refused (fire and forget)", "pass"], ["updateStudentStats returns null on any other error", "pass"], ["updateStudentStatsAsync swallows errors (fire and forget)", "pass"], ["checkHealth returns reachable on 2xx", "pass"], ["checkHealth returns unreachable on error", "pass"]]}, {"name": "utils.test.js", "layer": "Utils", "pass": 17, "fail": 0, "tests": [["ServiceError stores code, statusCode, message and fix", "pass"], ["ServiceError defaults fix to null", "pass"], ["apiResponse.success returns success envelope with provided status", "pass"], ["apiResponse.created uses 201 and default message", "pass"], ["apiResponse.accepted uses 202", "pass"], ["apiResponse.error builds failure envelope with optional fix", "pass"], ["apiResponse.paginated wraps items and meta", "pass"], ["masterySubmitSchema accepts a valid payload", "pass"], ["masterySubmitSchema rejects a payload with no knowledge gaps", "pass"], ["masterySubmitSchema rejects an overall score out of range", "pass"], ["materialQuerySchema rejects an invalid gap_type", "pass"], ["materialQuerySchema accepts valid query params", "pass"], ["paginationQuerySchema rejects limit above 100", "pass"], ["seedConceptGraphSchema validates an array of nodes", "pass"], ["seedConceptGraphSchema rejects an empty array", "pass"], ["n8nWebhookSchema accepts a valid material payload", "pass"], ["n8nWebhookSchema rejects missing material_id", "pass"]]}, {"name": "webhook.controller.test.js", "layer": "Controller", "pass": 10, "fail": 0, "tests": [["receiveMaterialCallback creates a new material and updates the job", "pass"], ["receiveMaterialCallback updates an existing material", "pass"], ["receiveMaterialCallback does not create an agent log when agentic_metadata missing", "pass"], ["receiveBatchCallback processes multiple materials and updates job counters", "pass"], ["receiveBatchCallback counts failures gracefully", "pass"], ["receiveJobStatusUpdate returns 404 when job not found", "pass"], ["receiveJobStatusUpdate updates job status", "pass"], ["handleProfileCallback updates the profile and job", "pass"], ["handleWorkflowComplete returns 400 when job_id missing", "pass"], ["handleWorkflowComplete marks job completed based on material count", "pass"]]}], "defects": [{"id": "LINT-01", "severity": "Low", "category": "Code Style", "file": "src/controllers/agent.controller.js", "desc": "Unexpected string concatenation (prefer-template) on lines 223 & 263.", "status": "Open (Non-blocking)", "impact": "None \u2014 style only", "fix": "Refactor to template literals."}, {"id": "LINT-02", "severity": "Low", "category": "Code Style", "file": "src/controllers/profile.controller.js", "desc": "object-shorthand & prefer-template warnings (lines 34-35, 102, 185-186, 211-212).", "status": "Open (Non-blocking)", "impact": "None \u2014 style only", "fix": "Apply auto-fix (eslint --fix)."}, {"id": "LINT-03", "severity": "Low", "category": "Code Style", "file": "src/middleware/error.middleware.js", "desc": "Unused 'next' parameter (no-unused-vars) on line 4.", "status": "Open (Non-blocking)", "impact": "None", "fix": "Prefix param with underscore or remove."}, {"id": "INFRA-01", "severity": "Low", "category": "Infrastructure", "file": "src/models/* (Mongoose)", "desc": "Duplicate schema index on structured_material.material_id warning on require.", "status": "Open (Non-blocking)", "impact": "None functional", "fix": "Remove duplicate index declaration."}, {"id": "COV-01", "severity": "Medium", "category": "Test Coverage", "file": "entire service", "desc": "No coverage tooling (c8/nyc) configured; line/branch coverage % not measured.", "status": "Open (Non-blocking)", "impact": "Coverage gaps not quantifiable", "fix": "Add c8 to npm scripts."}, {"id": "NOTE-01", "severity": "Info", "category": "Environment", "file": "test runner", "desc": "Runner logged 0 failed; 10 ESLint warnings (0 errors) across src/.", "status": "Closed / Verified", "impact": "None", "fix": "N/A"}], "coverage": [["Unit \u2014 Services", "material.service, n8n.service, userService.client, jobTracker, conceptGraph.service", 88], ["Unit \u2014 Controllers", "profile, material, webhook, agent, progress, conceptGraph", 57], ["Middleware", "validate, errorMiddleware, notFound, validateWebhookSecret, protect", 17], ["Utils", "ServiceError, apiResponse, validation schemas", 17], ["API Integration", "Express app routes: /health, /api/*, /api/webhooks/n8n", 6], ["Service Integration", "conceptGraph resolveGap three-tier flow + seed graph", 9], ["Regression (existing)", "conceptGraph, profileJobCounting, seedCycleDetection retained", 0]], "summary": {"pass_rate": 100.0, "blurb": "The MENTORA Learning Material Generator (LMG) service was subjected to a full regression and expansion test pass covering its service layer, controllers, middleware, utilities and Express HTTP routes. A total of 198 automated tests were executed under the Node.js native test runner. All 198 tests passed (0 failures), yielding a 100% pass rate. Two new test suites were added during this pass \u2014 app-level HTTP integration tests and progress-controller tests \u2014 alongside bug fixes in existing suites. The service is assessed as READY FOR RELEASE with respect to test coverage."}}</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const {meta, files, defects, coverage, summary}=D;
+
+document.getElementById('docTitle').textContent='MENTORA Learning Material Generator (LMG) Service — QA Test Report';
+document.getElementById('pillText').textContent='VERDICT: PASS — Ready for Release';
+document.getElementById('pillSub').textContent=`${summary.pass_rate}% pass rate · ${meta.failed} failures · ${meta.duration}s runtime`;
+
+const NAV=[
+ ['#exec','1. Executive Summary'],['#scope','2. Scope & Methodology'],['#results','3. Results by Module'],
+ ['#defects','4. Defects & Issues'],['#coverage','5. Coverage & Environment'],['#signoff','6. Sign-off']
+];
+const nl=document.getElementById('navLinks');
+NAV.forEach(([href,txt])=>{const a=document.createElement('a');a.href=href;a.textContent=txt;nl.appendChild(a);});
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* exec */
+const R2=52,C=2*Math.PI*R2;
+document.getElementById('app').innerHTML=`
+<section id="exec">
+  <div class="sec-head"><div class="sec-num">1</div><h2 class="sec-title">Executive Summary</h2></div>
+  <div class="sec-sub">Overall verdict and key metrics for the LMG service test pass.</div>
+  <div class="verdict">
+    <div class="pass-ring">
+      <svg width="130" height="130" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="${R2}" fill="none" stroke="#e8edf5" stroke-width="11"/>
+        <circle cx="60" cy="60" r="${R2}" fill="none" stroke="#16a34a" stroke-width="11" stroke-linecap="round"
+          stroke-dasharray="${C}" stroke-dashoffset="${C*(1-summary.pass_rate/100)}"/>
+      </svg>
+      <div class="c"><span class="p">${summary.pass_rate}%</span><span class="l">Pass Rate</span></div>
+    </div>
+    <div class="vtext">
+      <div class="t">All tests passing — ${meta.passed}/${meta.total}</div>
+      <div class="s">${esc(summary.blurb)}</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi b"><div class="n">${meta.total}</div><div class="l">Total Tests</div></div>
+      <div class="kpi g"><div class="n">${meta.passed}</div><div class="l">Passed</div></div>
+      <div class="kpi r"><div class="n">${meta.failed}</div><div class="l">Failed</div></div>
+      <div class="kpi y"><div class="n">${meta.files}</div><div class="l">Test Files</div></div>
+    </div>
+  </div>
+  <h3>Highlights</h3>
+  <div class="grid3">
+    <div class="card"><div class="ic" style="background:var(--green-bg)">✓</div><div class="t">100% Automated Pass Rate</div>
+      <div class="d">198/198 tests green across all layers with zero failures.</div></div>
+    <div class="card"><div class="ic" style="background:rgba(37,99,235,.1)">+</div><div class="t">Expanded Coverage</div>
+      <div class="d">New app-level HTTP integration suite and progress-controller suite added this pass.</div></div>
+    <div class="card"><div class="ic" style="background:rgba(13,148,136,.1)">◍</div><div class="t">Resilience Verified</div>
+      <div class="d">Fail-open behaviour and offline/timeout paths tested for n8n, user-service and LLM deps.</div></div>
+  </div>
+</section>
+
+<section id="scope">
+  <div class="sec-head"><div class="sec-num">2</div><h2 class="sec-title">Scope &amp; Methodology</h2></div>
+  <div class="sec-sub">What was tested, how it was tested, and the tooling used.</div>
+  <div class="cols">
+    <div>
+      <h3>Scope</h3>
+      <table>
+        <tr><th>Layer</th><th>Components Tested</th></tr>
+        <tr><td><b>Services</b></td><td class="mono">material.service · n8n.service · userService.client · jobTracker · conceptGraph.service</td></tr>
+        <tr><td><b>Controllers</b></td><td class="mono">profile · material · webhook · agent · progress · conceptGraph</td></tr>
+        <tr><td><b>Middleware</b></td><td class="mono">validate · errorMiddleware · notFoundMiddleware · validateWebhookSecret · protect</td></tr>
+        <tr><td><b>Utils</b></td><td class="mono">ServiceError · apiResponse · validationSchemas</td></tr>
+        <tr><td><b>API / HTTP</b></td><td class="mono">Express app · route registration · auth middleware · webhook security · notFound</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Methodology</h3>
+      <table>
+        <tr><th>Item</th><th>Detail</th></tr>
+        <tr><td><b>Test Runner</b></td><td>Node.js native test runner</td></tr>
+        <tr><td><b>Framework</b></td><td class="mono">node:test + node:assert/strict</td></tr>
+        <tr><td><b>Mocking</b></td><td class="mono">mock.method + mock.restoreAll</td></tr>
+        <tr><td><b>Run Command</b></td><td class="mono">npm test</td></tr>
+        <tr><td><b>HTTP Tests</b></td><td>Real Express app via Node fetch on ephemeral port</td></tr>
+        <tr><td><b>Test Types</b></td><td>Unit · Integration · Controller · API / E2E-lite</td></tr>
+      </table>
+    </div>
+  </div>
+  <h3>Execution Environment</h3>
+  <table>
+    <tr><th>Property</th><th>Value</th></tr>
+    <tr><td>Node.js Version</td><td class="mono">v25.8.2 (engines: >=20)</td></tr>
+    <tr><td>Package Manager</td><td class="mono">npm</td></tr>
+    <tr><td>Dependencies (dev)</td><td class="mono">eslint ^8.56.0 · nodemon ^3.0.2</td></tr>
+    <tr><td>Static Analysis</td><td>ESLint — <b>0 errors</b>, 10 warnings (non-blocking) across <code>src/</code></td></tr>
+  </table>
+</section>
+
+<section id="results">
+  <div class="sec-head"><div class="sec-num">3</div><h2 class="sec-title">Results by Module</h2></div>
+  <div class="sec-sub">Interactive matrix — search, filter by layer, and expand any module to view its tests.</div>
+  <div class="searchbar">
+    <input id="q" placeholder="Search tests or file names…" autocomplete="off">
+    <div class="chips" id="layerChips"></div>
+  </div>
+  <div id="files"></div>
+  <div class="empty" id="empty" style="display:none">No modules match the current filters.</div>
+  <h3>Module Pass Distribution</h3>
+  <div class="filerow" id="moduleBars"></div>
+</section>
+
+<section id="defects">
+  <div class="sec-head"><div class="sec-num">4</div><h2 class="sec-title">Defects &amp; Issues Log</h2></div>
+  <div class="sec-sub">Known issues captured during the QA pass. All are non-blocking; no functional defects were found.</div>
+  <table>
+    <tr><th>ID</th><th>Severity</th><th>Category</th><th>Description</th><th>Status</th><th>Remediation</th></tr>
+    ${defects.map(d=>`<tr>
+      <td class="mono"><b>${d.id}</b></td>
+      <td><span class="badge ${d.severity==='Low'?'b-open-l':d.severity==='Medium'?'b-open-m':'b-info'}">${d.severity}</span></td>
+      <td>${esc(d.category)}</td>
+      <td>${esc(d.desc)}<br><span class="mono" style="font-size:11.5px;color:var(--muted)">${esc(d.file)}</span></td>
+      <td><span class="badge ${d.status.startsWith('Open')?'b-open-m':d.status.startsWith('Closed')?'b-pass':'b-info'}">${esc(d.status)}</span></td>
+      <td style="font-size:13px">${esc(d.fix)}</td>
+    </tr>`).join('')}
+  </table>
+</section>
+
+<section id="coverage">
+  <div class="sec-head"><div class="sec-num">5</div><h2 class="sec-title">Coverage &amp; Environment</h2></div>
+  <div class="sec-sub">Where the test effort was concentrated, and how to reproduce the run.</div>
+  <div class="cols">
+    <div>
+      <h3>Test Effort by Area</h3>
+      ${coverage.map(([lbl, detail, n])=>`
+        <div class="covitem">
+          <div class="covlabel"><b>${esc(lbl)}</b><span>${esc(detail)}</span></div>
+          <div class="covnum">${n}</div>
+        </div>`).join('')}
+    </div>
+    <div>
+      <h3>Reproduction</h3>
+      <table>
+        <tr><th>Step</th><th>Command</th></tr>
+        <tr><td>Install dependencies</td><td class="mono">npm install</td></tr>
+        <tr><td>Run full test suite</td><td class="mono">npm test</td></tr>
+        <tr><td>Run a single suite</td><td class="mono">node --test test/&lt;file&gt;.test.js</td></tr>
+        <tr><td>Lint source</td><td class="mono">npm run lint</td></tr>
+      </table>
+      <h3>Notes</h3>
+      <ul style="color:var(--muted);font-size:13px;padding-left:18px">
+        <li>No coverage metrics tool (c8/nyc) is configured; line/branch coverage is not currently quantified (see <b>COV-01</b>).</li>
+        <li>Lightweight unit tests mock IO via <code class="mono">mock.method</code>; no live database, n8n, or user-service is required to run the suite.</li>
+        <li>All 17 test files execute in isolation under <code class="mono">node --test</code>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="signoff">
+  <div class="sec-head"><div class="sec-num">6</div><h2 class="sec-title">Sign-off &amp; Conclusion</h2></div>
+  <div class="sec-sub">Formal QA assessment and sign-off.</div>
+  <table>
+    <tr><th>Assessment Criterion</th><th>Result</th></tr>
+    <tr><td>Functional correctness of tested modules</td><td><span class="badge b-pass">PASS</span> — 0 functional failures</td></tr>
+    <tr><td>Negative / error-path handling</td><td><span class="badge b-pass">PASS</span> — offline, timeout, invalid-auth and not-found paths verified</td></tr>
+    <tr><td>Regression risk</td><td><span class="badge b-pass">LOW</span> — existing suites retained &amp; green</td></tr>
+    <tr><td>Remaining open defects</td><td><span class="badge b-open-m">NON-BLOCKING</span> — 5 low/medium, style &amp; coverage tooling only</td></tr>
+  </table>
+  <h3>Conclusion</h3>
+  <p style="color:var(--muted);max-width:760px">The LMG service meets its functional acceptance criteria for this release. No blocking defects were identified. The service is <b>recommended for release</b>; the 10 ESLint warnings and absence of coverage tooling are tracked as non-blocking follow-up items.</p>
+  <div class="signoff">
+    <div class="so"><div class="r">Tested By</div><div class="n">MENTORA QA</div><div class="dt">30 August 2026</div><div class="signline" style="border-top:1px dashed var(--line)"></div></div>
+    <div class="so"><div class="r">QA Signature</div><div class="n">—————</div><div class="dt">Authorized sign-off</div><div class="signline" style="border-top:1px dashed var(--line)"></div></div>
+    <div class="so"><div class="r">Approved For Release</div><div class="n"><span class="badge b-pass" style="font-size:13px">YES</span></div><div class="dt">Release Blockers: NONE</div><div class="signline" style="border-top:1px dashed var(--line)"></div></div>
+  </div>
+</section>
+
+<footer>MENTORA QA · Report QA-LMG-2026-08-30 · 30 August 2026 · Generated from live <code>npm test</code> execution</footer>
+`;
+
+/* interactive results matrix */
+const activeLayers=new Set();
+const chips=document.getElementById('layerChips');
+const layers=[...new Set(files.map(f=>f.layer))];
+layers.forEach(l=>{const c=document.createElement('span');c.className='chip';c.textContent=l;
+  c.onclick=()=>{activeLayers.has(l)?(activeLayers.delete(l),c.classList.remove('on')):(activeLayers.add(l),c.classList.add('on'));renderFiles();};
+  chips.appendChild(c);});
+
+function renderFiles(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const box=document.getElementById('files');box.innerHTML='';let shown=0;
+  files.forEach(f=>{
+    if(activeLayers.size&&!activeLayers.has(f.layer))return;
+    const nm=f.name.toLowerCase().includes(q);
+    const tm=f.tests.some(t=>t[0].toLowerCase().includes(q));
+    if(q&&!nm&&!tm)return;
+    shown++;
+    const total=f.pass+f.fail, pp=total?Math.round(f.pass/total*100):0;
+    const d=document.createElement('div');d.className='file';
+    d.innerHTML=`<div class="fhead"><span class="chev">▶</span><span class="fname">${esc(f.name)}</span>
+      <span class="flayer">${esc(f.layer)}</span><span class="mbar"><div style="width:${pp}%"></div></span>
+      <span class="fcount">${f.pass}/${total} · ${pp}%</span></div>
+      <div class="tests">${f.tests.map(([n,s])=>`<div class="tst"><span class="dot ${s}"></span><span>${esc(n)}</span></div>`).join('')}</div>`;
+    d.querySelector('.fhead').onclick=()=>d.classList.toggle('open');
+    box.appendChild(d);
+  });
+  document.getElementById('empty').style.display=shown?'none':'block';
+  renderModuleBars(q);
+}
+function renderModuleBars(q){
+  const box=document.getElementById('moduleBars');box.innerHTML='';
+  files.filter(f=>!q||f.name.toLowerCase().includes(q)||f.tests.some(t=>t[0].toLowerCase().includes(q))).forEach(f=>{
+    const total=f.pass+f.fail, pp=total?Math.round(f.pass/total*100):0;
+    const d=document.createElement('div');d.className='fcard';
+    d.innerHTML=`<div class="head"><span class="name">${esc(f.name)}</span><span class="layer">${esc(f.layer)}</span></div>
+      <div class="bar"><div style="width:${pp}%"></div></div>
+      <div class="fcount"><b>${f.pass}/${total}</b> passing · ${pp}%</div>`;
+    box.appendChild(d);
+  });
+}
+document.getElementById('q').addEventListener('input',renderFiles);
+renderFiles();
+</script>
+</body>
+</html>

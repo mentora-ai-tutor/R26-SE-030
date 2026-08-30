@@ -1,5 +1,9 @@
+from app.services.profile_contract import build_canonical_mastery_output
+
+
 def step10_output(profile: dict, validation: dict) -> dict:
-    return {
+    canonical = build_canonical_mastery_output(profile, validation)
+    canonical["legacy_summary"] = {
         "schema_version": "kaa-v1.0",
         "student_id": profile["student_id"],
         "mode": profile["mode"],
@@ -30,3 +34,7 @@ def step10_output(profile: dict, validation: dict) -> dict:
         "ready_for_downstream": True,
         "generated_at": profile["generated_at"],
     }
+    canonical["pipeline_steps_completed"] = 10
+    canonical["ready_for_downstream"] = True
+    canonical["generated_at"] = profile["generated_at"]
+    return canonical

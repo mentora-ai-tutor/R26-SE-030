@@ -8,7 +8,15 @@ const logger = require('../utils/logger');
 
 const submitMasteryProfile = async (req, res, next) => {
   try {
-    const { student_id, mastery_profile, analysis_timestamp, recommendations, data_sources } = req.body;
+    const {
+      schema_version,
+      student_id,
+      mastery_profile,
+      analysis_timestamp,
+      recommendations,
+      data_sources,
+      raw_analysis_payload,
+    } = req.body;
     const tokenStudentId = req.student.id;
 
     if (student_id !== tokenStudentId) {
@@ -24,13 +32,21 @@ const submitMasteryProfile = async (req, res, next) => {
     }
 
     const masteryProfile = new MasteryProfile({
+      schema_version: schema_version || 'kaa-lmg-v1.0',
       student_id,
       analysis_timestamp: analysis_timestamp ? new Date(analysis_timestamp) : new Date(),
       overall_mastery_score: mastery_profile.overall_mastery_score,
+      mastery_profile: {
+        overall_mastery_score: mastery_profile.overall_mastery_score,
+        knowledge_gaps: mastery_profile.knowledge_gaps,
+        strengths: mastery_profile.strengths || [],
+      },
       knowledge_gaps: mastery_profile.knowledge_gaps,
       strengths: mastery_profile.strengths || [],
       recommendations: recommendations,
       data_sources: data_sources,
+      gap_topic_ids: mastery_profile.knowledge_gaps.map((g) => g.topic_id),
+      raw_analysis_payload: raw_analysis_payload || {},
       submission_ip: req.ip,
       n8n_triggered: false,
     });

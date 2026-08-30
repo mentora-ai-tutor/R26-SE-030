@@ -106,5 +106,5 @@ class QuizResultRecord(BaseModel):
     created_at: Optional[str] = None
     result_id: Optional[str] = None
     # Present only when reconstructed from quiz_sessions because the dedicated
-    # quiz_results insert was missing; absent on normal records .
+    # quiz_results insert was missing; absent on normal records.
     recovered_from: Optional[str] = None

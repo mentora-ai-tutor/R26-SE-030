@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import MONGODB_DB, MONGODB_URL

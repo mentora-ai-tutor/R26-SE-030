@@ -65,3 +65,9 @@ The AME Agent leverages complex MongoDB aggregation pipelines and JavaScript-bas
 ### 4. Security & Middleware
 - **JWT Authentication**: Secure route protection with learner identity injection (`req.user.student_id`).
 - **Global Error Handling**: Standardized JSON error responses for all API failures.
+
+### 5. RAG Knowledge Base (Retrieval-Augmented Generation)
+- **Embedding Service**: Thin Ollama client (`embeddingService.js`) that batches embedding calls via `/api/embed` with a fallback to the legacy `/api/embeddings` endpoint.
+- **Ingestion Pipeline**: `ragService.ingestDocument` splits documents into overlapping chunks, embeds them, and upserts them into `ame_knowledge_documents` / `ame_knowledge_chunks`. Re-ingesting a `document_id` is idempotent (old chunks replaced).
+- **Semantic Retrieval**: `ragService.retrieve` embeds the query and ranks stored chunks by cosine similarity (`cosineSimilarity`), applying `RAG_TOP_K` and `RAG_MIN_SCORE`. A keyword-based fallback (`keywordSearch`) keeps retrieval functional if the embedding step fails.
+- **Automatic Enrichment**: `start-session` (per knowledge-gap topic) and `submit-answer` (current question) attach retrieved chunks as `rag_context` on the n8n payload. Best-effort — never fails the underlying request.

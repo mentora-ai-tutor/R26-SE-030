@@ -1,6 +1,19 @@
 const n8nService = require('../services/n8nService');
 const mongoose = require('mongoose');
+const ragService = require('../services/ragService');
 const { getFeedbackReport } = require('../services/mongoService');
+
+const attachRagContext = async (db, query, options = {}) => {
+  if (!ragService.isEnabled()) return null;
+  try {
+    const result = await ragService.retrieve(db, query, options);
+    if (!result.chunks || result.chunks.length === 0) return null;
+    return result;
+  } catch (error) {
+    console.warn('[RAG] Context enrichment skipped:', error.message);
+    return null;
+  }
+};
 
 const startSession = async (req, res, next) => {
   try {
@@ -25,6 +38,39 @@ const startSession = async (req, res, next) => {
       learner_id: req.user.student_id,
       mastery_profile,
     };
+
+    let rag_context = null;
+    try {
+      if (ragService.isEnabled() && Array.isArray(mastery_profile.knowledge_gaps) && mastery_profile.knowledge_gaps.length > 0) {
+        const db = mongoose.connection.db;
+        const topics = mastery_profile.knowledge_gaps.map((gap) => gap.topic).filter(Boolean);
+
+        const results = await Promise.all(
+          topics.map((topic) => attachRagContext(db, topic, { top_k: 3 }))
+        );
+
+        const seen = new Set();
+        const chunks = [];
+        for (const result of results) {
+          if (result && Array.isArray(result.chunks)) {
+            for (const chunk of result.chunks) {
+              if (!seen.has(chunk.chunk_id)) {
+                seen.add(chunk.chunk_id);
+                chunks.push(chunk);
+              }
+            }
+          }
+        }
+
+        if (chunks.length > 0) {
+          rag_context = { query: topics.join(', '), topics, chunks };
+        }
+      }
+    } catch (error) {
+      console.warn('[RAG] Failed to build rag_context for session start:', error.message);
+    }
+
+    if (rag_context) payload.rag_context = rag_context;
 
     const result = await n8nService.startSession(payload);
 
@@ -70,6 +116,30 @@ const submitAnswer = async (req, res, next) => {
       answer,
     };
 
+    let rag_context = null;
+    try {
+      if (ragService.isEnabled()) {
+        const db = mongoose.connection.db;
+        const questionDoc = await db.collection('ame_questions').findOne(
+          { 'current_question.question_id': question_id },
+          { projection: { current_question: 1, _id: 0 } }
+        );
+        const currentQuestion = questionDoc ? questionDoc.current_question : null;
+        const topic = currentQuestion ? currentQuestion.topic : null;
+        const questionText = currentQuestion ? currentQuestion.question_text : null;
+        const query = [topic, questionText].filter(Boolean).join(' - ') || question_id;
+
+        const result = await attachRagContext(db, query, { top_k: 3 });
+        if (result && Array.isArray(result.chunks) && result.chunks.length > 0) {
+          rag_context = { query, topic, chunks: result.chunks };
+        }
+      }
+    } catch (error) {
+      console.warn('[RAG] Failed to build rag_context for answer submission:', error.message);
+    }
+
+    if (rag_context) payload.rag_context = rag_context;
+
     const result = await n8nService.submitAnswer(payload);
 
     res.status(200).json(result);
@@ -77,6 +147,37 @@ const submitAnswer = async (req, res, next) => {
     next({
       statusCode: 500,
       message: 'Failed to submit answer',
+      error: error.message,
+    });
+  }
+};
+
+const runCode = async (req, res, next) => {
+  try {
+    const { session_id, question_id, code, stdin } = req.body;
+
+    if (!code || !String(code).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'code is required',
+      });
+    }
+
+    const payload = {
+      session_id: session_id || null,
+      question_id: question_id || null,
+      learner_id: req.user.student_id,
+      code,
+      stdin: stdin || '',
+    };
+
+    const result = await n8nService.runCode(payload);
+
+    res.status(200).json(result);
+  } catch (error) {
+    next({
+      statusCode: 502,
+      message: error.message || 'Code execution failed',
       error: error.message,
     });
   }
@@ -259,6 +360,7 @@ const getFeedbackReportBySession = async (req, res, next) => {
 module.exports = {
   startSession,
   submitAnswer,
+  runCode,
   getSession,
   getSessions,
   getQuestionsByTopic,

@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mentora AI Tutor — QA Report</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #475569;
+    --line: #e2e8f0;
+    --teal: #0d9488;
+    --teal-dark: #0f766e;
+    --pass: #16a34a;
+    --fail: #dc2626;
+    --warn: #d97706;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --code: #0f172a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+  header.hero {
+    background: linear-gradient(135deg, #06282a 0%, #0f766e 55%, #0d9488 100%);
+    color: #fff;
+    border-radius: 20px;
+    padding: 36px 40px;
+    margin-bottom: 28px;
+    box-shadow: 0 20px 40px -18px rgba(13,148,136,0.45);
+  }
+  .hero .tag { display:inline-block; background: rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.25); padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px;}
+  .hero h1 { margin: 0 0 6px; font-size: 30px; font-weight: 900; letter-spacing: -0.02em; }
+  .hero p.sub { margin: 0 0 16px; opacity: 0.85; font-size: 16px; }
+  .meta-grid { display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 13px; opacity: 0.9; }
+  .meta-grid b { font-weight: 700; }
+  h2 {
+    font-size: 21px;
+    font-weight: 800;
+    margin: 40px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--line);
+    letter-spacing: -0.01em;
+  }
+  h3 { font-size: 16px; font-weight: 700; margin: 22px 0 8px; }
+  p { margin: 0 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f1f5f9; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: center; }
+  tfoot td { font-weight: 800; background: #f8fafc; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .badge.pass { background: #dcfce7; color: var(--pass); }
+  .badge.fail { background: #fee2e2; color: var(--fail); }
+  .badge.warn { background: #fef3c7; color: var(--warn); }
+  .badge.info { background: #e0f2fe; color: #0369a1; }
+  .bar { height: 8px; border-radius: 999px; background: #f1f5f9; overflow: hidden; min-width: 90px; }
+  .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--teal-dark), var(--teal)); border-radius: 999px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 6px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .kpi .n { font-size: 30px; font-weight: 900; letter-spacing: -0.02em; }
+  .kpi .l { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+  .kpi.teal .n { color: var(--teal-dark); }
+  .kpi.green .n { color: var(--pass); }
+  .kpi.red .n { color: var(--fail); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; background: #f1f5f9; border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
+  pre { background: var(--code); color: #e2e8f0; border-radius: 12px; padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; }
+  pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+  .stripes li { margin-bottom: 8px; }
+  .note { font-size: 13px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } .wrap { padding: 16px; } }
+  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  
+  .nav { position: sticky; top: 8px; z-index: 60; display: flex; flex-wrap: wrap; gap: 4px;
+         background: rgba(15,23,42,0.92); border: 1px solid rgba(148,163,184,0.25);
+         color: #e2e8f0; padding: 8px 12px; border-radius: 14px; margin: 0 0 24px;
+         box-shadow: 0 10px 24px -12px rgba(2,6,23,0.5); backdrop-filter: blur(6px); }
+  .nav a { color: #cbd5e1; text-decoration: none; font-size: 12.5px; font-weight: 600;
+           padding: 4px 10px; border-radius: 8px; white-space: nowrap; }
+  .nav a:hover { background: rgba(13,148,136,0.35); color: #fff; }
+  .svc { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+         padding: 18px 20px; margin: 0 0 18px; scroll-margin-top: 70px; }
+  .svc-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: flex-start;
+              justify-content: space-between; margin-bottom: 8px; }
+  .svc-head h3 { margin: 0; font-size: 19px; }
+  .runner { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: #0369a1; background: #e0f2fe; border-radius: 999px;
+            padding: 2px 9px; vertical-align: 3px; margin-left: 6px; }
+  .svc-desc { margin: 4px 0 0; font-size: 13px; color: var(--muted); max-width: 640px; }
+  .svc-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 11.5px; font-weight: 700; background: #f1f5f9; color: #475569;
+          border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .chip.total { background: #ccfbf1; color: var(--teal-dark); border-color: #99f6e4; }
+  tr.layer-head td { background: #f8fafc; color: var(--muted); font-size: 11px; font-weight: 800;
+                     letter-spacing: 0.08em; text-transform: uppercase; }
+  tr.layer-head .count { font-weight: 700; color: var(--teal-dark); text-transform: none; letter-spacing: 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .svc-link { color: var(--teal-dark); font-weight: 800; text-decoration: none;
+              border-bottom: 1px dashed var(--teal-dark); }
+  .svc-link:hover { border-bottom-style: solid; }
+  @media print { .nav { display: none; } .svc { break-inside: avoid; } }
+  
+  .nav { position: sticky; top: 8px; z-index: 60; display: flex; flex-wrap: wrap; gap: 4px;
+         background: rgba(15,23,42,0.92); border: 1px solid rgba(148,163,184,0.25);
+         color: #e2e8f0; padding: 8px 12px; border-radius: 14px; margin: 0 0 24px;
+         box-shadow: 0 10px 24px -12px rgba(2,6,23,0.5); backdrop-filter: blur(6px); }
+  .nav a { color: #cbd5e1; text-decoration: none; font-size: 12.5px; font-weight: 600;
+           padding: 4px 10px; border-radius: 8px; white-space: nowrap; }
+  .nav a:hover { background: rgba(13,148,136,0.35); color: #fff; }
+  .svc { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+         padding: 18px 20px; margin: 0 0 18px; scroll-margin-top: 70px; }
+  .svc-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: flex-start;
+              justify-content: space-between; margin-bottom: 8px; }
+  .svc-head h3 { margin: 0; font-size: 19px; }
+  .runner { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+            text-transform: uppercase; color: #0369a1; background: #e0f2fe; border-radius: 999px;
+            padding: 2px 9px; vertical-align: 3px; margin-left: 6px; }
+  .svc-desc { margin: 4px 0 0; font-size: 13px; color: var(--muted); max-width: 640px; }
+  .svc-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 11.5px; font-weight: 700; background: #f1f5f9; color: #475569;
+          border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .chip.total { background: #ccfbf1; color: var(--teal-dark); border-color: #99f6e4; }
+  tr.layer-head td { background: #f8fafc; color: var(--muted); font-size: 11px; font-weight: 800;
+                     letter-spacing: 0.08em; text-transform: uppercase; }
+  tr.layer-head .count { font-weight: 700; color: var(--teal-dark); text-transform: none; letter-spacing: 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .svc-link { color: var(--teal-dark); font-weight: 800; text-decoration: none;
+              border-bottom: 1px dashed var(--teal-dark); }
+  .svc-link:hover { border-bottom-style: solid; }
+  @media print { .nav { display: none; } .svc { break-inside: avoid; } }
+  @media print { body { background: #fff; } header.hero { box-shadow: none; } .card, .kpi { box-shadow: none; } a { color: var(--teal-dark); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+
+
+
+<nav class="nav"><a href="#top">&uarr; Top</a><a href="#details">Per-service details</a>
+<a href="#svc-user-service">user-service</a>
+<a href="#svc-learning-generator">learning-generator</a>
+<a href="#svc-assessment-agent">assessment-agent</a>
+<a href="#svc-knowledge-analysis">knowledge-analysis</a>
+<a href="#svc-peer-learning">peer-learning</a>
+<a href="#svc-ai-engine">ai-engine</a>
+</nav>
+
+
+  <header class="hero" id="top">
+    <span class="tag">Quality Assurance Report</span>
+    <h1>Mentora AI Tutor — Full QA Report</h1>
+    <p class="sub">Automated test suites across all backend services, functional verification of frontend features, and defect log.</p>
+    <div class="meta-grid">
+      <span><b>Report date:</b> 31 Aug 2026</span>
+      <span><b>Repository:</b> mentora-backend / mentora-frontend</span>
+      <span><b>Test location:</b> <code>mentora-backend/test/</code></span>
+      <span><b>Overall result:</b> <b>188 / 188 tests PASS</b></span>
+    </div>
+  </header>
+
+  <!-- ── Executive summary ── -->
+  <h2>1. Executive Summary</h2>
+  <div class="card">
+    <p>A centralized QA harness (<code>mentora-backend/test/</code>) was implemented covering <b>every backend service</b> with three layers — <b>unit</b>, <b>integration</b> and <b>performance</b> tests. In addition, the frontend features delivered during this cycle (learning-material delete, real-data dashboard, settings page, delete-confirmation dialog) were functionally verified and the defects encountered were logged and fixed.</p>
+    <div class="kpis">
+      <div class="kpi teal"><div class="n">188</div><div class="l">Tests passing</div><div class="bar"><span style="width:100%"></span></div></div>
+      <div class="kpi"><div class="n">6</div><div class="l">Services covered</div></div>
+      <div class="kpi"><div class="n">3</div><div class="l">Test layers per service</div></div>
+      <div class="kpi green"><div class="n">0</div><div class="l">Open defects in scope</div></div>
+    </div>
+    <p class="note" style="margin-top:10px">Pass rate: <b>100%</b> across all six service suites. All suites are self-contained (no live MongoDB, LLM providers, or network access required) and complete in a few seconds.</p>
+  </div>
+
+  <!-- ── Scope & approach ── -->
+  <h2>2. Scope &amp; Approach</h2>
+  <div class="card grid2">
+    <div>
+      <h3>In scope</h3>
+      <ul class="stripes">
+        <li><b>Test architecture:</b> per-service folders under <code>test/&lt;service&gt;/</code> with <code>unit/</code>, <code>integration/</code>, <code>performance/</code> layers.</li>
+        <li><b>Node services:</b> user-service &amp; assessment-agent (Jest), learning-generator (node:test).</li>
+        <li><b>Python services:</b> knowledge-analysis, peer-learning, ai-engine (pytest).</li>
+        <li>Functional verification of the frontend deliverables (delete, dashboard, settings, dialogs).</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Out of scope / notes</h3>
+      <ul class="stripes">
+        <li>Live end-to-end tests with real databases/LLMs (covered by the docker-compose stack, not automated here).</li>
+        <li>UI automation (Playwright/Cypress) — not yet established.</li>
+        <li>Load/stress testing of the full distributed stack (performance here is per-module regression timing).</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── Environment ── -->
+  <h2>3. Test Environment</h2>
+  <div class="card">
+    <table>
+      <tr><th style="width:26%">Component</th><th>Version / Detail</th></tr>
+      <tr><td>OS</td><td>macOS (darwin), host machine</td></tr>
+      <tr><td>Node.js</td><td>v25.8.2 (npm 11.11.1) — note: <code>node --test</code> bare-directory scanning has an upstream bug on this build; scripts use the glob form that works across versions</td></tr>
+      <tr><td>Python</td><td>3.13.9 with <code>pytest</code> 8.4.2, <code>fastapi</code>, <code>httpx</code>, <code>motor</code>, <code>jwt</code></td></tr>
+      <tr><td>Test runner (Node)</td><td>Jest 29.7.0 + supertest 7.1.0 (<code>test/package.json</code>); node:test built-in</td></tr>
+      <tr><td>Backend services</td><td>Docker Compose: user-service (3001), lmg-service (5012→3002), knowledge-analysis (5007→8000), ai-engine (5010), peer-learning (8000), assessment-agent (5002)</td></tr>
+      <tr><td>LLM providers</td><td>Ollama (host, port 11434) — <code>llama3:8b</code>, <code>qwen2.5-coder:7b</code>; Vertex AI Gemini (provisioned, blocked by auth at time of report)</td></tr>
+      <tr><td>Frontend</td><td>Next.js app on localhost:3000</td></tr>
+    </table>
+  </div>
+
+  <!-- ── Test results ── -->
+  <h2>4. Automated Test Results</h2>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Runner</th>
+          <th class="num">Unit</th>
+          <th class="num">Integration</th>
+          <th class="num">Performance</th>
+          <th class="num">Total</th>
+          <th class="num">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><a class="svc-link" href="#svc-user-service">user-service</a></td><td>Jest</td><td class="num">10</td><td class="num">6</td><td class="num">2</td><td class="num">18</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><a class="svc-link" href="#svc-learning-generator">learning-generator</a></td><td>node:test</td><td class="num">19</td><td class="num">5</td><td class="num">2</td><td class="num">26</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><a class="svc-link" href="#svc-assessment-agent">assessment-agent</a></td><td>Jest</td><td class="num">45</td><td class="num">13</td><td class="num">2</td><td class="num">60</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><a class="svc-link" href="#svc-knowledge-analysis">knowledge-analysis</a></td><td>pytest</td><td class="num">21</td><td class="num">7</td><td class="num">3</td><td class="num">31</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><a class="svc-link" href="#svc-peer-learning">peer-learning</a></td><td>pytest</td><td class="num">11</td><td class="num">8</td><td class="num">3</td><td class="num">22</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><a class="svc-link" href="#svc-ai-engine">ai-engine</a></td><td>pytest</td><td class="num">23</td><td class="num">6</td><td class="num">2</td><td class="num">31</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2">TOTAL</td><td class="num">129</td><td class="num">45</td><td class="num">14</td><td class="num"><b>188</b></td><td class="num"><span class="badge pass">100% PASS</span></td></tr>
+      </tfoot>
+    </table>
+    <p class="note">Verified by re-running every suite after authoring (all green). Performance layer asserts generous thresholds and prints measured timings.</p>
+  </div>
+
+
+  <!-- ── Per-service test details ── -->
+  <h2 id="details">5. Per-Service Test Details</h2>
+  <div class="card">
+    <p>Every automated test across the six service suites, grouped by service and layer. Each row is one test
+    case with its source file and result. <b>188 / 188 tests PASS</b> on the run of 31 Aug 2026. Use the sticky
+    navigation above to jump to a service, the section-4 summary table links below, or <code>Ctrl/Cmd+F</code> to search.</p>
+  </div>
+
+    <section id="svc-user-service" class="svc">
+      <div class="svc-head">
+        <div>
+          <h3>user-service <span class="runner">Jest</span></h3>
+          <p class="svc-desc">Student model & auth (password hashing, comparePassword, soft-delete, login lockout), student-ID generator, AES/GCM github-token crypto, OAuth state HMAC, device parsing; REST endpoints for profile / preferences / password.</p>
+        </div>
+        <div class="svc-counts"><span class="chip">10 Unit ·</span><span class="chip">6 Integration ·</span><span class="chip">2 Performance ·</span><span class="chip total">Total 18</span></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:3%" class="num">#</th><th style="width:26%">File</th><th>Test case</th><th style="width:9%" class="num">Result</th></tr></thead>
+        <tbody><tr class="layer-head"><td colspan="5">Unit &mdash; unit tests <span class="count">10 tests</span></td></tr>
+<tr><td class="num mono">1</td><td class="mono">unit/student.model.test.js</td><td>save hashes the plaintext password and comparePassword verifies/rejects candidates</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">2</td><td class="mono">unit/student.model.test.js</td><td>toSafeObject strips password, refresh_token, and __v</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">3</td><td class="mono">unit/student.model.test.js</td><td>softDelete marks the account deleted/inactive and records who deleted it</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">4</td><td class="mono">unit/student.model.test.js</td><td>isLocked virtual reflects lock_until and incrementLoginAttempts locks at 5 attempts</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">5</td><td class="mono">unit/ghOAuthState.test.js</td><td>sign/verify round-trips the student id, and rejects tampering, replay, and expired states</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">6</td><td class="mono">unit/ghCrypto.test.js</td><td>encrypt/decrypt round-trips, binds to a student id (AAD), and validates input</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">7</td><td class="mono">unit/deviceParser.test.js</td><td>classifies user agents, defaults unknown agents, and derives deterministic session ids</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">8</td><td class="mono">unit/generateStudentId.test.js</td><td>returns STD-00001 when no previous student exists</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">9</td><td class="mono">unit/generateStudentId.test.js</td><td>increments the numeric suffix from the highest existing student id</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">10</td><td class="mono">unit/generateStudentId.test.js</td><td>fallbacks to a timestamp based id when the model lookup throws</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Integration &mdash; integration tests <span class="count">6 tests</span></td></tr>
+<tr><td class="num mono">11</td><td class="mono">integration/student.endpoints.test.js</td><td>GET /api/students/me returns the authenticated student without secrets</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">12</td><td class="mono">integration/student.endpoints.test.js</td><td>PUT /api/students/me updates name and profile fields</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">13</td><td class="mono">integration/student.endpoints.test.js</td><td>PUT /api/students/me/password changes the password when the current one matches</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">14</td><td class="mono">integration/student.endpoints.test.js</td><td>GET /api/students/me/preferences returns the stored preferences</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">15</td><td class="mono">integration/student.endpoints.test.js</td><td>PUT /api/students/me/preferences persists new preference values</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">16</td><td class="mono">integration/student.endpoints.test.js</td><td>protected routes reject requests without an access token</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Performance &mdash; performance tests <span class="count">2 tests</span></td></tr>
+<tr><td class="num mono">17</td><td class="mono">performance/student.performance.test.js</td><td>generateStudentId produces 1000 ids in under 2 seconds</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">18</td><td class="mono">performance/student.performance.test.js</td><td>Student hash+compare round-trips for 100 passwords in under 1 second</td><td class="num"><span class="badge pass">PASS</span></td></tr></tbody>
+      </table>
+    </section>
+    
+    <section id="svc-learning-generator" class="svc">
+      <div class="svc-head">
+        <div>
+          <h3>learning-generator <span class="runner">node:test</span></h3>
+          <p class="svc-desc">Material query builder & stats aggregation, apiResponse helpers (200/201/202/error/paginated), per-controller ownership guards; materials & progress endpoints incl. the hard-delete progress cascade.</p>
+        </div>
+        <div class="svc-counts"><span class="chip">19 Unit ·</span><span class="chip">5 Integration ·</span><span class="chip">2 Performance ·</span><span class="chip total">Total 26</span></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:3%" class="num">#</th><th style="width:26%">File</th><th>Test case</th><th style="width:9%" class="num">Result</th></tr></thead>
+        <tbody><tr class="layer-head"><td colspan="5">Unit &mdash; unit tests <span class="count">19 tests</span></td></tr>
+<tr><td class="num mono">1</td><td class="mono">unit/apiResponse.test.js</td><td>success() responds 200 with success/message/data envelope</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">2</td><td class="mono">unit/apiResponse.test.js</td><td>created() responds 201 and defaults the message</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">3</td><td class="mono">unit/apiResponse.test.js</td><td>accepted() responds 202</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">4</td><td class="mono">unit/apiResponse.test.js</td><td>error() responds with success=false and optional fix field</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">5</td><td class="mono">unit/apiResponse.test.js</td><td>error() omits fix when not provided</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">6</td><td class="mono">unit/apiResponse.test.js</td><td>paginated() wraps items and meta under data</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">7</td><td class="mono">unit/apiResponse.test.js</td><td>success() memoizes the statusCode setter chain</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">8</td><td class="mono">unit/material.service.test.js</td><td>buildMaterialQuery scopes to owner and excludes hard-deleted materials</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">9</td><td class="mono">unit/material.service.test.js</td><td>buildMaterialQuery adds topic, gap_type and status when provided</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">10</td><td class="mono">unit/material.service.test.js</td><td>buildMaterialQuery omits filters that are empty strings</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">11</td><td class="mono">unit/material.service.test.js</td><td>getMaterialStats returns empty-state shape when no materials exist</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">12</td><td class="mono">unit/material.service.test.js</td><td>getMaterialStats aggregates gap counts, averages, flags, retries and latest date</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">13</td><td class="mono">unit/ownership-guard.test.js</td><td>getMaterialsByStudent returns 403 FORBIDDEN when studentId differs from token student</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">14</td><td class="mono">unit/ownership-guard.test.js</td><td>getMaterialById returns 403 FORBIDDEN for a material owned by another student</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">15</td><td class="mono">unit/ownership-guard.test.js</td><td>getMaterialStats returns 403 FORBIDDEN on student mismatch</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">16</td><td class="mono">unit/ownership-guard.test.js</td><td>deleteMaterial returns 403 FORBIDDEN when material belongs to another student</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">17</td><td class="mono">unit/ownership-guard.test.js</td><td>getProgressByStudent returns 403 FORBIDDEN on student mismatch</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">18</td><td class="mono">unit/ownership-guard.test.js</td><td>getProgressStats returns 403 FORBIDDEN on student mismatch</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">19</td><td class="mono">unit/ownership-guard.test.js</td><td>getProgressStats computes aggregation for the owner</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Integration &mdash; integration tests <span class="count">5 tests</span></td></tr>
+<tr><td class="num mono">20</td><td class="mono">integration/endpoints.api.test.js</td><td>GET /api/materials/:studentId returns paginated materials for the owner</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">21</td><td class="mono">integration/endpoints.api.test.js</td><td>GET /api/materials/item/:materialId returns a material by 24-hex id for the owner</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">22</td><td class="mono">integration/endpoints.api.test.js</td><td>GET /api/materials/item/:materialId falls back to findOne for non-hex material ids</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">23</td><td class="mono">integration/endpoints.api.test.js</td><td>DELETE /api/materials/item/:materialId hard-deletes material and cascades progress</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">24</td><td class="mono">integration/endpoints.api.test.js</td><td>GET /api/progress/student/:studentId/stats aggregates progress for the owner</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Performance &mdash; performance tests <span class="count">2 tests</span></td></tr>
+<tr><td class="num mono">25</td><td class="mono">performance/material.performance.test.js</td><td>buildMaterialQuery runs 10k times in under 1s</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">26</td><td class="mono">performance/material.performance.test.js</td><td>mocked controller delete flow completes in under 500ms</td><td class="num"><span class="badge pass">PASS</span></td></tr></tbody>
+      </table>
+    </section>
+    
+    <section id="svc-assessment-agent" class="svc">
+      <div class="svc-head">
+        <div>
+          <h3>assessment-agent <span class="runner">Jest</span></h3>
+          <p class="svc-desc">RAG chunking + cosine similarity, embedding service caching, Mongo dashboard aggregations, assessment & RAG controller logic, error handler; endpoint auth/happy-path coverage.</p>
+        </div>
+        <div class="svc-counts"><span class="chip">45 Unit ·</span><span class="chip">13 Integration ·</span><span class="chip">2 Performance ·</span><span class="chip total">Total 60</span></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:3%" class="num">#</th><th style="width:26%">File</th><th>Test case</th><th style="width:9%" class="num">Result</th></tr></thead>
+        <tbody><tr class="layer-head"><td colspan="5">Unit &mdash; unit tests <span class="count">45 tests</span></td></tr>
+<tr><td class="num mono">1</td><td class="mono">unit/ragService.unit.test.js</td><td>returns [] for empty / whitespace input</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">2</td><td class="mono">unit/ragService.unit.test.js</td><td>returns the whole text as a single chunk when it fits</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">3</td><td class="mono">unit/ragService.unit.test.js</td><td>splits long text and applies overlap between consecutive chunks</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">4</td><td class="mono">unit/ragService.unit.test.js</td><td>clamps overlap so it never exceeds half the chunk size</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">5</td><td class="mono">unit/ragService.unit.test.js</td><td>identical vectors produce a similarity of 1</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">6</td><td class="mono">unit/ragService.unit.test.js</td><td>orthogonal vectors produce a similarity of 0</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">7</td><td class="mono">unit/ragService.unit.test.js</td><td>length-mismatched or empty inputs produce 0</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">8</td><td class="mono">unit/ragService.unit.test.js</td><td>ranks a closer vector higher than a distant one</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">9</td><td class="mono">unit/ragService.unit.test.js</td><td>returns true when RAG is not explicitly disabled</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">10</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns 400 when mastery_profile is missing</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">11</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns 400 when knowledge_gaps is not a non-empty array</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">12</td><td class="mono">unit/assessmentController.unit.test.js</td><td>forwards the enriched payload to n8n when RAG is disabled</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">13</td><td class="mono">unit/assessmentController.unit.test.js</td><td>deduplicates RAG chunks and attaches rag_context when enabled</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">14</td><td class="mono">unit/assessmentController.unit.test.js</td><td>delegates n8n failures to the error middleware with 500</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">15</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns 400 when session_id is missing</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">16</td><td class="mono">unit/assessmentController.unit.test.js</td><td>builds rag_context from the current question when RAG is enabled</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">17</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns 404 when no session document exists</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">18</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns the session document with success true</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">19</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns an empty list when the learner has no answered questions</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">20</td><td class="mono">unit/assessmentController.unit.test.js</td><td>shapes answered questions into the learner-facing format</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">21</td><td class="mono">unit/assessmentController.unit.test.js</td><td>filters questions by topic when a query param is supplied</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">22</td><td class="mono">unit/assessmentController.unit.test.js</td><td>rejects a report belonging to another learner with 403</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">23</td><td class="mono">unit/assessmentController.unit.test.js</td><td>returns the report when it belongs to the requesting learner</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">24</td><td class="mono">unit/mongoService.unit.test.js</td><td>aggregates session, learner and mastery counters</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">25</td><td class="mono">unit/mongoService.unit.test.js</td><td>buckets mastery values into the five fixed ranges</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">26</td><td class="mono">unit/mongoService.unit.test.js</td><td>counts reports only for known grade labels</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">27</td><td class="mono">unit/mongoService.unit.test.js</td><td>ranks misconceptions by frequency and honours the limit</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">28</td><td class="mono">unit/mongoService.unit.test.js</td><td>builds cohort heatmap and distribution from session updates</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">29</td><td class="mono">unit/ragController.unit.test.js</td><td>returns 400 when the query is missing or blank</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">30</td><td class="mono">unit/ragController.unit.test.js</td><td>returns the retrieval result wrapped in success:true</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">31</td><td class="mono">unit/ragController.unit.test.js</td><td>forwards retrieval failures to the error middleware with 500</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">32</td><td class="mono">unit/ragController.unit.test.js</td><td>returns 404 when the document does not exist</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">33</td><td class="mono">unit/ragController.unit.test.js</td><td>returns the document with its chunks</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">34</td><td class="mono">unit/ragController.unit.test.js</td><td>returns 404 when nothing was deleted</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">35</td><td class="mono">unit/ragController.unit.test.js</td><td>returns 200 with a deleted summary</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">36</td><td class="mono">unit/ragController.unit.test.js</td><td>defaults pagination and wraps the result</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">37</td><td class="mono">unit/ragController.unit.test.js</td><td>returns knowledge base stats</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">38</td><td class="mono">unit/embeddingService.unit.test.js</td><td>isEnabled defaults to true</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">39</td><td class="mono">unit/embeddingService.unit.test.js</td><td>embedTexts returns [] for empty / blank input without network calls</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">40</td><td class="mono">unit/embeddingService.unit.test.js</td><td>embedTexts hits the batch endpoint once and caches results</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">41</td><td class="mono">unit/embeddingService.unit.test.js</td><td>returns cached embeddings for individual texts without network calls</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">42</td><td class="mono">unit/embeddingService.unit.test.js</td><td>falls back to legacy per-prompt endpoint when the batch endpoint returns 404</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">43</td><td class="mono">unit/embeddingService.unit.test.js</td><td>trims leading/trailing whitespace and drops blank entries before embedding</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">44</td><td class="mono">unit/errorHandler.unit.test.js</td><td>responds with the provided status code and message</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">45</td><td class="mono">unit/errorHandler.unit.test.js</td><td>defaults to 500 / Internal server error and does not call next</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Integration &mdash; integration tests <span class="count">13 tests</span></td></tr>
+<tr><td class="num mono">46</td><td class="mono">integration/rag.endpoints.test.js</td><td>returns 400 when the query is missing</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">47</td><td class="mono">integration/rag.endpoints.test.js</td><td>returns the retrieval result with success:true</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">48</td><td class="mono">integration/rag.endpoints.test.js</td><td>lists documents with pagination and query parsing</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">49</td><td class="mono">integration/rag.endpoints.test.js</td><td>ingests a document and returns a 200 summary</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">50</td><td class="mono">integration/rag.endpoints.test.js</td><td>returns knowledge base statistics</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">51</td><td class="mono">integration/assessment.endpoints.test.js</td><td>reports service health</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">52</td><td class="mono">integration/assessment.endpoints.test.js</td><td>returns 401 when no bearer token is provided</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">53</td><td class="mono">integration/assessment.endpoints.test.js</td><td>returns 401 when the token is invalid</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">54</td><td class="mono">integration/assessment.endpoints.test.js</td><td>forwards the authenticated learners payload to the n8n service</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">55</td><td class="mono">integration/assessment.endpoints.test.js</td><td>returns 400 when mastery_profile validation fails</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">56</td><td class="mono">integration/assessment.endpoints.test.js</td><td>returns 404 when the session does not exist in either collection</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">57</td><td class="mono">integration/assessment.endpoints.test.js</td><td>returns the session state from the sessions collection</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">58</td><td class="mono">integration/assessment.endpoints.test.js</td><td>404 handler reports unknown routes</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Performance &mdash; performance tests <span class="count">2 tests</span></td></tr>
+<tr><td class="num mono">59</td><td class="mono">performance/rag.transform.perf.test.js</td><td>chunking and cosine scoring on a sample payload complete under 1s</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">60</td><td class="mono">performance/controller.flow.perf.test.js</td><td>startSession round-trip completes well under 500ms</td><td class="num"><span class="badge pass">PASS</span></td></tr></tbody>
+      </table>
+    </section>
+    
+    <section id="svc-knowledge-analysis" class="svc">
+      <div class="svc-head">
+        <div>
+          <h3>knowledge-analysis <span class="runner">pytest</span></h3>
+          <p class="svc-desc">LLM provider choice, prompt building, JSON extraction fallbacks, career classifier, diagnostic report, mastery contract, quiz engine; knowledge-profile / mastery / career / sandbox endpoints.</p>
+        </div>
+        <div class="svc-counts"><span class="chip">21 Unit ·</span><span class="chip">7 Integration ·</span><span class="chip">3 Performance ·</span><span class="chip total">Total 31</span></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:3%" class="num">#</th><th style="width:26%">File</th><th>Test case</th><th style="width:9%" class="num">Result</th></tr></thead>
+        <tbody><tr class="layer-head"><td colspan="5">Unit &mdash; unit tests <span class="count">21 tests</span></td></tr>
+<tr><td class="num mono">1</td><td class="mono">unit/test_career_classifier.py</td><td>test_readiness_level_requires_difficulty_ceiling</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">2</td><td class="mono">unit/test_career_classifier.py</td><td>test_model_rank_is_calibrated_and_consistent</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">3</td><td class="mono">unit/test_career_classifier.py</td><td>test_gaps_and_matched_are_complementary</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">4</td><td class="mono">unit/test_career_classifier.py</td><td>test_match_role_maps_aspirations_to_stated_labels</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">5</td><td class="mono">unit/test_diagnostic_report.py</td><td>test_diagnostic_report_assembles_all_sections</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">6</td><td class="mono">unit/test_diagnostic_report.py</td><td>test_diagnostic_report_degrades_and_pattern_classifier</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">7</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[gemini-gemini]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">8</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[ollama-ollama]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">9</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[OLLAMA-ollama]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">10</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[ Ollama -ollama]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">11</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[None-gemini]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">12</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[-gemini]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">13</td><td class="mono">unit/test_llm_choice.py</td><td>test_normalize_llm_choice[bogus-engine-gemini]</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">14</td><td class="mono">unit/test_mastery_contract.py</td><td>test_canonical_contract_serializes_to_schema_valid_shape</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">15</td><td class="mono">unit/test_mastery_contract.py</td><td>test_mastery_document_shape_mirrors_canonical_fields</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">16</td><td class="mono">unit/test_prompts_and_json.py</td><td>test_behavior_prompt_embeds_metrics_and_strict_rules</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">17</td><td class="mono">unit/test_prompts_and_json.py</td><td>test_prompt_builder_time_gap_and_metrics_formatting</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">18</td><td class="mono">unit/test_prompts_and_json.py</td><td>test_json_extraction_strips_fences_and_prose</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">19</td><td class="mono">unit/test_prompts_and_json.py</td><td>test_parse_analysis_response_validates_and_falls_back</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">20</td><td class="mono">unit/test_quiz_engine.py</td><td>test_generate_quiz_maps_mastery_to_difficulty_and_level</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">21</td><td class="mono">unit/test_quiz_engine.py</td><td>test_adaptive_helpers_grade_and_serialize</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Integration &mdash; integration tests <span class="count">7 tests</span></td></tr>
+<tr><td class="num mono">22</td><td class="mono">integration/test_api.py</td><td>test_knowledge_profile_me_endpoint</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">23</td><td class="mono">integration/test_api.py</td><td>test_mastery_profile_latest_fetch</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">24</td><td class="mono">integration/test_api.py</td><td>test_mastery_profile_latest_not_found</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">25</td><td class="mono">integration/test_api.py</td><td>test_career_predict_endpoint_with_llm_override</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">26</td><td class="mono">integration/test_api.py</td><td>test_sandbox_challenges_generated_path</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">27</td><td class="mono">integration/test_api.py</td><td>test_sandbox_challenges_seed_fallback</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">28</td><td class="mono">integration/test_api.py</td><td>test_endpoints_require_bearer_token</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Performance &mdash; performance tests <span class="count">3 tests</span></td></tr>
+<tr><td class="num mono">29</td><td class="mono">performance/test_performance.py</td><td>test_fifty_json_parses_under_one_second</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">30</td><td class="mono">performance/test_performance.py</td><td>test_two_hundred_career_predictions_under_one_second</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">31</td><td class="mono">performance/test_performance.py</td><td>test_overridden_endpoint_under_one_second</td><td class="num"><span class="badge pass">PASS</span></td></tr></tbody>
+      </table>
+    </section>
+    
+    <section id="svc-peer-learning" class="svc">
+      <div class="svc-head">
+        <div>
+          <h3>peer-learning <span class="runner">pytest</span></h3>
+          <p class="svc-desc">Agent response parsing, syntax/complexity logic, RAG extraction fallbacks, task-generation helpers; analysis import, diagnostic onboarding, sessions, quiz start/submit/summary endpoints.</p>
+        </div>
+        <div class="svc-counts"><span class="chip">11 Unit ·</span><span class="chip">8 Integration ·</span><span class="chip">3 Performance ·</span><span class="chip total">Total 22</span></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:3%" class="num">#</th><th style="width:26%">File</th><th>Test case</th><th style="width:9%" class="num">Result</th></tr></thead>
+        <tbody><tr class="layer-head"><td colspan="5">Unit &mdash; unit tests <span class="count">11 tests</span></td></tr>
+<tr><td class="num mono">1</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_fallback_syntax_check_accepts_balanced_code</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">2</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_fallback_syntax_check_rejects_mismatched_braces</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">3</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_fallback_syntax_check_rejects_missing_semicolon</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">4</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_estimate_complexity</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">5</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_evaluate_java_code_empty_and_class_check</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">6</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_evaluate_java_code_valid</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">7</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_derive_difficulty_level_mapping</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">8</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_rag_extract_json_from_text</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">9</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_rag_fallback_response_structure</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">10</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_student_agent_fallback_task_generation</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">11</td><td class="mono">unit/test_peer_learning_unit.py</td><td>test_peer_route_pure_helpers</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Integration &mdash; integration tests <span class="count">8 tests</span></td></tr>
+<tr><td class="num mono">12</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_health_check</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">13</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_import_and_get_student_analysis</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">14</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_import_analysis_forbidden_student_mismatch</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">15</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_rag_content_recommendation_fallback</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">16</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_diagnostic_onboard_and_diagnose</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">17</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_diagnostic_onboard_without_analysis_404</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">18</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_individual_quiz_start_and_submit</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">19</td><td class="mono">integration/test_peer_learning_integration.py</td><td>test_jwt_auth_boundary_real_token</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Performance &mdash; performance tests <span class="count">3 tests</span></td></tr>
+<tr><td class="num mono">20</td><td class="mono">performance/test_peer_learning_performance.py</td><td>test_200_agent_response_parses_under_1s</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">21</td><td class="mono">performance/test_peer_learning_performance.py</td><td>test_200_syntax_checks_under_1s</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">22</td><td class="mono">performance/test_peer_learning_performance.py</td><td>test_overridden_endpoint_under_1s</td><td class="num"><span class="badge pass">PASS</span></td></tr></tbody>
+      </table>
+    </section>
+    
+    <section id="svc-ai-engine" class="svc">
+      <div class="svc-head">
+        <div>
+          <h3>ai-engine <span class="runner">pytest</span></h3>
+          <p class="svc-desc">Ollama JSON repair/parsing + code-model retry, Java executor arg building & run/error/timeout flows, pydantic request models; code-review / execute / feedback endpoints.</p>
+        </div>
+        <div class="svc-counts"><span class="chip">23 Unit ·</span><span class="chip">6 Integration ·</span><span class="chip">2 Performance ·</span><span class="chip total">Total 31</span></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:3%" class="num">#</th><th style="width:26%">File</th><th>Test case</th><th style="width:9%" class="num">Result</th></tr></thead>
+        <tbody><tr class="layer-head"><td colspan="5">Unit &mdash; unit tests <span class="count">23 tests</span></td></tr>
+<tr><td class="num mono">1</td><td class="mono">unit/test_executor.py</td><td>test_extract_class_name_public_class</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">2</td><td class="mono">unit/test_executor.py</td><td>test_extract_class_name_class_without_public</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">3</td><td class="mono">unit/test_executor.py</td><td>test_extract_class_name_fallback_main</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">4</td><td class="mono">unit/test_executor.py</td><td>test_execute_success_flow</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">5</td><td class="mono">unit/test_executor.py</td><td>test_execute_compilation_error</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">6</td><td class="mono">unit/test_executor.py</td><td>test_execute_runtime_error</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">7</td><td class="mono">unit/test_executor.py</td><td>test_execute_passes_stdin_to_run</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">8</td><td class="mono">unit/test_executor.py</td><td>test_execute_timeout_handled</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">9</td><td class="mono">unit/test_models.py</td><td>test_code_execute_request_valid</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">10</td><td class="mono">unit/test_models.py</td><td>test_code_execute_request_rejects_empty_code</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">11</td><td class="mono">unit/test_models.py</td><td>test_feedback_request_allows_optional_fields</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">12</td><td class="mono">unit/test_models.py</td><td>test_code_review_annotation_valid</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">13</td><td class="mono">unit/test_models.py</td><td>test_code_review_request_rejects_missing_code</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">14</td><td class="mono">unit/test_models.py</td><td>test_code_execute_response_roundtrip</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">15</td><td class="mono">unit/test_ollama_service.py</td><td>test_find_balanced_json_object</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">16</td><td class="mono">unit/test_ollama_service.py</td><td>test_find_balanced_json_array</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">17</td><td class="mono">unit/test_ollama_service.py</td><td>test_find_balanced_json_ignores_braces_in_strings</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">18</td><td class="mono">unit/test_ollama_service.py</td><td>test_find_balanced_json_returns_none_when_no_json</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">19</td><td class="mono">unit/test_ollama_service.py</td><td>test_fix_llm_json_fixes_unescaped_newlines</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">20</td><td class="mono">unit/test_ollama_service.py</td><td>test_fix_llm_json_fixes_unescaped_tab</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">21</td><td class="mono">unit/test_ollama_service.py</td><td>test_call_ollama_json_parses_code_fence</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">22</td><td class="mono">unit/test_ollama_service.py</td><td>test_call_ollama_json_retries_with_code_model_on_failure</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">23</td><td class="mono">unit/test_ollama_service.py</td><td>test_call_ollama_json_returns_empty_on_all_parsing_failures</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Integration &mdash; integration tests <span class="count">6 tests</span></td></tr>
+<tr><td class="num mono">24</td><td class="mono">integration/test_endpoints.py</td><td>test_health_returns_200</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">25</td><td class="mono">integration/test_endpoints.py</td><td>test_code_review_returns_200_with_stubbed_llm</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">26</td><td class="mono">integration/test_endpoints.py</td><td>test_execute_returns_200_with_stubbed_executor</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">27</td><td class="mono">integration/test_endpoints.py</td><td>test_feedback_returns_200</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">28</td><td class="mono">integration/test_endpoints.py</td><td>test_execute_input_validation_400</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">29</td><td class="mono">integration/test_endpoints.py</td><td>test_run_with_feedback_returns_200</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr class="layer-head"><td colspan="5">Performance &mdash; performance tests <span class="count">2 tests</span></td></tr>
+<tr><td class="num mono">30</td><td class="mono">performance/test_performance.py</td><td>test_parse_100_ai_json_responses_under_1s</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+<tr><td class="num mono">31</td><td class="mono">performance/test_performance.py</td><td>test_overridden_execute_endpoint_under_1s</td><td class="num"><span class="badge pass">PASS</span></td></tr></tbody>
+      </table>
+    </section>
+    
+
+  <!-- ── Coverage ── -->
+  <h2>6. What Each Layer Covers</h2>
+  <div class="card grid2">
+    <div>
+      <h3>Unit</h3>
+      <ul class="stripes">
+        <li><b>user-service:</b> Student model (pre-save hashing, comparePassword, softDelete, lockout), student-ID generator, AES/GCM github token crypto, OAuth state HMAC, device parser.</li>
+        <li><b>learning-generator:</b> material query builder &amp; stats aggregation, apiResponse helpers, per-controller ownership guards.</li>
+        <li><b>assessment-agent:</b> RAG chunking + cosine similarity, embedding service caching, mongo dashboard aggregations, assessment &amp; rag controller logic, error handler.</li>
+        <li><b>knowledge-analysis:</b> LLM provider choice, prompt building, JSON extraction fallbacks, career classifier, diagnostic report, mastery contract, quiz engine.</li>
+        <li><b>peer-learning:</b> agent response parsing, syntax/complexity logic, RAG extraction fallbacks, task generation helpers.</li>
+        <li><b>ai-engine:</b> Ollama JSON repair/parsing + code-model retry, Java executor arg building &amp; run/error/timeout flows, pydantic request models.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Integration</h3>
+      <ul class="stripes">
+        <li>Endpoints exercised via supertest / FastAPI TestClient with persistence and external clients mocked (no real DB/LLM/network).</li>
+        <li>Auth boundaries verified: 401 missing/invalid token, 403 cross-student access, 404 not-found, 400 validation, 200 happy paths.</li>
+        <li>Key flows: student profile/preferences/password, materials fetch/delete (incl. hard-delete progress cascade), progress stats, knowledge-profile &amp; mastery endpoints, RAG retrieval, sandbox/challenge endpoints, peer-learning sessions &amp; quiz start/submit/summary, ai-engine code-review/execute/feedback.</li>
+      </ul>
+      <h3>Performance</h3>
+      <ul class="stripes">
+        <li>Timing regressions with generous bounds: ID generation ×1000, password hashing ×100, query-builder ×10k, JSON parsing ×50–100, classifier ×200, endpoint round-trips. Typical measured times are in the low ms range.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── Functional verification ── -->
+  <h2>7. Functional Verification (Frontend)</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:22%">Feature</th><th>Verification</th><th style="width:12%" class="num">Status</th></tr></thead>
+      <tbody>
+        <tr><td><b>Delete learning materials</b></td><td>Per-card trash icon opens centered confirmation; single &amp; "Delete all" remove records from MongoDB (hard delete) and cascade student-progress cleanup; list refreshes.</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><b>Delete confirmation dialog</b></td><td>Rendered via portal to <code>document.body</code> so it centers on the full viewport and dims the entire background regardless of ancestor transforms; scroll locked while open; error banner surfaces backend failures.</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><b>Material card layout</b></td><td>Badges (difficulty / prerequisite / gap-type) grouped &amp; left-aligned in a wrap-safe row; delete icon pinned; long titles/topic-ids truncate cleanly.</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><b>Dashboard real data</b></td><td>Mastery goal + weak concepts + mastery level from latest KAA mastery profile; progress bars from LMG progress stats; "Just for you" cards from the user&rsquo;s 3 most recent materials; graceful empty/error states.</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><b>Settings page</b></td><td>Profile edit (name, java level, institution, country, bio, avatar) via <code>PUT /api/students/me</code>; password change; notification toggles/language/timezone via preferences endpoints; account deletion with password confirmation.</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+        <tr><td><b>Type safety</b></td><td><code>npx tsc --noEmit</code> clean for all changed frontend code (single pre-existing <code>fabric</code> typing gap unrelated to this work).</td><td class="num"><span class="badge pass">PASS</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Defect log ── -->
+  <h2>8. Defects Found &amp; Fixed</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:4%">ID</th><th style="width:16%">Severity</th><th>Defect / Root cause</th><th style="width:26%">Fix applied</th><th style="width:11%" class="num">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="num">D1</td><td><span class="badge fail">HIGH</span></td><td>Deleting a material never deleted it — backend <code>deleteMaterial</code> matched only <code>structured_material.material_id</code>, but the client sent the Mongo <code>_id</code>, so every delete 404&rsquo;d.</td><td>Lookup falls back to <code>findById</code> when the id is a 24-hex ObjectId (mirrors <code>getMaterialById</code>).</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D2</td><td><span class="badge fail">HIGH</span></td><td>Soft-deleted materials still appeared — list filter <code>quality_flags: {$ne:'deleted'}</code> never matched the <code>{deleted:true}</code> object that delete sets.</td><td>Filter changed to <code>quality_flags.deleted: {$ne: true}</code>; delete upgraded to a true hard delete.</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D3</td><td><span class="badge fail">HIGH</span></td><td>Frontend silently swallowed delete failures — the API client never threw on non-2xx and <code>performDelete</code> ignored the response.</td><td>Handler verifies <code>res.success</code> for single and bulk ops and surfaces the real error in the dialog.</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D4</td><td><span class="badge warn">MEDIUM</span></td><td>After a successful delete, the <code>deleting</code> flag was never reset, silently disabling all further deletes.</td><td>Reset <code>deleting</code> on the success path.</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D5</td><td><span class="badge warn">MEDIUM</span></td><td>Delete/confirm dialog rendered "in the page" — an ancestor <code>animate-slide-up</code> transform created a containing block, breaking <code>position:fixed</code> centering/dimming.</td><td>Dialog rendered through a React portal into <code>document.body</code>; body scroll-locked while open.</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D6</td><td><span class="badge fail">HIGH</span></td><td>AI features failed — Ollama was not running on the host, so every <code>ai-engine</code> call returned <i>"All connection attempts failed"</i>.</td><td>Ollama restarted; <code>llama3:8b</code> / <code>qwen2.5-coder:7b</code> confirmed installed and reachable from the container (HTTP 200).</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D7</td><td><span class="badge warn">MEDIUM</span></td><td>Dashboard rendered hard-coded mock data instead of real user insights.</td><td>Rewired to live KAA mastery profile, LMG progress stats and recent materials with isolated per-source failure handling.</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+        <tr><td class="num">D8</td><td><span class="badge warn">MEDIUM</span></td><td>During earlier cycles (resolved previously): register 409 misreported; <code>knowledge-profile/me</code> &amp; <code>github-review</code> 403s; port-5007 KAA connectivity; <code>sonner</code> build failure.</td><td>Response normalization, internal-key handling, compose port mapping, dependency fix — carry-over, verified stable.</td><td class="num"><span class="badge pass">FIXED</span></td></tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:8px">Regression coverage for D1–D4 lives in <code>test/learning-generator/integration/endpoints.api.test.js</code> (materials fetch/delete incl. progress cascade) and the user-service/assessment suites re-verified during this cycle.</p>
+  </div>
+
+  <!-- ── Known issues ── -->
+  <h2>9. Known Issues &amp; Residual Risks</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:22%">Item</th><th style="width:14%">Severity</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td>Vertex AI (Gemini) auth</td><td><span class="badge warn">OPEN</span></td><td><code>invalid_grant: account not found</code> with the current <code>gcp-sa.json</code>. The stack falls back to Ollama (<code>gemini_configured()</code> gate). Not blocking; requires a valid service account credential to enable Gemini.</td></tr>
+        <tr><td><code>fabric</code> TS typings</td><td><span class="badge info">LOW</span></td><td>Pre-existing TS7016 in peer-learning CodeEditor; add <code>@types/fabric</code> or a declaration when convenient.</td></tr>
+        <tr><td>Node 25 <code>node --test</code> quirk</td><td><span class="badge info">LOW</span></td><td>Bare-directory arg crashes on this Node build (upstream bug); scripts use glob patterns, so CI on Node 20/22 is unaffected.</td></tr>
+        <tr><td>No UI automation</td><td><span class="badge warn">MEDIUM</span></td><td>Frontend verified functionally/manually; recommended next step is Playwright for regressions.</td></tr>
+        <tr><td>Delete-all scope</td><td><span class="badge info">LOW</span></td><td>Bulk delete operates on the currently loaded (paginated) list; pagination is fixed at the API default.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Commands ── -->
+  <h2>10. How to Run</h2>
+  <div class="card">
+    <pre><code># Node suites (user-service, assessment-agent, learning-generator)
+cd mentora-backend/test
+npm install
+npm test
+
+# Python suites (from repo root — conftest.py wires sys.path)
+cd /Volumes/My Data/SLIIT/Research/PP2/mentora-backend
+python3 -m pytest test/knowledge-analysis -q
+python3 -m pytest test/peer-learning       -q
+python3 -m pytest test/ai-engine           -q</code></pre>
+    <p class="note">See <code>test/README.md</code> for per-service and single-file run instructions, layer definitions and the full status table.</p>
+  </div>
+
+  <!-- ── Conclusion ── -->
+  <h2>11. Conclusion &amp; Recommendations</h2>
+  <div class="card">
+    <p>The backend test strategy is now consolidated in a single harness with equal three-layer coverage for all six services (<b>188 tests, 100% passing</b>), and the frontend deliverables for this cycle passed functional verification with all identified defects closed. Remaining action items, in priority order:</p>
+    <ol class="stripes" style="margin:0">
+      <li>Obtain a valid GCP service-account credential to activate the Gemini provider path.</li>
+      <li>Add Playwright UI regression tests for the dashboard, materials and settings flows.</li>
+      <li>Wire the <code>test/</code> suites into CI (GitHub Actions already builds the services; add test jobs) using Node 20/22 LTS.</li>
+      <li>Resolve the <code>fabric</code> typing gap and evaluate true load-testing of the dockerized stack.</li>
+    </ol>
+  </div>
+
+  <footer>
+    Prepared for the Mentora AI Tutor project · QA report generated from a full clean run of all suites on 31 Aug 2026 · Self-contained HTML, print-friendly.
+  </footer>
+
+</div>
+</body>
+</html>

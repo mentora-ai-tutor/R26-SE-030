@@ -48,9 +48,10 @@ calls are required to run them.
 
 ## Prerequisites
 
-- **Node.js** `>= 20` for the JavaScript suites
-  (`node --test` directory scanning is broken on some Node 25.x builds — the
-  npm scripts use the glob form that works everywhere).
+- **Node.js** `>= 21` (Node 22 LTS **recommended**, and what CI uses) for the
+  JavaScript suites. `node --test` glob arguments need Node 21+ — on Node 20 a
+  glob like `"learning-generator/**/*.test.js"` is treated as a literal path and
+  fails, and bare-directory scanning is broken on some Node 25.x builds.
 - **Python 3.11+** with `pytest`, `fastapi` and `httpx` installed for the
   Python suites:
   ```bash

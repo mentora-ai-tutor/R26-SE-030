@@ -12,5 +12,6 @@ chromadb
 pypdf
 python-dotenv
 websockets
+python-socketio[asyncio_client]
 scikit-learn
 numpy

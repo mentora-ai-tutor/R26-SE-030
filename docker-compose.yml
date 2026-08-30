@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # ── User Service ──
   user-service:
@@ -34,6 +32,67 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - user-service
+
+  # ── Assessment & Mastery Evaluation (AME) Agent ──
+  assessment-agent:
+    build:
+      context: ./services/assessment-agent
+      dockerfile: Dockerfile
+    container_name: mentora-assessment-agent
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    env_file:
+      - ./services/assessment-agent/.env
+    environment:
+      PORT: 5002
+      N8N_BASE_URL: http://n8n-container:5678
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      FRONTEND_URL: http://localhost:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - user-service
+
+  # ── Peer Learning Service ──
+  peer-learning:
+    build:
+      context: ./services/peer-learning
+      dockerfile: Dockerfile
+    container_name: mentora-peer-learning
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./services/peer-learning/.env
+    environment:
+      PORT: 8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Knowledge Analysis Agent (KAA) ──
+  knowledge-analysis:
+    build:
+      context: ./services/knowledge-analysis
+      dockerfile: Dockerfile
+    container_name: mentora-knowledge-analysis
+    restart: unless-stopped
+    ports:
+      - "5007:8000"
+    env_file:
+      - ./services/knowledge-analysis/.env
+    environment:
+      USER_SERVICE_INTERNAL_URL: http://user-service:3001
+      AI_ENGINE_URL: http://ai-engine:5010
+      OLLAMA_URL: http://host.docker.internal:11434
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-sa.json
+    volumes:
+      - ./services/knowledge-analysis/gcp-sa.json:/app/gcp-sa.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - user-service
+      - ai-engine
 
   # ── AI Engine ──
   ai-engine:

@@ -53,16 +53,21 @@ async def llm_options() -> dict[str, Any]:
     """
     Report which LLM engines the review UI may offer.
 
-    Gemini is always available (it is the managed default). Ollama is only
-    offered when the configured local server actually answers a health check,
-    so the frontend can disable it instead of letting a review error out.
+    Ollama is only offered when the configured local server actually answers a
+    health check, so the frontend can disable it instead of letting a review
+    error out. The reported default falls back to Ollama when Gemini's service
+    account is not configured on this machine (the credentials file is missing).
     """
+    from app.services.llm import config as llm_cfg
+
+    ollama_up = await ollama_available()
+    default = "ollama" if (ollama_up and not llm_cfg.gemini_configured()) else "gemini"
     return {
         "status": "success",
         "data": {
             "providers": list(LLM_CHOICES),
-            "default": "gemini",
-            "ollama_available": await ollama_available(),
+            "default": default,
+            "ollama_available": ollama_up,
         },
     }
 

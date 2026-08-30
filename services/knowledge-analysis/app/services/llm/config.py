@@ -10,6 +10,11 @@ GCP_PROJECT  = os.getenv("GCP_PROJECT",  "chapmanvoice")
 GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
+
+def gemini_configured() -> bool:
+    """True when the Gemini/Vertex AI service-account file actually exists."""
+    return bool(GOOGLE_APPLICATION_CREDENTIALS) and os.path.isfile(GOOGLE_APPLICATION_CREDENTIALS)
+
 GEMINI_MODEL_PRIMARY = os.getenv("GEMINI_MODEL_PRIMARY", "gemini-3.1-pro-preview")
 GEMINI_MODEL_TOOLS   = os.getenv("GEMINI_MODEL_TOOLS",   "gemini-3.1-pro-preview-customtools")
 GEMINI_MODEL_GA      = os.getenv("GEMINI_MODEL_GA",      "gemini-2.5-pro")

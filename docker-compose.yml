@@ -78,12 +78,16 @@ services:
     container_name: mentora-knowledge-analysis
     restart: unless-stopped
     ports:
-      - "8001:8000"
+      - "5007:8000"
     env_file:
       - ./services/knowledge-analysis/.env
     environment:
       USER_SERVICE_INTERNAL_URL: http://user-service:3001
       AI_ENGINE_URL: http://ai-engine:5010
+      OLLAMA_URL: http://host.docker.internal:11434
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-sa.json
+    volumes:
+      - ./services/knowledge-analysis/gcp-sa.json:/app/gcp-sa.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

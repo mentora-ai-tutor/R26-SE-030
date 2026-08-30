@@ -14,7 +14,7 @@ services:
       - ./services/user service/.env
     environment:
       PORT: 3001
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3002
 
   # ── Learning Material Generator Service ──
   lmg-service:
@@ -29,7 +29,9 @@ services:
       - ./services/learning-generator/.env
     environment:
       PORT: 3002
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - user-service
 

@@ -1,0 +1,816 @@
+{
+  "name": "LMG_PP1-v19-fixed",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "learner-profile",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8458dbb9-6dd3-4e15-a1b3-eb4ae5f3650d",
+      "name": "Webhook — Receive Learner Profile",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        1616
+      ],
+      "webhookId": "dc5d1f26-b678-449a-b758-1969f9991977",
+      "notes": "Receives JSON learner profile from Knowledge Analysis Agent (Component 01)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\n\nlet data = raw.body ?? raw;\nif (typeof data === 'string') {\n  try { data = JSON.parse(data); } catch(e) { throw new Error('Invalid JSON body: ' + e.message); }\n}\n\nlet body = data.test_cases ? data.test_cases[0].body : data;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch(e) {}\n}\n\nif (!body.student_id)       throw new Error('Missing: student_id');\nif (!body.mastery_profile)  throw new Error('Missing: mastery_profile');\nif (!Array.isArray(body.mastery_profile.knowledge_gaps)) throw new Error('knowledge_gaps must be an array');\nif (body.mastery_profile.knowledge_gaps.length === 0)    throw new Error('No knowledge gaps found');\n\nreturn [{\n  json: {\n    student_id:            String(body.student_id),\n    analysis_timestamp:    body.analysis_timestamp || new Date().toISOString(),\n    overall_mastery_score: body.mastery_profile.overall_mastery_score ?? null,\n    knowledge_gaps:        body.mastery_profile.knowledge_gaps,\n    strengths:             body.mastery_profile.strengths    || [],\n    recommendations:       body.recommendations              || {},\n    data_sources:          body.data_sources                 || {}\n  }\n}];"
+      },
+      "id": "75cbb958-ef7d-44ee-a78d-a22d201767bf",
+      "name": "Schema Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst DIFFICULTY_MAP = {\n  'FUNDAMENTAL_GAP': 'beginner',\n  'PARTIAL_GAP':     'intermediate',\n  'SURFACE_GAP':     'intermediate'\n};\nconst CONTENT_TYPE_MAP = {\n  'interactive_tutorial':  ['concept_explanation','step_by_step_tutorial','coding_examples'],\n  'step_by_step_practice': ['step_by_step_tutorial','debugging_task','practice_exercises'],\n  'targeted_quiz':         ['concept_summary','quiz','practice_exercises'],\n  'practice_exercises':    ['practice_exercises','coding_examples','quiz']\n};\n\nconst studentId    = String(data.student_id);\nconst masteryScore = data.overall_mastery_score ?? null;\n\nconst processedGaps = data.knowledge_gaps.map((gap, index) => {\n  const intervention        = gap.suggested_intervention || {};\n  const primaryIntervention = intervention.primary || 'interactive_tutorial';\n  const contentTypes        = CONTENT_TYPE_MAP[primaryIntervention] || ['concept_explanation','practice_exercises'];\n  return {\n    student_id:            studentId,\n    overall_mastery_score: masteryScore,\n    priority:              index + 1,\n    topic:                 gap.topic,\n    topic_id:              gap.topic_id,\n    gap_type:              gap.gap_type,\n    difficulty_level:      DIFFICULTY_MAP[gap.gap_type] || intervention.difficulty_level || 'beginner',\n    misconceptions:        gap.misconceptions           || [],\n    error_patterns:        gap.observed_error_patterns  || {},\n    evidence_summary:      gap.evidence_summary         || '',\n    prerequisite_topics:   gap.prerequisite_topics      || [],\n    related_topics:        gap.related_topics           || [],\n    learning_objectives:   intervention.learning_objectives || [],\n    content_types_to_generate: contentTypes,\n    estimated_time_minutes: intervention.estimated_time_minutes || 60,\n    primary_intervention:  primaryIntervention\n  };\n});\n\nreturn [{\n  json: {\n    student_id:            studentId,\n    analysis_timestamp:    data.analysis_timestamp,\n    overall_mastery_score: masteryScore,\n    strengths:             data.strengths,\n    processed_gaps:        processedGaps,\n    recommendations:       data.recommendations,\n    processing_timestamp:  new Date().toISOString()\n  }\n}];"
+      },
+      "id": "7ae39d8b-4b83-4641-994d-b62637bbafe7",
+      "name": "Profile Processing Module",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $json;\nconst gap  = item.gap || item;\n\nconst studentId    = gap.student_id    || item.student_id    || 'UNKNOWN';\nconst masteryScore = gap.overall_mastery_score ?? item.overall_mastery_score ?? 'N/A';\nconst topic        = gap.topic        || 'Unknown Topic';\nconst level        = gap.difficulty_level || 'beginner';\nconst gapType      = gap.gap_type     || 'FUNDAMENTAL_GAP';\n\nconst misconceptions = (gap.misconceptions || []).slice(0, 3).map((m, i) => `${i+1}. ${m}`).join('\\n') || 'None listed';\nconst prereqs        = (gap.prerequisite_topics || []).slice(0, 3).join(', ') || 'None';\nconst relatedTopics  = (gap.related_topics || []).slice(0, 2).join(', ')      || 'advanced topics';\nconst objectives     = (gap.learning_objectives || []).slice(0, 3).map((o, i) => `${i+1}. ${o}`).join('\\n') || 'Master the concept';\nconst evidence       = (gap.evidence_summary || 'No evidence provided').substring(0, 200);\n\n// USER PROMPT: student context only — JSON schema is in the system prompt\nconst llmPrompt = `STUDENT: ${studentId} | Score: ${masteryScore}/100 | Level: ${level}\nTOPIC: ${topic} (${gapType})\nKNOWS: ${prereqs}\nUNLOCKS: ${relatedTopics}\nMISCONCEPTIONS:\n${misconceptions}\nEVIDENCE: ${evidence}\nOBJECTIVES:\n${objectives}`;\n\nconst slmPrompt = `STUDENT: ${studentId} | Topic: ${topic} | Level: ${level}\nMISCONCEPTIONS:\n${misconceptions}\nEVIDENCE: ${evidence}`;\n\nreturn [{\n  json: {\n    ...item,\n    student_id:            studentId,\n    overall_mastery_score: masteryScore,\n    gap:                   gap,\n    llm_prompt:            llmPrompt,\n    slm_prompt:            slmPrompt,\n    prompt_generated_at:   new Date().toISOString(),\n    agent_retry_count:     0,\n    agent_state:           'initial'\n  }\n}];\n"
+      },
+      "id": "517edb8c-cc19-4d12-8d7b-8729c2ce19df",
+      "name": "Prompt Construction Module",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        1616
+      ],
+      "notes": "V19: Lean user prompts — student context only. Full JSON template in system prompt. Fixes token overflow on qwen2.5-coder:7b."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item     = $input.first().json;\nconst upstream = $('Prompt Construction Module').first().json;\n\nconst raw = (item.message?.content || item.response || '').trim();\n\nfunction stripFences(s) {\n  return s.replace(/^```json\\s*/gi, '').replace(/^```\\s*/gi, '').replace(/\\s*```$/gi, '').replace(/^`+/g, '').replace(/`+$/g, '').trim();\n}\n\nfunction findOutermostObject(s) {\n  const start = s.indexOf('{');\n  if (start === -1) return null;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === '{') depth++;\n    else if (s[i] === '}') { depth--; if (depth === 0) return s.substring(start, i + 1); }\n  }\n  const lastClose = s.lastIndexOf('}');\n  if (lastClose > start) return s.substring(start, lastClose + 1);\n  return null;\n}\n\nfunction extractField(s, fieldName, type) {\n  if (type === 'string') {\n    const re = new RegExp('\"' + fieldName + '\"\\\\s*:\\\\s*\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"', 's');\n    const m = s.match(re);\n    return m ? m[1].replace(/\\\\n/g,'\\n').replace(/\\\\\"/g,'\"') : null;\n  }\n  const bracket = type === 'array' ? '[' : '{';\n  const closeBracket = type === 'array' ? ']' : '}';\n  const re = new RegExp('\"' + fieldName + '\"\\\\s*:\\\\s*(\\\\' + bracket + ')');\n  const m = re.exec(s);\n  if (!m) return null;\n  let start = m.index + m[0].length - 1;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === bracket) depth++;\n    else if (s[i] === closeBracket) { depth--; if (depth === 0) { try { return JSON.parse(s.substring(start, i+1)); } catch(e) { return null; } } }\n  }\n  return null;\n}\n\nlet llmContent = null;\nlet parseError  = null;\nconst cleaned   = stripFences(raw);\nconst candidate = findOutermostObject(cleaned);\n\nif (candidate) {\n  try {\n    llmContent = JSON.parse(candidate);\n  } catch(e) {\n    parseError = 'JSON.parse failed: ' + e.message;\n    const partial = {};\n    ['page_title'].forEach(f => { partial[f] = extractField(candidate, f, 'string'); });\n    ['introduction','concept_explained','syntax_reference','examples','step_by_step_guide','debugging_exercise','quick_reference','connections'].forEach(f => { partial[f] = extractField(candidate, f, 'object'); });\n    ['common_mistakes'].forEach(f => { partial[f] = extractField(candidate, f, 'array'); });\n    const filledCount = Object.values(partial).filter(v => v !== null).length;\n    if (filledCount > 0) {\n      partial._extraction_method = 'field_by_field_fallback';\n      partial._fields_recovered  = filledCount;\n      llmContent = partial;\n      parseError += ` | fallback recovered ${filledCount} fields`;\n    } else {\n      llmContent = { parse_failed: true, raw_response: raw.substring(0, 3000), error: parseError };\n    }\n  }\n} else {\n  parseError = 'No JSON object found';\n  llmContent  = { parse_failed: true, raw_response: raw.substring(0, 3000), error: parseError };\n}\n\nreturn [{\n  json: {\n    student_id:            upstream.student_id,\n    gap:                   upstream.gap,\n    overall_mastery_score: upstream.overall_mastery_score,\n    llm_output:            llmContent,\n    llm_parse_error:       parseError,\n    llm_model:             'qwen2.5-coder:7b',\n    llm_responded_at:      new Date().toISOString(),\n    agent_retry_count:     upstream.agent_retry_count || 0,\n    agent_state:           upstream.agent_state || 'initial',\n    llm_prompt:            upstream.llm_prompt,\n    slm_prompt:            upstream.slm_prompt\n  }\n}];\n"
+      },
+      "id": "282b2661-193f-4b67-bd63-95ff3b7793ad",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        1424
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── QUALITY REVIEW AGENT V19 ─────────────────────────────────────────\n// Fixed: lower threshold (60 not 80) for 7b model, MAX_RETRIES=1 to\n// prevent 6-minute timeout loops. Patch fills gaps intelligently.\n\nconst item = $input.first().json;\nconst llm  = item.llm_output || {};\nconst gap  = item.gap || {};\nconst retryCount = item.agent_retry_count || 0;\nconst MAX_RETRIES = 1; // was 2 — one retry is enough for a 7b model\n\n// ── Quality scoring ───────────────────────────────────────────────────\nconst checks = {\n  has_title:          !!llm.page_title,\n  has_introduction:   !!(llm.introduction?.what_is_it),\n  has_concept:        !!(llm.concept_explained?.core_definition),\n  has_syntax:         !!(llm.syntax_reference?.basic_syntax),\n  has_examples:       !!(llm.examples?.example_1?.code),\n  has_steps:          Array.isArray(llm.step_by_step_guide?.steps) && llm.step_by_step_guide.steps.length >= 3,\n  has_debug_exercise: !!(llm.debugging_exercise?.broken_code),\n  has_mistakes:       Array.isArray(llm.common_mistakes) && llm.common_mistakes.length >= 2,\n  no_parse_fail:      !llm.parse_failed,\n  no_empty_codes:     !!(llm.examples?.example_1?.code?.length > 20)\n};\n\nconst passedChecks = Object.values(checks).filter(Boolean).length;\nconst totalChecks  = Object.keys(checks).length;\nconst qualityScore = Math.round((passedChecks / totalChecks) * 100);\n\n// ── Agent Decision — threshold lowered to 60 for 7b model ────────────\nlet agentDecision;\nlet refinedPromptAddition = '';\n\n// CRITICAL FIX: if LLM returned nothing (parse_failed + empty), go straight\n// to patch after 1 retry — retrying a timed-out model wastes 6 minutes\nconst isCompletelyEmpty = llm.parse_failed && retryCount >= MAX_RETRIES;\nconst isEmptyFirstPass  = llm.parse_failed && retryCount === 0;\n\nif (qualityScore >= 60 && !llm.parse_failed) {\n  agentDecision = 'ACCEPT';\n} else if (isCompletelyEmpty || retryCount >= MAX_RETRIES) {\n  agentDecision = 'ACCEPT_WITH_PATCH';\n} else {\n  agentDecision = 'RETRY';\n  const missing = Object.entries(checks).filter(([k,v]) => !v).map(([k]) => k);\n  refinedPromptAddition = `\\n\\n⚠ RETRY ${retryCount + 1}: Missing sections: ${missing.join(', ')}. Quality was ${qualityScore}/100. Include ALL sections with real Java content.`;\n}\n\n// ── Patch missing fields with topic-aware defaults ────────────────────\nif (agentDecision === 'ACCEPT_WITH_PATCH') {\n  const topic = gap.topic || 'Java Concept';\n  const level = gap.difficulty_level || 'beginner';\n  const prereqs = (gap.prerequisite_topics || []).join(', ') || 'basic Java';\n  const related = (gap.related_topics || []).join(', ') || 'advanced Java topics';\n  const misconceptions = (gap.misconceptions || []);\n\n  if (!llm.page_title)\n    llm.page_title = `Java ${topic} - MENTORA Tutorial`;\n\n  if (!llm.introduction)\n    llm.introduction = {\n      what_is_it: `${topic} is a core Java concept that allows programs to ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'treat objects of different types through a common interface, enabling flexible and extensible code' : topic.includes('Linked') ? 'store elements in nodes connected by references, enabling efficient insertion and deletion' : topic.includes('Exception') ? 'handle runtime errors gracefully without crashing the program' : 'organize and structure code more effectively'}. It is fundamental to writing professional Java applications.`,\n      why_learn_it: `Mastering ${topic} enables you to write cleaner, more maintainable Java code. It is required knowledge for ${level === 'beginner' ? 'intermediate Java programming and most real-world projects' : 'advanced topics and professional development'}. Without understanding ${topic}, you will struggle with ${related}.`,\n      prerequisite_note: `You should be comfortable with ${prereqs} before studying ${topic}.`\n    };\n\n  if (!llm.concept_explained)\n    llm.concept_explained = {\n      core_definition: `${topic} in Java enables ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'objects of different classes to be treated as instances of a common superclass, with methods resolved at runtime' : topic.includes('Linked') ? 'a sequence of nodes where each node holds data and a reference to the next node' : topic.includes('Exception') ? 'the program to detect, signal, and recover from error conditions using try-catch-finally blocks' : 'structured, reusable programming patterns'}.`,\n      analogy: `Think of ${topic} like ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'a TV remote — you press \"volume up\" and it works whether you have a Samsung, LG, or Sony TV. The same button (method call) produces the right action depending on which TV (object type) you point it at' : topic.includes('Linked') ? 'a train — each carriage (node) is connected to the next one. To reach carriage 5, you walk through carriages 1, 2, 3, 4. Adding a new carriage only requires connecting it to its neighbours' : topic.includes('Exception') ? 'a safety net under a tightrope walker — you hope it is never needed, but when something goes wrong, it catches you and lets you recover gracefully instead of crashing to the floor' : 'a blueprint for a building — the plan defines the structure and behaviour, and you can build many instances from one plan'}.`,\n      how_java_handles_it: `Java implements ${topic} through ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'dynamic dispatch: when you call a method on a superclass reference, Java looks up the actual object type at runtime and calls the correct overridden method. This is enabled by the JVM\\'s virtual method table (vtable)' : topic.includes('Linked') ? 'the LinkedList class in java.util, or custom Node classes. Each Node holds a data field and a next reference. Java\\'s garbage collector automatically frees nodes when they are no longer referenced' : topic.includes('Exception') ? 'a hierarchy of Throwable classes. Checked exceptions (IOException, SQLException) must be declared or caught. Unchecked exceptions (NullPointerException, ArrayIndexOutOfBoundsException) extend RuntimeException and do not require explicit handling' : 'built-in language features and standard library classes'}.`,\n      misconceptions_corrected: misconceptions.length > 0\n        ? misconceptions.map((m, i) => `MISCONCEPTION ${i+1}: ${m}\\nTHE TRUTH: ${topic.includes('OOP') || topic.includes('Polymorphism') ? (i===0 ? 'Overloading = same method name, different parameters (compile-time). Overriding = same signature in subclass (runtime). They are completely different mechanisms.' : i===1 ? 'Dynamic dispatch means Java decides WHICH method to call based on the actual object type at runtime, not the declared variable type. Animal a = new Dog(); a.speak() calls Dog.speak().' : 'Abstract classes can have state and concrete methods; they use extends. Interfaces define contracts; they use implements. Use abstract class for shared behaviour, interface for capability contracts.') : (i===0 ? 'Review the Java documentation and practice with small examples to correct this understanding.' : 'Practice more examples to solidify the correct mental model.')}`)\n          .join('\\n\\n')\n        : `Common misconceptions about ${topic} can be corrected through careful study of the examples below.`\n    };\n\n  if (!llm.syntax_reference)\n    llm.syntax_reference = {\n      basic_syntax: topic.includes('OOP') || topic.includes('Polymorphism')\n        ? `class Animal { void speak() { System.out.println(\"...\"); } }\\nclass Dog extends Animal { @Override void speak() { System.out.println(\"Woof!\"); } }\\nAnimal a = new Dog(); a.speak(); // prints: Woof! (dynamic dispatch)`\n        : topic.includes('Linked')\n        ? `class Node { int data; Node next; Node(int d) { data = d; next = null; } }\\nNode head = new Node(1);\\nhead.next = new Node(2);\\nhead.next.next = new Node(3);`\n        : topic.includes('Exception')\n        ? `try {\\n    // risky code\\n} catch (IOException e) {\\n    // handle checked exception\\n} catch (RuntimeException e) {\\n    // handle unchecked exception\\n} finally {\\n    // always runs\\n}`\n        : `// Core ${topic} syntax — see examples below`,\n      syntax_breakdown: `1. Declaration: defines the structure\\n2. Initialization: creates the instance\\n3. Usage: applies the concept\\n4. Clean-up: releases resources if needed`,\n      important_rules: `1. Always define proper termination/base conditions\\n2. Ensure every code path returns a value\\n3. Handle edge cases (null, empty, boundary values)`\n    };\n\n  if (!llm.examples || !llm.examples.example_1)\n    llm.examples = {\n      example_1: {\n        title: `Basic ${topic}`,\n        description: `Demonstrates the core ${topic} concept in Java.`,\n        code: topic.includes('OOP') || topic.includes('Polymorphism')\n          ? `public class PolymorphismDemo {\\n    // Base class\\n    static class Animal {\\n        String name;\\n        Animal(String name) { this.name = name; }\\n        void speak() { System.out.println(name + \" makes a sound\"); }\\n    }\\n    // Subclass overrides speak()\\n    static class Dog extends Animal {\\n        Dog(String name) { super(name); }\\n        @Override\\n        void speak() { System.out.println(name + \" says: Woof!\"); }\\n    }\\n    static class Cat extends Animal {\\n        Cat(String name) { super(name); }\\n        @Override\\n        void speak() { System.out.println(name + \" says: Meow!\"); }\\n    }\\n    public static void main(String[] args) {\\n        // Polymorphic array — Animal references hold Dog and Cat objects\\n        Animal[] animals = { new Dog(\"Rex\"), new Cat(\"Luna\"), new Dog(\"Buddy\") };\\n        for (Animal a : animals) {\\n            a.speak(); // Java calls the correct overridden method at runtime\\n        }\\n    }\\n}`\n          : topic.includes('Linked')\n          ? `public class LinkedListDemo {\\n    static class Node {\\n        int data;\\n        Node next;\\n        Node(int data) { this.data = data; this.next = null; }\\n    }\\n    static class LinkedList {\\n        Node head;\\n        void add(int data) {\\n            Node newNode = new Node(data);\\n            if (head == null) { head = newNode; return; }\\n            Node curr = head;\\n            while (curr.next != null) curr = curr.next;\\n            curr.next = newNode;\\n        }\\n        void print() {\\n            Node curr = head;\\n            while (curr != null) {\\n                System.out.print(curr.data + (curr.next != null ? \" -> \" : \"\\\\n\"));\\n                curr = curr.next;\\n            }\\n        }\\n    }\\n    public static void main(String[] args) {\\n        LinkedList list = new LinkedList();\\n        list.add(10); list.add(20); list.add(30);\\n        list.print();\\n    }\\n}`\n          : `public class ${topic.replace(/[^a-zA-Z]/g,'')}Demo {\\n    public static void main(String[] args) {\\n        System.out.println(\"Demonstrating ${topic}\");\\n        example();\\n    }\\n    static void example() {\\n        System.out.println(\"Core concept applied\");\\n        System.out.println(\"Study the concept_explained section above\");\\n        System.out.println(\"Then try the practice_challenge below\");\\n    }\\n}`,\n        output: topic.includes('OOP') || topic.includes('Polymorphism')\n          ? `Rex says: Woof!\\nLuna says: Meow!\\nBuddy says: Woof!`\n          : topic.includes('Linked') ? `10 -> 20 -> 30` : `Demonstrating ${topic}`,\n        explanation: `This example shows the fundamental ${topic} pattern. Notice how the code follows the syntax_reference above. Run it yourself and trace the execution manually using the step_by_step_guide.`\n      },\n      example_2: {\n        title: `Real-World ${topic} Use`,\n        description: `Shows how ${topic} appears in practical Java applications.`,\n        code: topic.includes('OOP') || topic.includes('Polymorphism')\n          ? `public class ShapeCalculator {\\n    static abstract class Shape {\\n        abstract double area();\\n        void describe() {\\n            System.out.printf(\"%s area: %.2f%n\", getClass().getSimpleName(), area());\\n        }\\n    }\\n    static class Circle extends Shape {\\n        double radius;\\n        Circle(double r) { radius = r; }\\n        @Override double area() { return Math.PI * radius * radius; }\\n    }\\n    static class Rectangle extends Shape {\\n        double w, h;\\n        Rectangle(double w, double h) { this.w=w; this.h=h; }\\n        @Override double area() { return w * h; }\\n    }\\n    public static void main(String[] args) {\\n        Shape[] shapes = { new Circle(5), new Rectangle(4, 6) };\\n        for (Shape s : shapes) s.describe();\\n    }\\n}`\n          : `public class RealWorldDemo {\\n    public static void main(String[] args) {\\n        System.out.println(\"Real-world application of ${topic}\");\\n        processData(42);\\n    }\\n    static void processData(int value) {\\n        System.out.println(\"Processing: \" + value);\\n        System.out.println(\"Result: \" + (value * 2));\\n    }\\n}`,\n        output: topic.includes('OOP') || topic.includes('Polymorphism')\n          ? `Circle area: 78.54\\nRectangle area: 24.00` : `Real-world application of ${topic}\\nProcessing: 42\\nResult: 84`,\n        explanation: `In real applications, ${topic} allows you to write code that works with multiple types through a common interface. This is the foundation of frameworks like Spring and Android.`\n      },\n      example_3_misconception_fix: {\n        title: `Common Mistake: Fixed`,\n        description: misconceptions[0] || `A common misunderstanding of ${topic}`,\n        wrong_code: topic.includes('OOP') || topic.includes('Polymorphism')\n          ? `public class WrongOOP {\\n    static class Animal {\\n        void speak() { System.out.println(\"Animal sound\"); }\\n    }\\n    static class Dog extends Animal {\\n        // BUG: This is OVERLOADING (different param) not OVERRIDING\\n        void speak(String loudly) { System.out.println(\"Woof \" + loudly); }\\n    }\\n    public static void main(String[] args) {\\n        Animal a = new Dog();\\n        a.speak(); // BUG: Calls Animal.speak(), not Dog's version!\\n    }\\n}`\n          : `public class WrongExample {\\n    public static void main(String[] args) {\\n        // BUG: Common mistake with ${topic}\\n        System.out.println(\"This approach is incorrect\");\\n    }\\n}`,\n        wrong_output: topic.includes('OOP') || topic.includes('Polymorphism') ? `Animal sound  // Expected Dog behaviour but got Animal's!` : `This approach is incorrect`,\n        correct_code: topic.includes('OOP') || topic.includes('Polymorphism')\n          ? `public class CorrectOOP {\\n    static class Animal {\\n        void speak() { System.out.println(\"Animal sound\"); }\\n    }\\n    static class Dog extends Animal {\\n        // FIXED: @Override ensures we actually override, not overload\\n        @Override\\n        void speak() { System.out.println(\"Woof!\"); }\\n    }\\n    public static void main(String[] args) {\\n        Animal a = new Dog();\\n        a.speak(); // Now correctly calls Dog.speak() via dynamic dispatch\\n    }\\n}`\n          : `public class CorrectExample {\\n    public static void main(String[] args) {\\n        System.out.println(\"This is the correct approach\");\\n    }\\n}`,\n        correct_output: topic.includes('OOP') || topic.includes('Polymorphism') ? `Woof!` : `This is the correct approach`,\n        explanation: `The bug was ${misconceptions[0] ? `related to: ${misconceptions[0]}` : `a common mistake`}. Always use @Override annotation — it causes a compile error if you accidentally overload instead of override, catching the bug immediately.`\n      }\n    };\n\n  if (!Array.isArray(llm.step_by_step_guide?.steps) || llm.step_by_step_guide.steps.length < 3)\n    llm.step_by_step_guide = {\n      overview: `Follow these 5 steps to master ${topic}. Take your time on each step — understanding beats memorisation.`,\n      steps: [\n        { step_number: 1, title: 'Understand the concept', instruction: `Read the concept_explained section carefully. Focus on the analogy — it builds the right mental model. Ask yourself: what problem does ${topic} solve? Why does Java need it?`, java_tip: 'Write the definition in your own words before coding anything.' },\n        { step_number: 2, title: 'Study the syntax', instruction: `Read syntax_reference carefully. Identify each part of the pattern. Copy the basic_syntax into your IDE and confirm it compiles without errors.`, java_tip: `Use your IDE's autocomplete to explore ${topic} — it reveals available methods and options.` },\n        { step_number: 3, title: 'Trace Example 1', instruction: `Read example_1 line by line. Before running it, predict the output. Then run it and compare. If you were wrong, trace again until you understand why.`, java_tip: 'Add System.out.println() statements inside loops or methods to see values at each step.' },\n        { step_number: 4, title: 'Fix the debugging exercise', instruction: `Try to find the bug in debugging_exercise.broken_code before reading the hint. Write down your hypothesis, fix it, and verify with the solution_explanation.`, java_tip: 'Read error messages carefully — they usually point to the exact line and problem.' },\n        { step_number: 5, title: 'Complete the practice challenge', instruction: `Attempt practice_challenge independently. Start with the starter_code, implement the requirements one by one, and test with the provided example_input.`, java_tip: `If stuck, re-read the step_by_step_guide for ${topic} and try a smaller version of the problem first.` }\n      ]\n    };\n\n  if (!Array.isArray(llm.common_mistakes) || llm.common_mistakes.length < 2)\n    llm.common_mistakes = [\n      {\n        mistake_number: 1,\n        title: misconceptions[0] ? misconceptions[0].substring(0, 50) : `Misusing ${topic}`,\n        description: misconceptions[0] ? `Students often ${misconceptions[0].toLowerCase()}.` : `A common misunderstanding of ${topic} fundamentals.`,\n        bad_code: `// BUG: Incorrect ${topic} usage\\npublic class Mistake1 {\\n    public static void main(String[] args) {\\n        // This represents the mistake — see explanation below\\n        System.out.println(\"Wrong approach\");\\n    }\\n}`,\n        good_code: `// FIXED: Correct ${topic} usage\\npublic class Fixed1 {\\n    public static void main(String[] args) {\\n        System.out.println(\"Correct approach\");\\n    }\\n}`,\n        explanation: `Study example_3_misconception_fix above for a detailed code comparison of this exact mistake.`\n      },\n      {\n        mistake_number: 2,\n        title: misconceptions[1] ? misconceptions[1].substring(0, 50) : 'Ignoring edge cases',\n        description: misconceptions[1] ? `Students often ${misconceptions[1].toLowerCase()}.` : 'Forgetting to handle null, empty, or boundary conditions.',\n        bad_code: `// BUG: No edge case handling\\npublic class Mistake2 {\\n    static void process(Object obj) {\\n        System.out.println(obj.toString()); // BUG: NullPointerException if obj is null\\n    }\\n}`,\n        good_code: `// FIXED: Null check added\\npublic class Fixed2 {\\n    static void process(Object obj) {\\n        if (obj == null) { System.out.println(\"null input\"); return; }\\n        System.out.println(obj.toString());\\n    }\\n}`,\n        explanation: 'Always consider: what happens with null input? Empty collection? The largest possible value? These edge cases cause most production bugs.'\n      },\n      {\n        mistake_number: 3,\n        title: misconceptions[2] ? misconceptions[2].substring(0, 50) : 'Not testing incrementally',\n        description: 'Writing all the code before testing any of it.',\n        bad_code: `// BUG: Writing everything then testing\\npublic class Mistake3 {\\n    // 100 lines written before running once — bugs are now hard to isolate\\n    public static void main(String[] args) { /* all code here */ }\\n}`,\n        good_code: `// FIXED: Test-as-you-go approach\\npublic class Fixed3 {\\n    public static void main(String[] args) {\\n        // Step 1: Test smallest piece first\\n        System.out.println(\"Step 1 works: \" + step1());\\n        // Step 2: Add next piece only after step 1 passes\\n    }\\n    static String step1() { return \"basic functionality\"; }\\n}`,\n        explanation: 'Write 5-10 lines, run and test, then continue. This isolates bugs immediately when they appear rather than hunting through 100 lines.'\n      }\n    ];\n\n  if (!llm.debugging_exercise)\n    llm.debugging_exercise = {\n      title: `Debug This ${topic} Code`,\n      scenario: `A student wrote a ${topic} implementation but it produces wrong output. Your job is to find and fix the bug before reading the solution.`,\n      broken_code: topic.includes('OOP') || topic.includes('Polymorphism')\n        ? `public class DebugOOP {\\n    static class Vehicle {\\n        void startEngine() { System.out.println(\"Vroom!\"); }\\n    }\\n    static class ElectricCar extends Vehicle {\\n        // BUG: Missing @Override — this OVERLOADS, does not override\\n        void startEngine(boolean silent) { System.out.println(\"Quiet hum\"); }\\n    }\\n    public static void main(String[] args) {\\n        Vehicle v = new ElectricCar();\\n        v.startEngine(); // Expected: \"Quiet hum\" but prints: \"Vroom!\"\\n    }\\n}`\n        : `public class DebugExample {\\n    public static void main(String[] args) {\\n        int result = compute(5);\\n        System.out.println(\"Result: \" + result);\\n        // BUG: Expected 25 but output is wrong\\n    }\\n    static int compute(int n) {\\n        return n + n; // BUG: Should be n * n\\n    }\\n}`,\n      error_output: topic.includes('OOP') || topic.includes('Polymorphism') ? `Vroom!  // Bug: Expected \"Quiet hum\" from ElectricCar` : `Result: 10  // Bug: Expected 25`,\n      hint: `What annotation should you use in Java to guarantee you are overriding a parent method and not accidentally overloading it?`,\n      solution_code: topic.includes('OOP') || topic.includes('Polymorphism')\n        ? `public class DebugOOPFixed {\\n    static class Vehicle {\\n        void startEngine() { System.out.println(\"Vroom!\"); }\\n    }\\n    static class ElectricCar extends Vehicle {\\n        @Override // FIXED: Now correctly overrides parent method\\n        void startEngine() { System.out.println(\"Quiet hum\"); }\\n    }\\n    public static void main(String[] args) {\\n        Vehicle v = new ElectricCar();\\n        v.startEngine(); // Now correctly prints: Quiet hum\\n    }\\n}`\n        : `public class DebugExampleFixed {\\n    public static void main(String[] args) {\\n        int result = compute(5);\\n        System.out.println(\"Result: \" + result);\\n    }\\n    static int compute(int n) {\\n        return n * n; // FIXED: multiplication, not addition\\n    }\\n}`,\n      solution_explanation: `WHAT WAS WRONG: ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'ElectricCar.startEngine(boolean) has a different signature — it OVERLOADS Vehicle.startEngine(), not OVERRIDES it.' : 'The compute method used + (addition) instead of * (multiplication).'}\\nWHY IT BROKE: ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'Java saw two different methods (different parameters), so dynamic dispatch used the parent\\'s method.' : 'n + n = 2n, not n². For input 5: 5+5=10, but 5×5=25.'}\\nWHY THE FIX WORKS: ${topic.includes('OOP') || topic.includes('Polymorphism') ? '@Override causes a compile-time error if the signature does not match the parent, catching this bug immediately.' : 'Changing + to * gives the correct mathematical operation.'}\\nHOW TO AVOID: ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'Always use @Override when you intend to override a method. Your IDE will flag it instantly if signatures do not match.' : 'Write unit tests for each method: compute(5) should equal 25.'}`\n    };\n\n  if (!llm.quick_reference)\n    llm.quick_reference = {\n      cheat_sheet: `${topic.toUpperCase()} QUICK REFERENCE\\n\\nKey syntax: see syntax_reference above\\n\\nTop 3 rules:\\n1. Always handle edge cases (null, empty, boundaries)\\n2. Test with small examples first, then scale up\\n3. Use @Override, proper access modifiers, and clear variable names\\n\\nWhen to use: when ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'you need to treat multiple object types through a common interface' : topic.includes('Linked') ? 'you need frequent insertions/deletions and do not need random access' : topic.includes('Exception') ? 'code can fail at runtime and you need graceful recovery' : 'the problem naturally fits this pattern'}`,\n      key_terms: `${topic.includes('OOP') || topic.includes('Polymorphism') ? 'Polymorphism: many forms — one interface, many implementations\\nInheritance: child class extends parent class capabilities\\nOverriding: redefining a parent method in a child class\\nDynamic Dispatch: Java resolves the method to call at runtime\\nAbstract: a class or method that must be implemented by subclasses' : topic.includes('Linked') ? 'Node: an element holding data and a reference to the next node\\nHead: the first node in the list\\nTail: the last node (next = null)\\nTraversal: visiting each node in sequence\\nPointer/Reference: the link connecting nodes' : topic.includes('Exception') ? 'Checked Exception: must be declared or caught (IOException, SQLException)\\nUnchecked Exception: extends RuntimeException (NPE, AIOOBE)\\ntry-catch-finally: the exception handling block structure\\nthrow: manually signal an exception\\nthrows: declare a method may throw an exception' : `${topic}: the primary concept\\nImplementation: applying the concept in code\\nEdge case: boundary condition that needs special handling\\nBase case: the termination condition\\nRecursion: a method that calls itself`}`\n    };\n\n  if (!llm.connections)\n    llm.connections = {\n      builds_on: `${topic} requires solid understanding of ${prereqs}. Without these foundations, the concept will feel abstract and confusing.`,\n      unlocks: `Mastering ${topic} enables you to study ${related} and tackle professional-level Java projects, frameworks like Spring, and coding interviews.`,\n      real_world: `${topic} is used in ${topic.includes('OOP') || topic.includes('Polymorphism') ? 'virtually every Java framework. Spring\\'s dependency injection, Android\\'s View hierarchy, and JDBC\\'s driver system all rely on polymorphism. It is the backbone of the Strategy, Factory, and Observer design patterns.' : topic.includes('Linked') ? 'Java\\'s LinkedList, Deque, and LRU cache implementations. Browser history (back/forward), music playlists, and undo/redo systems commonly use linked list structures.' : topic.includes('Exception') ? 'every production Java application. File I/O, database operations, network calls, and user input all require proper exception handling. Unhandled exceptions are the #1 cause of application crashes.' : 'many areas of Java development including data structures, algorithms, and framework design.'}`\n    };\n}\n\nconsole.log(`[Quality Agent V19] Student: ${item.student_id} | Topic: ${gap.topic} | Score: ${qualityScore}/100 | Decision: ${agentDecision} | Retry: ${retryCount}`);\n\nreturn [{\n  json: {\n    ...item,\n    llm_output:              agentDecision === 'RETRY' ? item.llm_output : llm,\n    agent_decision:          agentDecision,\n    agent_quality_score:     qualityScore,\n    agent_quality_checks:    checks,\n    agent_retry_count:       retryCount,\n    agent_refined_prompt:    agentDecision === 'RETRY' ? (item.llm_prompt + refinedPromptAddition) : item.llm_prompt,\n    agent_decision_reason:   `Quality score ${qualityScore}/100 (${passedChecks}/${totalChecks} checks passed)`,\n    agent_evaluated_at:      new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "3f132dbb-ec91-4d49-9f6f-579eaab77d0a",
+      "name": "🤖 Quality Review Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        1424
+      ],
+      "notes": "V19: Threshold lowered to 60 (7b model), MAX_RETRIES=1 (stops 6-min loops), topic-aware intelligent patching for all 10 lesson sections."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent_decision }}",
+              "value2": "RETRY"
+            }
+          ]
+        }
+      },
+      "id": "05b8aefa-cd64-4af9-b93e-b6448e548eba",
+      "name": "Agent Decision Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        1424
+      ],
+      "notes": "V17 AGENTIC: Routes based on Quality Review Agent decision. TRUE=RETRY loop, FALSE=proceed to merge."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── ADAPTIVE RETRY AGENT V17 ─────────────────────────────────────────\n// Prepares the refined prompt for the retry LLM call.\n// Increments retry counter and updates state for traceability.\n\nconst item = $input.first().json;\n\nconsole.log(`[Retry Agent] Preparing retry ${(item.agent_retry_count||0)+1} for student ${item.student_id}, topic: ${item.gap?.topic}`);\n\nreturn [{\n  json: {\n    ...item,\n    llm_prompt:        item.agent_refined_prompt,\n    agent_retry_count: (item.agent_retry_count || 0) + 1,\n    agent_state:       'retry_' + ((item.agent_retry_count || 0) + 1),\n    retry_initiated_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "b377700c-07e3-498b-bb69-a2dc4014ebff",
+      "name": "Adaptive Retry Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        1232
+      ],
+      "notes": "V17 AGENTIC: Increments retry counter, injects refined prompt, updates agent_state. Feeds back into LLM node for another generation attempt."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.20.10.2:11434/api/chat",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', messages: [{ role: 'system', content: \"You are MENTORA, a Java educator. Previous response was incomplete. Generate the COMPLETE lesson now.\\n\\nOutput ONE raw JSON object. No markdown. No backticks. Start { end }.\\n\\nREQUIRED keys \\u2014 you MUST include ALL of them with real content, not placeholders:\\npage_title, introduction (what_is_it + why_learn_it + prerequisite_note), concept_explained (core_definition + analogy + how_java_handles_it + misconceptions_corrected), syntax_reference (basic_syntax + syntax_breakdown + important_rules), examples (example_1 with full code + example_2 with full code + example_3_misconception_fix with wrong_code containing // BUG and correct_code), step_by_step_guide with steps array of 5 objects, common_mistakes array of 3 objects each with bad_code (// BUG) and good_code, debugging_exercise with broken_code (// BUG) and solution_code, quick_reference (cheat_sheet + key_terms), connections (builds_on + unlocks + real_world).\\n\\nUse \\\\n for newlines in strings. Be thorough \\u2014 the student depends on complete content.\" }, { role: 'user', content: $json.llm_prompt }], stream: false, options: { num_ctx: 8192, num_predict: 3000, temperature: 0.2, top_p: 0.85, repeat_penalty: 1.1 } }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "87346488-7d3a-44cc-abdf-5db6ae1b0665",
+      "name": "LLM — Retry Call (Qwen2.5-Coder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1968,
+        1232
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Retry timeout: 200s. onError=continueRegularOutput."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the retry LLM response — same robust logic as the primary parser\nconst item     = $input.first().json;\nconst upstream = $('Adaptive Retry Agent').first().json;\n\nconst raw = (item.message?.content || item.response || '').trim();\n\nfunction stripFences(s) { return s.replace(/^```json\\s*/gi,'').replace(/^```\\s*/gi,'').replace(/\\s*```$/gi,'').trim(); }\nfunction findOutermostObject(s) {\n  const start = s.indexOf('{'); if (start === -1) return null;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === '{') depth++;\n    else if (s[i] === '}') { depth--; if (depth === 0) return s.substring(start, i+1); }\n  }\n  const last = s.lastIndexOf('}');\n  return last > start ? s.substring(start, last+1) : null;\n}\n\nlet llmContent = null, parseError = null;\nconst candidate = findOutermostObject(stripFences(raw));\nif (candidate) {\n  try { llmContent = JSON.parse(candidate); }\n  catch(e) { parseError = e.message; llmContent = { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError }; }\n} else {\n  parseError = 'No JSON object found in retry response';\n  llmContent  = { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError };\n}\n\nreturn [{\n  json: {\n    ...upstream,\n    llm_output:       llmContent,\n    llm_parse_error:  parseError,\n    llm_model:        'qwen2.5-coder:7b',\n    llm_responded_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "a7dfd75f-a7d9-4d0c-b566-8d5477840567",
+      "name": "Parse Retry LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        1232
+      ],
+      "notes": "V17 AGENTIC: Parses the retry response and feeds BACK into the Quality Review Agent for re-evaluation."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.20.10.2:11434/api/chat",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', messages: [{ role: 'system', content: \"You are a Java assessor. Output ONE raw JSON object only. No markdown. No backticks. Start { end }.\\n\\nGenerate assessment content matching this EXACT structure:\\n\\n{\\\"quiz\\\":[{\\\"question_number\\\":1,\\\"type\\\":\\\"code_output\\\",\\\"question\\\":\\\"{what is the output of this code?}\\\",\\\"code_snippet\\\":\\\"{Java snippet}\\\",\\\"options\\\":[\\\"A) {answer}\\\",\\\"B) {answer}\\\",\\\"C) {answer}\\\",\\\"D) {answer}\\\"],\\\"correct\\\":\\\"A\\\",\\\"explanation\\\":\\\"{3-4 sentences why A is correct}\\\",\\\"misconception_targeted\\\":\\\"{which misconception this tests}\\\",\\\"difficulty\\\":\\\"{level}\\\"},{\\\"question_number\\\":2,\\\"type\\\":\\\"conceptual\\\",\\\"question\\\":\\\"{scenario-based question}\\\",\\\"code_snippet\\\":\\\"\\\",\\\"options\\\":[\\\"A) {answer}\\\",\\\"B) {answer}\\\",\\\"C) {answer}\\\",\\\"D) {answer}\\\"],\\\"correct\\\":\\\"B\\\",\\\"explanation\\\":\\\"{3-4 sentences}\\\",\\\"misconception_targeted\\\":\\\"{misconception}\\\",\\\"difficulty\\\":\\\"{level}\\\"},{\\\"question_number\\\":3,\\\"type\\\":\\\"complete_the_code\\\",\\\"question\\\":\\\"{complete this code to achieve X}\\\",\\\"code_snippet\\\":\\\"{partial Java with ___BLANK___ placeholder}\\\",\\\"options\\\":[\\\"A) {code option}\\\",\\\"B) {code option}\\\",\\\"C) {code option}\\\",\\\"D) {code option}\\\"],\\\"correct\\\":\\\"C\\\",\\\"explanation\\\":\\\"{why C completes it correctly}\\\",\\\"misconception_targeted\\\":\\\"{misconception}\\\",\\\"difficulty\\\":\\\"{level}\\\"}],\\\"concept_summary\\\":\\\"{WHAT IS [TOPIC]?\\\\n[definition]\\\\n\\\\nKEY RULE:\\\\n[the most important rule]\\\\n\\\\nREMEMBER:\\\\n\\u2022 [point 1]\\\\n\\u2022 [point 2]\\\\n\\u2022 [point 3]}\\\",\\\"practice_challenge\\\":{\\\"title\\\":\\\"Practice: {topic}\\\",\\\"difficulty\\\":\\\"{level}\\\",\\\"time_estimate\\\":\\\"15-20 minutes\\\",\\\"problem_statement\\\":\\\"{clear 2-3 sentence problem}\\\",\\\"requirements\\\":[\\\"{requirement 1}\\\",\\\"{requirement 2}\\\",\\\"{requirement 3}\\\"],\\\"starter_code\\\":\\\"{Java skeleton with // TODO comments}\\\",\\\"example_input\\\":\\\"{sample input}\\\",\\\"expected_output\\\":\\\"{expected output}\\\",\\\"bonus\\\":\\\"{optional extension task}\\\"},\\\"self_check\\\":{\\\"can_you\\\":[\\\"{question 1}\\\",\\\"{question 2}\\\",\\\"{question 3}\\\",\\\"{question 4}\\\",\\\"{question 5}\\\"],\\\"if_stuck\\\":\\\"{2-3 sentence advice}\\\"}}\\n\\nCRITICAL: All 3 quiz questions must target the student's listed misconceptions. Use \\\\n inside strings.\" }, { role: 'user', content: $json.slm_prompt }], stream: false, options: { num_ctx: 4096, num_predict: 2000, temperature: 0.3, top_p: 0.9, repeat_penalty: 1.1 } }) }}",
+        "options": {
+          "timeout": 200000
+        }
+      },
+      "id": "f1a395c2-16a2-4659-ad0d-6cd7fcdd10a0",
+      "name": "LLM — Qwen2.5-Coder (Assessment + Quiz)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        784,
+        1776
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Timeout: 150s. onError=continueRegularOutput."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item     = $input.first().json;\nconst upstream = $('Prompt Construction Module').first().json;\n\nconst raw = (item.message?.content || item.response || '').trim();\n\nfunction stripFences(s) { return s.replace(/^```json\\s*/gi,'').replace(/^```\\s*/gi,'').replace(/\\s*```$/gi,'').trim(); }\nfunction findOutermostObject(s) {\n  const start = s.indexOf('{'); if (start === -1) return null;\n  let depth = 0;\n  for (let i = start; i < s.length; i++) {\n    if (s[i] === '{') depth++; else if (s[i] === '}') { depth--; if (depth === 0) return s.substring(start, i+1); }\n  }\n  const last = s.lastIndexOf('}');\n  return last > start ? s.substring(start, last+1) : null;\n}\n\nfunction extractField(s, fieldName, type) {\n  if (type === 'string') {\n    const re = new RegExp('\"' + fieldName + '\"\\\\s*:\\\\s*\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"', 's');\n    const m = s.match(re);\n    return m ? m[1].replace(/\\\\n/g,'\\n').replace(/\\\\\"/g,'\"') : null;\n  }\n  const b = type==='array'?'[':'{';\n  const cb = type==='array'?']':'}';\n  const re = new RegExp('\"'+fieldName+'\"\\\\s*:\\\\s*(\\\\'+b+')');\n  const m = re.exec(s); if (!m) return null;\n  let start = m.index+m[0].length-1, depth=0;\n  for (let i=start;i<s.length;i++) {\n    if (s[i]===b) depth++; else if (s[i]===cb) { depth--; if (depth===0) { try { return JSON.parse(s.substring(start,i+1)); } catch(e) { return null; } } }\n  }\n  return null;\n}\n\nlet slmContent = null, parseError = null;\nconst candidate = findOutermostObject(stripFences(raw));\nif (candidate) {\n  try { slmContent = JSON.parse(candidate); }\n  catch(e) {\n    parseError = 'JSON.parse failed: ' + e.message;\n    const partial = {};\n    partial.quiz               = extractField(candidate, 'quiz', 'array');\n    partial.concept_summary    = extractField(candidate, 'concept_summary', 'string');\n    partial.practice_challenge = extractField(candidate, 'practice_challenge', 'object');\n    partial.self_check         = extractField(candidate, 'self_check', 'object');\n    const count = Object.values(partial).filter(v=>v!==null).length;\n    slmContent = count > 0 ? { ...partial, _extraction_method: 'fallback' } : { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError };\n  }\n} else {\n  parseError = 'No JSON found';\n  slmContent  = { parse_failed: true, raw_response: raw.substring(0,2000), error: parseError };\n}\n\nreturn [{ json: { student_id: upstream.student_id, gap: upstream.gap, slm_output: slmContent, slm_parse_error: parseError, slm_model: 'qwen2.5-coder:7b', slm_responded_at: new Date().toISOString() } }];\n"
+      },
+      "id": "da2c2b2f-56b3-4946-b248-2f384f830fec",
+      "name": "Parse SLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── CONTENT VALIDATION AGENT V17 ─────────────────────────────────────\n// Agentic validator that checks SLM (assessment) output quality.\n// Autonomously patches missing quiz/practice fields with sensible defaults\n// rather than failing silently.\n\nconst item = $input.first().json;\nconst slm  = item.slm_output || {};\nconst gap  = item.gap || {};\nconst topic = gap.topic || 'Java Concept';\nconst level = gap.difficulty_level || 'beginner';\n\nconst validationChecks = {\n  has_quiz:              Array.isArray(slm.quiz) && slm.quiz.length >= 3,\n  has_quiz_explanations: Array.isArray(slm.quiz) && slm.quiz.every(q => !!q.explanation),\n  has_concept_summary:   !!(slm.concept_summary && slm.concept_summary.length > 50),\n  has_practice:          !!(slm.practice_challenge?.problem_statement),\n  has_starter_code:      !!(slm.practice_challenge?.starter_code),\n  has_self_check:        Array.isArray(slm.self_check?.can_you) && slm.self_check.can_you.length >= 3,\n  no_parse_fail:         !slm.parse_failed\n};\n\nconst validScore = Math.round((Object.values(validationChecks).filter(Boolean).length / Object.keys(validationChecks).length) * 100);\n\n// Agent auto-patches missing assessment content\nconst patched = { ...slm };\n\nif (!validationChecks.has_quiz || !Array.isArray(patched.quiz)) {\n  patched.quiz = [\n    { question_number: 1, type: 'conceptual', question: `What is the primary purpose of ${topic} in Java?`, options: ['A) Memory management', 'B) Code organization and reusability', 'C) Exception handling', 'D) Thread synchronization'], correct: 'B', explanation: `${topic} is primarily used for code organization and reusability in Java.`, misconception_targeted: 'general concept', difficulty: level },\n    { question_number: 2, type: 'conceptual', question: `When should you use ${topic} in Java?`, options: ['A) Always', 'B) Never', 'C) When solving problems that have self-similar sub-problems', 'D) Only in legacy code'], correct: 'C', explanation: `Use ${topic} when the problem can be broken down into smaller, similar sub-problems.`, misconception_targeted: 'use case', difficulty: level },\n    { question_number: 3, type: 'conceptual', question: `Which of the following is most important when implementing ${topic}?`, options: ['A) Performance only', 'B) A proper base/termination case', 'C) Using global variables', 'D) Avoiding return values'], correct: 'B', explanation: `A proper termination condition is critical to prevent infinite loops in ${topic}.`, misconception_targeted: 'base case', difficulty: level }\n  ];\n  patched._quiz_patched = true;\n}\n\nif (!validationChecks.has_concept_summary) {\n  patched.concept_summary = `WHAT IS ${topic.toUpperCase()}?\\nA fundamental Java programming concept that enables modular, reusable code.\\n\\nKEY RULE:\\nAlways define a clear termination condition.\\n\\nREMEMBER:\\n• Break the problem into smaller sub-problems\\n• Ensure every path has a return value\\n• Test with small inputs first`;\n  patched._summary_patched = true;\n}\n\nif (!validationChecks.has_practice) {\n  patched.practice_challenge = { title: `Practice: ${topic}`, difficulty: level, time_estimate: '20 minutes', problem_statement: `Implement a ${topic} solution in Java. Your solution should correctly handle edge cases and produce the expected output.`, requirements: ['Correct base case handling', 'Proper recursive structure', 'Input validation'], starter_code: `public class Practice${topic.replace(/\\s/g,'')} {\\n    public static void main(String[] args) {\\n        // TODO: Test your implementation\\n    }\\n    // TODO: Implement your solution\\n}`, example_input: '5', expected_output: 'Solution output for input 5', bonus: `Extend your solution to handle ${gap.related_topics?.[0] || 'additional edge cases'}.` };\n  patched._practice_patched = true;\n}\n\nif (!validationChecks.has_self_check) {\n  patched.self_check = { can_you: [`Can you explain ${topic} to someone new?`, `Can you write a ${topic} solution without help?`, `Can you trace execution step by step?`, `Can you spot a bug in a broken implementation?`, `Can you explain when to use ${topic} vs alternatives?`], if_stuck: `Review the concept_explanation and examples again. Try tracing through a simple example by hand before coding.` };\n  patched._self_check_patched = true;\n}\n\nconsole.log(`[Content Validation Agent] Student: ${item.student_id} | Topic: ${topic} | Score: ${validScore}/100 | Patches: ${JSON.stringify(Object.keys(patched).filter(k=>k.includes('_patched')))}`);\n\nreturn [{\n  json: {\n    ...item,\n    slm_output:                      patched,\n    content_validation_score:        validScore,\n    content_validation_checks:       validationChecks,\n    content_validation_agent_ran_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "id": "b0fcc026-6dd0-46e2-b80b-9e7ec91a2dc2",
+      "name": "🤖 Content Validation Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        1776
+      ],
+      "notes": "V17 AGENTIC: Validates SLM (assessment) output with 7 quality checks. Autonomously patches missing quiz questions, concept summaries, practice challenges, and self-check items — ensuring always-complete output."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "3d67ca25-0b1f-4c78-8870-052935a20a79",
+      "name": "Merge LLM + SLM Outputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        1568
+      ],
+      "notes": "V17: Waits for BOTH the accepted LLM output and validated SLM output before continuing."
+    },
+    {
+      "parameters": {
+        "jsCode": "const all     = $input.all();\nconst llmItem = all.find(i => i.json.llm_output !== undefined)?.json ?? {};\nconst slmItem = all.find(i => i.json.slm_output !== undefined)?.json ?? {};\n\nconst studentId = llmItem.student_id || slmItem.student_id || 'unknown';\nconst gap       = llmItem.gap        || slmItem.gap        || {};\nconst llm       = llmItem.llm_output || {};\nconst slm       = slmItem.slm_output || {};\n\nconst materialId  = `${studentId}_${gap.topic_id || 'unknown'}_${Date.now()}`;\nconst generatedAt = new Date().toISOString();\n\nconst structuredMaterial = {\n  material_id:   materialId,\n  student_id:    studentId,\n  topic:         gap.topic,\n  topic_id:      gap.topic_id,\n  gap_type:      gap.gap_type,\n  difficulty_level: gap.difficulty_level,\n  generated_at:  generatedAt,\n\n  generation_models: {\n    llm: llmItem.llm_model || 'qwen2.5-coder:7b',\n    slm: slmItem.slm_model || 'qwen2.5-coder:7b'\n  },\n\n  // ── Full W3Schools-style lesson (from LLM) ───────────────────────────\n  lesson: {\n    page_title:            llm.page_title            || null,\n    introduction:          llm.introduction          || null,\n    concept_explained:     llm.concept_explained     || null,\n    syntax_reference:      llm.syntax_reference      || null,\n    examples:              llm.examples              || null,\n    step_by_step_guide:    llm.step_by_step_guide    || null,\n    common_mistakes:       llm.common_mistakes        || [],\n    debugging_exercise:    llm.debugging_exercise    || null,\n    quick_reference:       llm.quick_reference       || null,\n    connections:           llm.connections           || null\n  },\n\n  // ── Assessment content (from SLM + Content Validation Agent) ────────\n  assessment: {\n    quiz:               slm.quiz             || [],\n    concept_summary:    slm.concept_summary  || null,\n    practice_challenge: slm.practice_challenge || null,\n    self_check:         slm.self_check       || null\n  },\n\n  // ── Personalisation metadata ─────────────────────────────────────────\n  personalisation: {\n    misconceptions_targeted: gap.misconceptions      || [],\n    error_patterns:          gap.error_patterns      || {},\n    evidence_summary:        gap.evidence_summary    || null,\n    prerequisite_topics:     gap.prerequisite_topics || [],\n    related_topics:          gap.related_topics      || []\n  },\n\n  // ── Study plan ───────────────────────────────────────────────────────\n  study_plan: {\n    estimated_minutes:   gap.estimated_time_minutes || 60,\n    learning_objectives: gap.learning_objectives    || [],\n    suggested_sequence: [\n      { step: 1, activity: 'Read introduction and concept_explained', duration_min: 10, focus: 'Build intuition and correct misconceptions' },\n      { step: 2, activity: 'Follow step_by_step_guide', duration_min: 15, focus: 'Understand the design process' },\n      { step: 3, activity: 'Study examples (all 3)', duration_min: 10, focus: 'See correct and incorrect patterns' },\n      { step: 4, activity: 'Complete debugging_exercise', duration_min: 15, focus: 'Apply understanding to find bugs' },\n      { step: 5, activity: 'Answer quiz questions', duration_min: 10, focus: 'Verify conceptual understanding' },\n      { step: 6, activity: 'Attempt practice_challenge', duration_min: null, focus: 'Independent application' }\n    ],\n    prerequisite_review: gap.prerequisite_topics || []\n  },\n\n  // ── Agentic AI metadata ──────────────────────────────────────────────\n  agentic_metadata: {\n    quality_review_agent: {\n      decision:      llmItem.agent_decision          || 'ACCEPT',\n      quality_score: llmItem.agent_quality_score     || null,\n      checks:        llmItem.agent_quality_checks    || {},\n      retry_count:   llmItem.agent_retry_count       || 0,\n      final_state:   llmItem.agent_state             || 'initial',\n      evaluated_at:  llmItem.agent_evaluated_at      || null,\n      reason:        llmItem.agent_decision_reason   || null\n    },\n    content_validation_agent: {\n      validation_score:  slmItem.content_validation_score   || null,\n      checks:            slmItem.content_validation_checks  || {},\n      patches_applied:   Object.keys(slmItem.slm_output || {}).filter(k => k.includes('_patched')),\n      validated_at:      slmItem.content_validation_agent_ran_at || null\n    }\n  },\n\n  // ── Quality metadata ─────────────────────────────────────────────────\n  quality_flags: {\n    llm_parse_failed:          !!llmItem.llm_parse_error,\n    slm_parse_failed:          !!slmItem.slm_parse_error,\n    agent_retried:             (llmItem.agent_retry_count || 0) > 0,\n    agent_patched_llm:         llmItem.agent_decision === 'ACCEPT_WITH_PATCH',\n    agent_patched_slm:         Object.keys(slmItem.slm_output || {}).some(k => k.includes('_patched')),\n    needs_review:              !!(llmItem.llm_parse_error || slmItem.slm_parse_error || llm.parse_failed || slm.parse_failed),\n    overall_quality_score:     Math.round(((llmItem.agent_quality_score || 0) + (slmItem.content_validation_score || 0)) / 2),\n    content_completeness: {\n      has_introduction:        !!(llm.introduction?.what_is_it),\n      has_concept_explained:   !!(llm.concept_explained?.core_definition),\n      has_syntax:              !!(llm.syntax_reference?.basic_syntax),\n      has_examples:            !!(llm.examples?.example_1?.code),\n      has_step_guide:          Array.isArray(llm.step_by_step_guide?.steps),\n      has_debug_exercise:      !!(llm.debugging_exercise?.broken_code),\n      has_quiz:                (slm.quiz || []).length >= 3,\n      has_practice:            !!(slm.practice_challenge?.problem_statement),\n      has_self_check:          Array.isArray(slm.self_check?.can_you)\n    }\n  }\n};\n\nconst comparisonLog = {\n  log_id:                     `comp_${materialId}`,\n  student_id:                 studentId,\n  topic:                      gap.topic,\n  llm_model:                  llmItem.llm_model,\n  slm_model:                  slmItem.slm_model,\n  llm_responded_at:           llmItem.llm_responded_at,\n  slm_responded_at:           slmItem.slm_responded_at,\n  llm_parse_error:            llmItem.llm_parse_error  || null,\n  slm_parse_error:            slmItem.slm_parse_error  || null,\n  agent_quality_score:        llmItem.agent_quality_score,\n  content_validation_score:   slmItem.content_validation_score,\n  agent_retry_count:          llmItem.agent_retry_count,\n  timestamp:                  generatedAt\n};\n\nreturn [{ json: { structured_material: structuredMaterial, comparison_log: comparisonLog } }];"
+      },
+      "id": "f9cad874-c895-449c-b6c6-60e366196b77",
+      "name": "Content Structuring Module",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        1568
+      ],
+      "notes": "V17: Extended to include agentic_metadata block — tracks Quality Review Agent decisions, Content Validation Agent patches, retry counts, and overall quality scores."
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "learning_materials",
+        "fields": "=structured_material",
+        "options": {}
+      },
+      "id": "edfa513b-baf2-43f3-8dc4-ee3f375c7914",
+      "name": "MongoDB — Store Learning Material",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        1456
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "ALsYtxgQmJStr4TR",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "model_comparison_logs",
+        "fields": "=comparison_log",
+        "options": {}
+      },
+      "id": "1d024cac-d4c2-44b5-bfff-4927342d9adf",
+      "name": "MongoDB — Log LLM vs SLM Comparison",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        1680
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "ALsYtxgQmJStr4TR",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $input.first().json;\nconst errorLog = {\n  error_id:      `err_${Date.now()}`,\n  student_id:    errorData.student_id || 'unknown',\n  error_message: errorData.error?.message || 'Unknown error',\n  error_node:    errorData.execution?.lastNode || 'unknown',\n  timestamp:     new Date().toISOString(),\n  raw_payload:   JSON.stringify(errorData).substring(0, 500)\n};\nconsole.error('Pipeline error:', JSON.stringify(errorLog));\nreturn [{ json: errorLog }];"
+      },
+      "id": "d9c62716-ec9a-4503-92ff-0bd929e56de8",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        2032
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: 'Material generation failed', error_id: $json.error_id, details: $json.error_message }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "bad5fe87-5334-4315-bbf7-925fb9a8b24e",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        768,
+        2032
+      ]
+    },
+    {
+      "parameters": {
+        "path": "materials/:studentId",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f806293f-e91d-46d8-9177-52b72935bb96",
+      "name": "Webhook — GET Materials by Student",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        1968
+      ],
+      "webhookId": "452fd522-1145-41d0-b4e6-147f9323d11d"
+    },
+    {
+      "parameters": {
+        "collection": "learning_materials",
+        "options": {
+          "limit": 20,
+          "sort": "{ \"generated_at\": -1 }"
+        },
+        "query": "={ \"student_id\": \"{{ $json.params.studentId }}\" }"
+      },
+      "id": "cef23738-3a97-484b-8adf-b8b7fd5eb4af",
+      "name": "MongoDB — Fetch Materials",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        1968
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "ALsYtxgQmJStr4TR",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($input.all().map(i => i.json)) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "5adb647c-a240-4f67-a7cb-9f4ac35e3583",
+      "name": "Return Materials List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        1968
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize the sequential loop state.\n// Attach current_index=0 so the first gap is processed first.\nconst item = $json;\n\nif (!Array.isArray(item.processed_gaps) || item.processed_gaps.length === 0) {\n  throw new Error('No processed_gaps found. Check Profile Processing Module.');\n}\n\nreturn [{\n  json: {\n    ...item,\n    current_index: 0,\n    total_gaps: item.processed_gaps.length\n  }\n}];\n"
+      },
+      "id": "4b346a9a-d883-4237-8240-47f6e721815f",
+      "name": "Initialize Loop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1616
+      ],
+      "notes": "Sets current_index=0 and total_gaps. Starts the sequential gap loop."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the gap at current_index from processed_gaps.\n// This is the single gap that will go through the full pipeline.\nconst item = $json;\n\nconst idx  = item.current_index;\nconst gap  = item.processed_gaps[idx];\n\nif (!gap) throw new Error(`Get Current Gap: no gap at index ${idx}`);\n\nconsole.log(`[Loop] Processing gap ${idx + 1}/${item.total_gaps}: ${gap.topic}`);\n\nreturn [{\n  json: {\n    // Carry loop state forward so Increment Index can use it\n    processed_gaps:        item.processed_gaps,\n    current_index:         idx,\n    total_gaps:            item.total_gaps,\n    student_id:            gap.student_id,\n    overall_mastery_score: gap.overall_mastery_score,\n    gap:                   gap\n  }\n}];\n"
+      },
+      "id": "0a0914bc-3226-4159-ba8d-9a827f322e2c",
+      "name": "Get Current Gap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        1616
+      ],
+      "notes": "Reads processed_gaps[current_index]. Passes ONE gap into the pipeline."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Called after MongoDB stores the current gap's material.\n// Increments current_index and carries processed_gaps forward.\n// The Check If Done node decides whether to loop or stop.\n\n// Get the loop state from Get Current Gap (carried through the whole pipeline)\nconst loopState = $('Get Current Gap').first().json;\n\nconst nextIndex = (loopState.current_index || 0) + 1;\n\nconsole.log(`[Loop] Gap ${loopState.current_index + 1}/${loopState.total_gaps} done. Next index: ${nextIndex}`);\n\nreturn [{\n  json: {\n    processed_gaps: loopState.processed_gaps,\n    current_index:  nextIndex,\n    total_gaps:     loopState.total_gaps,\n    student_id:     loopState.student_id\n  }\n}];\n"
+      },
+      "id": "cd1e8c21-637e-4e55-8a53-706cf4e9b1fa",
+      "name": "Increment Index",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        1456
+      ],
+      "notes": "Increments current_index after each gap is stored. Feeds into Check If Done."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.current_index }}",
+              "value2": "={{ $json.total_gaps }}"
+            }
+          ]
+        }
+      },
+      "id": "16e8084a-0d72-4129-8af6-3db2b2b8dc59",
+      "name": "Check If Done",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        1456
+      ],
+      "notes": "TRUE = more gaps remain → loop back to Get Current Gap. FALSE = all done → send final HTTP response."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'success',\n  message: 'All knowledge gaps processed sequentially (Agentic AI V17)',\n  student_id: $json.student_id,\n  gaps_processed: $json.total_gaps,\n  completed_at: new Date().toISOString()\n}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "df8e47bb-3ba8-4777-955e-820195cd8269",
+      "name": "Final Response — All Gaps Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2688,
+        1616
+      ],
+      "notes": "Fires ONCE when current_index >= total_gaps. All gaps processed and stored."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  status: 'accepted',\n  message: 'Learning material generation started. Materials will be stored in MongoDB as each gap is processed.',\n  student_id: $json.student_id,\n  total_gaps: $json.knowledge_gaps.length,\n  job_started_at: new Date().toISOString()\n}) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "b48c6981-eab9-429d-b4ea-96ba653c2f55",
+      "name": "Immediate ACK Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        1808
+      ],
+      "notes": "Returns HTTP 202 Accepted immediately after validation. Prevents webhook timeout. Processing continues async."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.20.10.2:11434/api/chat",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', messages: [{ role: 'system', content: \"You are MENTORA, a Java educator. Output ONE raw JSON object only. No markdown. No backticks. Start { end }.\\n\\nGenerate a personalised Java lesson matching this EXACT structure (replace all {...} with real content):\\n\\n{\\\"page_title\\\":\\\"Java {TOPIC} - MENTORA Tutorial\\\",\\\"introduction\\\":{\\\"what_is_it\\\":\\\"{2-3 sentence definition}\\\",\\\"why_learn_it\\\":\\\"{2-3 sentences on importance}\\\",\\\"prerequisite_note\\\":\\\"{1 sentence on prerequisites}\\\"},\\\"concept_explained\\\":{\\\"core_definition\\\":\\\"{1 clear sentence}\\\",\\\"analogy\\\":\\\"{3-4 sentence real-world analogy}\\\",\\\"how_java_handles_it\\\":\\\"{3-4 sentences on Java specifics}\\\",\\\"misconceptions_corrected\\\":\\\"{address each student misconception with: MISCONCEPTION: ... THE TRUTH: ... JAVA PROOF: short code}\\\"},\\\"syntax_reference\\\":{\\\"basic_syntax\\\":\\\"{fundamental pattern}\\\",\\\"syntax_breakdown\\\":\\\"{numbered list of 4 elements}\\\",\\\"important_rules\\\":\\\"{3 numbered rules}\\\"},\\\"examples\\\":{\\\"example_1\\\":{\\\"title\\\":\\\"Basic {TOPIC}\\\",\\\"description\\\":\\\"{1 sentence}\\\",\\\"code\\\":\\\"{complete runnable Java class}\\\",\\\"output\\\":\\\"{exact console output}\\\",\\\"explanation\\\":\\\"{3 sentences}\\\"},\\\"example_2\\\":{\\\"title\\\":\\\"Real-World Use\\\",\\\"description\\\":\\\"{1 sentence}\\\",\\\"code\\\":\\\"{complete Java class}\\\",\\\"output\\\":\\\"{exact output}\\\",\\\"explanation\\\":\\\"{why this uses the topic}\\\"},\\\"example_3_misconception_fix\\\":{\\\"title\\\":\\\"Common Mistake Fixed\\\",\\\"description\\\":\\\"{the mistake}\\\",\\\"wrong_code\\\":\\\"{broken snippet with // BUG comment}\\\",\\\"wrong_output\\\":\\\"{error or wrong result}\\\",\\\"correct_code\\\":\\\"{fixed version}\\\",\\\"correct_output\\\":\\\"{correct result}\\\",\\\"explanation\\\":\\\"{what was wrong and why fix works}\\\"}},\\\"step_by_step_guide\\\":{\\\"overview\\\":\\\"{1 paragraph}\\\",\\\"steps\\\":[{\\\"step_number\\\":1,\\\"title\\\":\\\"Understand the problem\\\",\\\"instruction\\\":\\\"{2-3 sentences}\\\",\\\"java_tip\\\":\\\"{1 tip}\\\"},{\\\"step_number\\\":2,\\\"title\\\":\\\"Identify the base/termination case\\\",\\\"instruction\\\":\\\"{2-3 sentences}\\\",\\\"java_tip\\\":\\\"{1 tip}\\\"},{\\\"step_number\\\":3,\\\"title\\\":\\\"Define the core logic\\\",\\\"instruction\\\":\\\"{2-3 sentences}\\\",\\\"java_tip\\\":\\\"{1 tip}\\\"},{\\\"step_number\\\":4,\\\"title\\\":\\\"Write and test\\\",\\\"instruction\\\":\\\"{2-3 sentences}\\\",\\\"java_tip\\\":\\\"{1 tip}\\\"},{\\\"step_number\\\":5,\\\"title\\\":\\\"Trace execution manually\\\",\\\"instruction\\\":\\\"{2-3 sentences}\\\",\\\"java_tip\\\":\\\"{1 tip}\\\"}]},\\\"common_mistakes\\\":[{\\\"mistake_number\\\":1,\\\"title\\\":\\\"{mistake name}\\\",\\\"description\\\":\\\"{1-2 sentences}\\\",\\\"bad_code\\\":\\\"{snippet with // BUG}\\\",\\\"good_code\\\":\\\"{fixed snippet}\\\",\\\"explanation\\\":\\\"{why}\\\"},{\\\"mistake_number\\\":2,\\\"title\\\":\\\"{mistake name}\\\",\\\"description\\\":\\\"{1-2 sentences}\\\",\\\"bad_code\\\":\\\"{snippet with // BUG}\\\",\\\"good_code\\\":\\\"{fixed snippet}\\\",\\\"explanation\\\":\\\"{why}\\\"},{\\\"mistake_number\\\":3,\\\"title\\\":\\\"{mistake name}\\\",\\\"description\\\":\\\"{1-2 sentences}\\\",\\\"bad_code\\\":\\\"{snippet with // BUG}\\\",\\\"good_code\\\":\\\"{fixed snippet}\\\",\\\"explanation\\\":\\\"{why}\\\"}],\\\"debugging_exercise\\\":{\\\"title\\\":\\\"Debug This Code\\\",\\\"scenario\\\":\\\"{2 sentences describing the bug scenario}\\\",\\\"broken_code\\\":\\\"{Java class with // BUG comment}\\\",\\\"error_output\\\":\\\"{exact error or wrong output}\\\",\\\"hint\\\":\\\"{Socratic question to guide student}\\\",\\\"solution_code\\\":\\\"{fixed Java class}\\\",\\\"solution_explanation\\\":\\\"WHAT WAS WRONG: {explanation}\\\\nWHY IT BROKE: {explanation}\\\\nWHY THE FIX WORKS: {explanation}\\\\nHOW TO AVOID: {tip}\\\"},\\\"quick_reference\\\":{\\\"cheat_sheet\\\":\\\"{key syntax + 3 rules + when to use}\\\",\\\"key_terms\\\":\\\"{4-5 terms as TERM: definition, each on new line}\\\"},\\\"connections\\\":{\\\"builds_on\\\":\\\"{1-2 sentences on prerequisites}\\\",\\\"unlocks\\\":\\\"{1-2 sentences on what this enables}\\\",\\\"real_world\\\":\\\"{2-3 sentences on industry use}\\\"}}\\n\\nCRITICAL: Use \\\\n for newlines inside strings. Use \\\\\\\" for quotes inside strings. Every code field must be a valid Java snippet.\" }, { role: 'user', content: $json.llm_prompt }], stream: false, options: { num_ctx: 8192, num_predict: 3000, temperature: 0.3, top_p: 0.9, repeat_penalty: 1.1 } }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "21bed014-e108-4954-aad7-be9f8c3f2464",
+      "name": "LLM — Qwen2.5-Coder via Ollama (Explanation + Tutorial)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        784,
+        1424
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Timeout: 240s. onError=continueRegularOutput so a timeout skips to Parse (which handles empty gracefully)."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook — GET Materials by Student": {
+      "main": [
+        [
+          {
+            "node": "MongoDB — Fetch Materials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB — Fetch Materials": {
+      "main": [
+        [
+          {
+            "node": "Return Materials List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook — Receive Learner Profile": {
+      "main": [
+        [
+          {
+            "node": "Schema Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schema Validator": {
+      "main": [
+        [
+          {
+            "node": "Profile Processing Module",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Immediate ACK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Processing Module": {
+      "main": [
+        [
+          {
+            "node": "Initialize Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Loop": {
+      "main": [
+        [
+          {
+            "node": "Get Current Gap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Gap": {
+      "main": [
+        [
+          {
+            "node": "Prompt Construction Module",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Construction Module": {
+      "main": [
+        [
+          {
+            "node": "LLM — Qwen2.5-Coder (Assessment + Quiz)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LLM — Qwen2.5-Coder via Ollama (Explanation + Tutorial)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [
+          {
+            "node": "🤖 Quality Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Quality Review Agent": {
+      "main": [
+        [
+          {
+            "node": "Agent Decision Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Decision Router": {
+      "main": [
+        [
+          {
+            "node": "Adaptive Retry Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge LLM + SLM Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adaptive Retry Agent": {
+      "main": [
+        [
+          {
+            "node": "LLM — Retry Call (Qwen2.5-Coder)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM — Retry Call (Qwen2.5-Coder)": {
+      "main": [
+        [
+          {
+            "node": "Parse Retry LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Retry LLM Response": {
+      "main": [
+        [
+          {
+            "node": "🤖 Quality Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM — Qwen2.5-Coder (Assessment + Quiz)": {
+      "main": [
+        [
+          {
+            "node": "Parse SLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SLM Response": {
+      "main": [
+        [
+          {
+            "node": "🤖 Content Validation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Content Validation Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge LLM + SLM Outputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge LLM + SLM Outputs": {
+      "main": [
+        [
+          {
+            "node": "Content Structuring Module",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Structuring Module": {
+      "main": [
+        [
+          {
+            "node": "MongoDB — Store Learning Material",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MongoDB — Log LLM vs SLM Comparison",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB — Store Learning Material": {
+      "main": [
+        [
+          {
+            "node": "Increment Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Index": {
+      "main": [
+        [
+          {
+            "node": "Check If Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Done": {
+      "main": [
+        [
+          {
+            "node": "Get Current Gap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Response — All Gaps Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM — Qwen2.5-Coder via Ollama (Explanation + Tutorial)": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3a2a3b9a-7f44-4851-9a1b-18ab6e87c219",
+  "meta": {
+    "instanceId": "d897270d1c5a9e19bcdbe95e7e8ff4fb931a4542eea5d4948e9530d0b7cb76d3"
+  },
+  "id": "H6Ssd0_GNJEaFHZfeeajh",
+  "tags": [
+    {
+      "updatedAt": "2026-05-02T19:00:11.457Z",
+      "createdAt": "2026-05-02T19:00:11.457Z",
+      "id": "e0ZHV57vPaGMkIzo",
+      "name": "LMG"
+    },
+    {
+      "updatedAt": "2026-05-02T19:00:11.464Z",
+      "createdAt": "2026-05-02T19:00:11.464Z",
+      "id": "k2rxLEEN8ew7mXFG",
+      "name": "Education"
+    }
+  ]
+}

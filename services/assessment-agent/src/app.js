@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const assessmentRoutes = require('./routes/assessment');
+const ragRoutes = require('./routes/rag');
 //const adminRoutes = require('./routes/admin');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -27,6 +28,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/ame', assessmentRoutes);
+app.use('/api/ame', ragRoutes);
 //app.use('/api/admin', adminRoutes);
 
 app.use((req, res) => {

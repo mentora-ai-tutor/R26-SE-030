@@ -316,7 +316,13 @@ const completeJob = async (req, res, next) => {
     }
 
     const profile = await MasteryProfile.findById(job.profile_id);
-    const gapTopicIds = profile?.knowledge_gaps?.map(g => g.topic_id) || [];
+
+    // Use the augmented topic list persisted on the job (explicit resolved gaps
+    // + injected implicit prerequisites). Re-deriving from profile.knowledge_gaps
+    // would exclude implicit prerequisites and the job would never reach gaps_total.
+    const gapTopicIds = (job.gap_topic_ids && job.gap_topic_ids.length > 0)
+      ? job.gap_topic_ids
+      : (profile?.knowledge_gaps?.map(g => g.topic_id) || []);
 
     const matchingMaterials = await LearningMaterial.find({
       'structured_material.student_id': job.student_id,

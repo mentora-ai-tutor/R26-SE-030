@@ -77,6 +77,28 @@ const agentQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).optional(),
 });
 
+const coverageQuerySchema = Joi.object({
+  category: Joi.string().optional(),
+});
+
+const seedConceptNodeSchema = Joi.object({
+  concept_id: Joi.string().required(),
+  name: Joi.string().required(),
+  category: Joi.string().required(),
+  subcategory: Joi.string().allow('').optional(),
+  bloom_level: Joi.string()
+    .valid('remember', 'understand', 'apply', 'analyze', 'evaluate', 'create')
+    .required(),
+  description: Joi.string().required(),
+  aliases: Joi.array().items(Joi.string()).optional(),
+  prerequisites: Joi.array().items(Joi.string()).optional(),
+  related_topics: Joi.array().items(Joi.string()).optional(),
+  source: Joi.string().optional(),
+  version: Joi.number().optional(),
+}).unknown(true);
+
+const seedConceptGraphSchema = Joi.array().min(1).items(seedConceptNodeSchema).required();
+
 const n8nWebhookSchema = Joi.object({
   student_id: Joi.string().required(),
   job_id: Joi.string().optional(),
@@ -122,5 +144,7 @@ module.exports = {
   paginationQuerySchema,
   materialQuerySchema,
   agentQuerySchema,
+  coverageQuerySchema,
+  seedConceptGraphSchema,
   n8nWebhookSchema,
 };

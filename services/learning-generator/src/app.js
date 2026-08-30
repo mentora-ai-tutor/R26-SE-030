@@ -12,6 +12,7 @@ const materialRoutes = require('./routes/material.routes');
 const agentRoutes = require('./routes/agent.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const progressRoutes = require('./routes/progress.routes');
+const conceptGraphRoutes = require('./routes/conceptGraph.routes');
 const apiResponse = require('./utils/apiResponse');
 
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/mastery', protect, profileRoutes);
 app.use('/api/materials', protect, materialRoutes);
 app.use('/api/agent', protect, agentRoutes);
 app.use('/api/progress', protect, progressRoutes);
+app.use('/api/concept-graph', protect, conceptGraphRoutes);
 app.use('/api/webhooks/n8n', webhookRoutes);
 
 app.use(notFoundMiddleware);

@@ -22,7 +22,7 @@ const escapeForJsString = (s) =>
   String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '\\u003c');
 
 const renderCallbackHtml = ({ payload }) => {
-  const targetOrigin = escapeForJsString(config.frontendOrigin);
+  const targetOrigins = config.frontendOrigins.map(escapeForJsString).join("','");
   const json = JSON.stringify(payload);
   const safeJson = json.replace(/</g, '\\u003c');
   return `<!doctype html><html><head><meta charset="utf-8"><title>GitHub linked</title>
@@ -31,11 +31,11 @@ const renderCallbackHtml = ({ payload }) => {
 <p>You can close this window.</p>
 <script>
 (function(){
-  try {
-    if (window.opener) {
-      window.opener.postMessage(${safeJson}, '${targetOrigin}');
-    }
-  } catch (e) { /* no-op */ }
+  ['${targetOrigins}'].forEach(function(o){
+    try {
+      if (window.opener) { window.opener.postMessage(${safeJson}, o); }
+    } catch (e) { /* no-op */ }
+  });
   setTimeout(function(){ window.close(); }, 100);
 })();
 </script>

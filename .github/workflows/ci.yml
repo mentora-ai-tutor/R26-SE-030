@@ -80,10 +80,46 @@ jobs:
         run: python -m pytest test/ai-engine -q
 
   # ══════════════════════════════════════════════════════════════
-  # Build & Push images (pushed only on push to main)
+  # Detect which services changed, so we only rebuild & push those
+  # ══════════════════════════════════════════════════════════════
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      user-service: ${{ steps.filter.outputs.user-service }}
+      lmg-service: ${{ steps.filter.outputs.lmg-service }}
+      assessment-agent: ${{ steps.filter.outputs.assessment-agent }}
+      knowledge-analysis: ${{ steps.filter.outputs.knowledge-analysis }}
+      peer-learning: ${{ steps.filter.outputs.peer-learning }}
+      ai-engine: ${{ steps.filter.outputs.ai-engine }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter changed service paths
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            user-service:
+              - 'services/user service/**'
+            lmg-service:
+              - 'services/learning-generator/**'
+            assessment-agent:
+              - 'services/assessment-agent/**'
+            knowledge-analysis:
+              - 'services/knowledge-analysis/**'
+            peer-learning:
+              - 'services/peer-learning/**'
+            ai-engine:
+              - 'ai-engine/**'
+
+  # ══════════════════════════════════════════════════════════════
+  # Build & Push images (changed services only; pushed on push to main)
   # ══════════════════════════════════════════════════════════════
   user-service:
-    needs: [test-node, test-python]
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.user-service == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -112,7 +148,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/user-service:${{ github.sha }}
 
   lmg-service:
-    needs: [test-node, test-python]
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.lmg-service == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -141,7 +178,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/lmg-service:${{ github.sha }}
 
   assessment-agent:
-    needs: [test-node, test-python]
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.assessment-agent == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -170,7 +208,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/assessment-agent:${{ github.sha }}
 
   knowledge-analysis:
-    needs: [test-node, test-python]
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.knowledge-analysis == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -199,7 +238,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/knowledge-analysis:${{ github.sha }}
 
   peer-learning:
-    needs: [test-node, test-python]
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.peer-learning == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -228,7 +268,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/peer-learning:${{ github.sha }}
 
   ai-engine:
-    needs: [test-node, test-python]
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.ai-engine == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read

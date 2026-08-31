@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import random
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -37,6 +38,12 @@ CHALLENGE_SCHEMA_VERSION = "kaa-sandbox-challenge-v1.0"
 DIFFICULTY_ORDER = ["easy", "medium", "hard"]
 SANDBOX_DEFAULT_TOPICS = ["Loops", "Arrays", "Strings", "Recursion", "Collections"]
 _VERIFY_TIMEOUT_SECONDS = 35.0
+# Ceiling for LLM generation + reference-solution verification per batch. A hung
+# generate_json (Gemini auth failure demoted to a slow Ollama, 300s HTTP timeout)
+# must not block the sandbox page — we fail fast to the verified seed bank.
+SANDBOX_GENERATION_TIMEOUT_SECONDS = float(
+    os.getenv("SANDBOX_GENERATION_TIMEOUT_SECONDS", "45")
+)
 
 
 def _utcnow() -> datetime:
@@ -180,9 +187,12 @@ async def build_challenge_batch(
 
     generated: list[dict[str, Any]] = []
     try:
-        generated = await _generate_and_verify(topics, count, force_provider=force_provider)
-    except Exception as exc:  # any LLM/router/validation failure -> seed fallback
-        logger.warning("Sandbox challenge generation failed (%s); using seed bank", exc)
+        generated = await asyncio.wait_for(
+            _generate_and_verify(topics, count, force_provider=force_provider),
+            timeout=SANDBOX_GENERATION_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # any LLM/router/timeout/validation/verify failure -> seed bank
+        logger.warning("Sandbox challenge generation failed or timed out (%s); using seed bank", exc)
 
     challenges = list(generated)
     seed_used = False

@@ -25,6 +25,7 @@ from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
 from app.core.constants import (
+    QUIZ_ASSESSMENT_MAX_QUESTIONS,
     QUIZ_DEFAULT_MAX_QUESTIONS,
     QUIZ_DIFFICULTY_ORDER,
     QUIZ_SCHEMA_VERSION,
@@ -204,16 +205,26 @@ async def create_session(student: Any, req: StartQuizRequest) -> dict[str, Any]:
     for q in pool:
         q["qid"] = str(ObjectId())
 
-    max_questions = min(req.max_questions or QUIZ_DEFAULT_MAX_QUESTIONS, len(pool))
+    max_questions = min(
+        req.max_questions
+        or (
+            QUIZ_ASSESSMENT_MAX_QUESTIONS
+            if req.mode == "assessment"
+            else QUIZ_DEFAULT_MAX_QUESTIONS
+        ),
+        len(pool),
+    )
     start_difficulty = QUIZ_DIFFICULTY_ORDER[0]  # always "simple to hard"
     first = select_next(pool, [], start_difficulty)
     now = _utcnow()
 
+    topics = pool_info.get("topics") or req.topics
     doc = {
         "student_id": student.id,
         "public_student_id": student.student_id,
         "mode": req.mode,
-        "topics": req.topics,
+        "topics": topics,
+        "covered_topics": pool_info.get("covered_topics"),
         "job_id": req.job_id,
         "status": "active",
         "source": pool_info["source"],
@@ -387,6 +398,73 @@ async def get_session_view(student: Any, session_id: str) -> dict[str, Any]:
         "total_planned": doc.get("max_questions", 0),
         "difficulty": doc.get("current_difficulty"),
         "pending_question": strip_question(pending_question),
+        "results": (doc.get("results") or summarize(doc.get("answers", []))) if completed else None,
+    }
+
+
+# ------------------------------------------------------------- generated set views
+# Every quiz session IS a durable, recorded "generated question set" (its ``pool``
+# holds the full questions, with the answer key). These helpers expose that history so
+# a student can re-view questions they generated before, or spot a regenerated set.
+def _set_summary(doc: dict[str, Any]) -> dict[str, Any]:
+    pool = doc.get("pool", [])
+    topic_counts: dict[str, int] = {}
+    for q in pool:
+        topic = q.get("topic", "Unknown")
+        topic_counts[topic] = topic_counts.get(topic, 0) + 1
+    results = doc.get("results") or {}
+    created = doc.get("created_at")
+    return {
+        "session_id": str(doc.get("_id")),
+        "mode": doc.get("mode"),
+        "status": doc.get("status"),
+        "source": doc.get("source"),
+        "degraded": doc.get("degraded"),
+        "topics": sorted(topic_counts),
+        "topic_counts": topic_counts,
+        "total_questions": len(pool),
+        "covered_count": len(topic_counts),
+        "answered": len(doc.get("answers", [])),
+        "total_planned": doc.get("max_questions", 0),
+        "score_percent": results.get("score_percent"),
+        "created_at": _datetime_iso(created),
+    }
+
+
+def _datetime_iso(value: Any) -> Optional[str]:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+async def list_sets(student: Any, limit: int = 50) -> list[dict[str, Any]]:
+    """Recent question sets (quiz sessions) for a student, newest first."""
+    db = get_database()
+    docs = (
+        await db.quiz_sessions.find({"student_id": student.id})
+        .sort("created_at", -1)
+        .limit(limit)
+        .to_list(length=limit)
+    )
+    return [_set_summary(doc) for doc in docs]
+
+
+async def get_set_view(student: Any, session_id: str) -> dict[str, Any]:
+    """Full read-only view of a generated question set (client-safe questions)."""
+    doc = await _load_owned_session(student, session_id)
+    pool = doc.get("pool", [])
+    completed = doc.get("status") == "completed"
+    return {
+        "session_id": session_id,
+        "mode": doc.get("mode"),
+        "status": doc.get("status"),
+        "source": doc.get("source"),
+        "degraded": doc.get("degraded"),
+        "topics": sorted({q.get("topic", "Unknown") for q in pool}),
+        "total_questions": len(pool),
+        "answered": len(doc.get("answers", [])),
+        "total_planned": doc.get("max_questions", 0),
+        "questions": [strip_question(q) for q in pool],
         "results": (doc.get("results") or summarize(doc.get("answers", []))) if completed else None,
     }
 

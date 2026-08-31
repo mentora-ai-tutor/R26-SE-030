@@ -1,4 +1,5 @@
 const LearningMaterial = require('../models/LearningMaterial');
+const StudentProgress = require('../models/StudentProgress');
 const materialService = require('../services/material.service');
 const apiResponse = require('../utils/apiResponse');
 const logger = require('../utils/logger');
@@ -156,9 +157,16 @@ const deleteMaterial = async (req, res, next) => {
     const { materialId } = req.params;
     const tokenStudentId = req.student.id;
 
-    const material = await LearningMaterial.findOne({
-      'structured_material.material_id': materialId,
-    });
+    let material;
+    if (materialId.match(/^[0-9a-fA-F]{24}$/)) {
+      material = await LearningMaterial.findById(materialId);
+    }
+
+    if (!material) {
+      material = await LearningMaterial.findOne({
+        'structured_material.material_id': materialId,
+      });
+    }
 
     if (!material) {
       return res.status(404).json({
@@ -176,14 +184,12 @@ const deleteMaterial = async (req, res, next) => {
       });
     }
 
-    if (!material.structured_material.quality_flags) {
-      material.structured_material.quality_flags = {};
-    }
-    material.structured_material.quality_flags.deleted = true;
-    await material.save();
+    await LearningMaterial.deleteOne({ _id: material._id });
 
-    logger.info('Material soft deleted', {
-      material_id: materialId,
+    await StudentProgress.deleteMany({ material_id: String(material._id) });
+
+    logger.info('Material deleted', {
+      material_id: String(material._id),
       student_id: tokenStudentId,
     });
 

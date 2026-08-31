@@ -3,12 +3,16 @@
 These intentionally avoid Mongo and the LLM: they cover the "simple -> hard" engine
 and the offline fallback bank, which is exactly the part that must never regress.
 """
+import asyncio
+import re
 from datetime import datetime, timezone
 
 from app.core.constants import QUIZ_DIFFICULTY_ORDER, QUIZ_SCHEMA_VERSION
 from app.models.quiz import QuizResultRecord
 from app.models.schemas import QuizPerformance
+from app.services import concept_graph as cg
 from app.services import quiz_store
+from app.services import quiz_generator as qg
 from app.services.quiz_generator import build_seed_pool, load_seed_questions
 
 
@@ -192,3 +196,97 @@ def test_strip_question_withholds_answer_key():
     assert "correct_option_id" not in stripped
     assert "explanation" not in stripped
     assert stripped["qid"] == "x" and stripped["options"] == q["options"]
+
+
+# ------------------------------------------------------------------ assessment
+def _assessment_question(topic: str, difficulty: str) -> dict:
+    return {
+        "topic": topic,
+        "difficulty": difficulty,
+        "type": "mcq",
+        "question": f"Which choice best describes {topic}?",
+        "code_snippet": None,
+        "options": [
+            {"id": "A", "text": f"{topic} A"},
+            {"id": "B", "text": f"{topic} B"},
+            {"id": "C", "text": f"{topic} C"},
+            {"id": "D", "text": f"{topic} D"},
+        ],
+        "correct_option_id": "A",
+        "explanation": f"Correct for {topic}.",
+        "concept_tested": topic,
+    }
+
+
+def _batch_for_prompt(prompt: str, skip: tuple[str, ...] = ()) -> dict:
+    pairs = re.findall(r"^- (.+?) \(required difficulty: (\w+)\)", prompt, flags=re.MULTILINE)
+    return {
+        "questions": [
+            _assessment_question(topic, difficulty)
+            for topic, difficulty in pairs
+            if difficulty not in skip
+        ]
+    }
+
+
+class _EchoAssessmentRouter:
+    """LLM stand-in that answers each batch prompt with one question per requested topic."""
+
+    def __init__(self, skip: tuple[str, ...] = ()):
+        self.skip = skip
+        self.calls: list[dict] = []
+
+    async def generate_json(self, *, prompt: str, schema: type, task=None, **kwargs) -> dict:
+        self.calls.append({"task": getattr(task, "value", str(task))})
+        return _batch_for_prompt(prompt, self.skip)
+
+
+def test_assessment_difficulty_maps_graph_level_to_rung():
+    for label in cg.graph_topic_labels():
+        level = cg.difficulty(label)
+        expected = "easy" if level <= 2 else ("medium" if level == 3 else "hard")
+        assert qg._assessment_difficulty(label) == expected
+
+
+def test_build_assessment_pool_covers_every_syllabus_topic(monkeypatch):
+    labels = cg.graph_topic_labels()
+    assert len(labels) == 33  # the full syllabus, not just the core set
+
+    router = _EchoAssessmentRouter()
+    monkeypatch.setattr(qg, "get_router", lambda: router)
+
+    pool = asyncio.run(qg.build_assessment_pool(labels, ["mcq"]))
+    assert pool["source"] == "generated"
+    assert pool["degraded"] is False
+    assert pool["covered_topics"] == sorted(labels)
+    assert len(pool["questions"]) == len(labels)
+    assert {q["topic"] for q in pool["questions"]} == set(labels)
+    assert all(q["source"] == "generated" for q in pool["questions"])
+    assert router.calls and router.calls[0]["task"] == "question_gen"
+
+
+def test_build_assessment_pool_falls_back_to_seed_when_llm_down(monkeypatch):
+    class _DownRouter:
+        async def generate_json(self, *, prompt: str, schema: type, task=None, **kwargs):
+            raise RuntimeError("llm down")
+
+    monkeypatch.setattr(qg, "get_router", lambda: _DownRouter())
+
+    pool = asyncio.run(qg.build_assessment_pool(cg.graph_topic_labels(), ["mcq", "predict_output"]))
+    assert pool["source"] == "seed"
+    assert pool["degraded"] is True
+    difficulties = {q["difficulty"] for q in pool["questions"]}
+    assert difficulties == set(QUIZ_DIFFICULTY_ORDER)  # ladder stays usable
+    assert all(q["source"] == "seed" for q in pool["questions"])
+
+
+def test_build_assessment_pool_topped_up_by_seed_when_rungs_missing(monkeypatch):
+    router = _EchoAssessmentRouter(skip=("medium", "hard"))
+    monkeypatch.setattr(qg, "get_router", lambda: router)
+
+    pool = asyncio.run(qg.build_assessment_pool(cg.graph_topic_labels(), ["mcq", "predict_output"]))
+    assert pool["source"] == "mixed"
+    assert pool["degraded"] is True
+    difficulties = {q["difficulty"] for q in pool["questions"]}
+    assert difficulties == set(QUIZ_DIFFICULTY_ORDER)
+    assert {q["source"] for q in pool["questions"]} == {"generated", "seed"}

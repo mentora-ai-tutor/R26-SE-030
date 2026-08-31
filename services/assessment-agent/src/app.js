@@ -9,8 +9,13 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
+// FRONTEND_URL may be a comma-separated list of allowed origins (local + deployed).
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim());
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: allowedOrigins,
   credentials: true,
 }));
 

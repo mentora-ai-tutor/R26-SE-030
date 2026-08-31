@@ -2,6 +2,21 @@ from app.core.constants import WEIGHTS
 from app.models.schemas import LearnerInput
 
 
+def _weighted(entries: list[tuple[float, float]]) -> float:
+    """Weighted mean over *present* signals only.
+
+    Renormalise so a topic scored from a single source (e.g. quiz-only) is judged on
+    that source alone instead of being dragged toward a phantom neutral 50 by missing
+    sandbox/forensic signals.
+    """
+    if not entries:
+        return 0.5
+    total_weight = sum(weight for weight, _ in entries)
+    if total_weight <= 0:
+        return 0.5
+    return sum(weight * value for weight, value in entries) / total_weight
+
+
 def step7_score(data: LearnerInput, features: dict, mode_result: dict) -> dict:
     del features
     scores = {}
@@ -13,8 +28,10 @@ def step7_score(data: LearnerInput, features: dict, mode_result: dict) -> dict:
     }
 
     for topic, a in enriched.items():
-        quiz_score = quiz_map.get(topic, 0.5)
-        sbox_score = sbox_map.get(topic, 0.5)
+        # Absent sources stay None — no phantom neutral scores. A missing quiz or
+        # sandbox signal means "no evidence", not "50% mastery".
+        quiz_score = quiz_map.get(topic)
+        sbox_score = sbox_map.get(topic)
 
         if mode_result["mode"] == "full":
             fs = a.get("forensic_signals") or {}
@@ -23,14 +40,23 @@ def step7_score(data: LearnerInput, features: dict, mode_result: dict) -> dict:
             big_bang = fs.get("big_bang_ratio", 0.0)
             for_score = max(gran * 0.5 + refactor * 0.3 - big_bang * 0.5, 0.0)
         else:
-            for_score = 0.5
+            for_score = None
 
-        mastery = WEIGHTS["sandbox"] * sbox_score + WEIGHTS["forensic"] * for_score + WEIGHTS["quiz"] * quiz_score
+        entries = []
+        if sbox_score is not None:
+            entries.append((WEIGHTS["sandbox"], sbox_score))
+        if for_score is not None:
+            entries.append((WEIGHTS["forensic"], for_score))
+        if quiz_score is not None:
+            entries.append((WEIGHTS["quiz"], quiz_score))
+
+        mastery = _weighted(entries)
+
         scores[topic] = {
             "mastery_score": round(mastery, 3),
-            "quiz_score": round(quiz_score, 3),
-            "sandbox_score": round(sbox_score, 3),
-            "forensic_score": round(for_score, 3),
+            "quiz_score": round(quiz_score, 3) if quiz_score is not None else None,
+            "sandbox_score": round(sbox_score, 3) if sbox_score is not None else None,
+            "forensic_score": round(for_score, 3) if for_score is not None else None,
             "priority_rank": None,
         }
 

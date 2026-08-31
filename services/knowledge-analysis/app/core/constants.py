@@ -23,6 +23,9 @@ QUIZ_SCHEMA_VERSION = "kaa-quiz-v1.0"
 QUIZ_DIFFICULTY_ORDER = ["easy", "medium", "hard"]
 # Questions served per session before it auto-completes.
 QUIZ_DEFAULT_MAX_QUESTIONS = 6
+# Assessment sessions serve many items because their pool spans the whole syllabus
+# (every concept-graph topic) — a 6-question run would only sample a few topics.
+QUIZ_ASSESSMENT_MAX_QUESTIONS = 20
 # Default Java topics for a profile-only (no-repo) skill check.
 QUIZ_DEFAULT_TOPICS = [
     "Loops",

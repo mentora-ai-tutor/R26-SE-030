@@ -72,6 +72,11 @@ class KnowledgeGap(BaseModel):
     prerequisite_topics: List[str] = Field(default_factory=list)
     related_topics: List[str] = Field(default_factory=list)
     suggested_intervention: SuggestedIntervention
+    # Concept-graph enrichment (additive): exact leaf concepts the student is
+    # struggling with and the course week the LMG should target.
+    weak_concepts: List[str] = Field(default_factory=list)
+    weak_concept_ids: List[str] = Field(default_factory=list)
+    week_area: Optional[str] = None
 
 
 class Strength(BaseModel):

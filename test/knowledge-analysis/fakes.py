@@ -36,6 +36,21 @@ class FakeCursor:
         self._limit_n: int | None = None
 
     def sort(self, *args, **kwargs) -> "FakeCursor":
+        if not args:
+            return self
+        spec = args[0]
+        direction = args[1] if len(args) > 1 else kwargs.get("direction", 1)
+        if isinstance(spec, (list, tuple)) and spec and isinstance(spec[0], (list, tuple)):
+            key, direction = spec[0][0], spec[0][1]
+        elif isinstance(spec, str):
+            key = spec
+        else:
+            return self
+        self._docs = sorted(
+            self._docs,
+            key=lambda doc, k=key: doc.get(k) or "",
+            reverse=(direction == -1),
+        )
         return self
 
     def limit(self, n: int) -> "FakeCursor":
@@ -186,7 +201,6 @@ def patch_database(monkeypatch, fdb: FakeDatabase) -> None:
     module namespace, not only in ``app.db.database``.
     """
     import app.db.database as db_mod
-    import app.api.routes as routes_mod
     import app.api.knowledge_profile_routes as kp_mod
     import app.api.github_review_routes as groutes_mod
     import app.services.mastery_profile_store as mps_mod
@@ -199,7 +213,6 @@ def patch_database(monkeypatch, fdb: FakeDatabase) -> None:
     monkeypatch.setattr(db_mod, "get_client", lambda: None)
     monkeypatch.setattr(db_mod, "get_database", lambda: fdb)
     for mod in (
-        routes_mod,
         kp_mod,
         groutes_mod,
         mps_mod,

@@ -8,6 +8,8 @@ fixed StudentContext, so ``AUTH_HEADER`` satisfies the real header-parsing contr
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from bson import ObjectId
 from fastapi.testclient import TestClient
@@ -393,3 +395,192 @@ def test_endpoints_require_bearer_token() -> None:
     resp = client.get("/api/v1/knowledge-profile/me")
     assert resp.status_code == 401
     assert resp.json()["detail"] == "Authorization header is required"
+
+
+# ------------------------------------------------------------------ analyze/auto
+def _quiz_session_doc() -> dict:
+    now = utcnow()
+    return {
+        "_id": ObjectId(),
+        "student_id": STUDENT_OBJECT_ID,
+        "public_student_id": PUBLIC_STUDENT_ID,
+        "session_id": "q-auto-1",
+        "mode": "sandbox",
+        "status": "completed",
+        "completed_at": now,
+        "created_at": now,
+        "answers": [
+            {
+                "qid": "q-a1",
+                "topic": "Loops",
+                "difficulty": "easy",
+                "correct": True,
+                "chosen_option_id": "A",
+                "time_seconds": 12.0,
+            },
+            {
+                "qid": "q-a2",
+                "topic": "Recursion",
+                "difficulty": "medium",
+                "correct": False,
+                "chosen_option_id": "B",
+                "time_seconds": 18.0,
+            },
+        ],
+    }
+
+
+def _analyze_auto_body(data: dict) -> dict:
+    assert data["status"] == "success"
+    result = data["data"] if "data" in data else data
+    return result
+
+
+def test_analyze_auto_delegates_to_github_bridge_when_reviews_exist(env) -> None:
+    client, fdb = env
+    fdb.repo_review_jobs.docs.append(_review_job_doc())
+    fdb.quiz_sessions.docs.append(_quiz_session_doc())
+    fdb.mastery_profiles.docs.clear()
+
+    resp = client.post("/analyze/auto", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # Delegated to the github_review_bridge, not the github-blind pipeline.
+    assert body["pipeline"]["mode"] == "github_review_bridge"
+    assert body["persistence"]["source"] == "github_review_bridge"
+    assert body["persistence"]["saved"] is True
+    assert body["final_output"]["data_sources"]["github"] == "available"
+    assert body["final_output"]["student_id"] == PUBLIC_STUDENT_ID
+    assert int(body["final_output"]["data_sources"].get("github_review_repos", 0)) >= 1
+
+    # The merged profile (reviews + quiz + sandbox) was persisted as the latest.
+    assert fdb.mastery_profiles.docs
+    assert fdb.mastery_profiles.docs[-1]["student_id"] == PUBLIC_STUDENT_ID
+
+
+def test_analyze_auto_uses_bridge_without_github_reviews(env) -> None:
+    client, fdb = env
+    fdb.quiz_sessions.docs.append(_quiz_session_doc())
+    fdb.mastery_profiles.docs.clear()
+
+    resp = client.post("/analyze/auto", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # No repo reviews -> the bridge still runs, fusing the quiz evidence into the
+    # same canonical profile shape; github simply reports as unavailable.
+    assert body["pipeline"]["mode"] == "github_review_bridge"
+    assert body["pipeline"].get("step1_ingestion") is None
+    assert body["persistence"]["source"] == "github_review_bridge"
+    assert body["persistence"]["saved"] is True
+    assert body["final_output"]["data_sources"]["github"] == "unavailable"
+    assert body["final_output"]["knowledge_gaps"] or body["final_output"]["strengths"]
+    assert fdb.mastery_profiles.docs
+
+    # Loops was answered correctly, so it must not be flagged as a fake gap from
+    # a fabricable neutral sandbox/forensic baseline.
+    gaps = {g["topic_id"] for g in body["final_output"]["knowledge_gaps"]}
+    assert "CS101-LOOP" not in gaps
+    strengths = {s["topic"] for s in body["final_output"]["strengths"]}
+    assert "Loops" in strengths
+
+
+# -------------------------------------------------------------- quiz /sets view
+def _assessment_set_doc(session_tag: str, created_at) -> dict:
+    pool = []
+    for i, topic in enumerate(["Loops", "Recursion", "Arrays"], start=1):
+        pool.append(
+            {
+                "qid": f"agg-{session_tag}-{i}",
+                "topic": topic,
+                "difficulty": "easy",
+                "type": "mcq",
+                "question": f"Which choice best describes {topic}?",
+                "code_snippet": None,
+                "options": [
+                    {"id": "A", "text": f"{topic} A"},
+                    {"id": "B", "text": f"{topic} B"},
+                    {"id": "C", "text": f"{topic} C"},
+                    {"id": "D", "text": f"{topic} D"},
+                ],
+                "correct_option_id": "A",
+                "explanation": f"Correct for {topic}.",
+                "concept_tested": topic,
+                "source": "generated",
+            }
+        )
+    return {
+        "_id": ObjectId(),
+        "student_id": STUDENT_OBJECT_ID,
+        "public_student_id": PUBLIC_STUDENT_ID,
+        "mode": "assessment",
+        "topics": ["Loops", "Recursion", "Arrays"],
+        "covered_topics": ["Loops", "Recursion", "Arrays"],
+        "job_id": None,
+        "status": "active",
+        "source": "generated",
+        "degraded": False,
+        "current_difficulty": "easy",
+        "max_questions": 20,
+        "pool": pool,
+        "asked": [],
+        "answers": [],
+        "created_at": created_at,
+        "updated_at": created_at,
+    }
+
+
+def test_quiz_sets_lists_stored_sets_newest_first(env) -> None:
+    client, fdb = env
+    older = _assessment_set_doc("s1", utcnow())
+    newer = _assessment_set_doc("s2", utcnow() + timedelta(seconds=60))
+    fdb.quiz_sessions.docs += [older, newer]
+
+    resp = client.get("/api/v1/quiz/sets", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert [s["session_id"] for s in data] == [str(newer["_id"]), str(older["_id"])]
+    assert all(s["mode"] == "assessment" for s in data)
+    assert data[0]["source"] == "generated"
+    assert data[0]["covered_count"] == 3
+    assert data[0]["total_planned"] == 20
+    assert data[0]["total_questions"] == 3
+
+
+def test_quiz_set_view_is_read_only_and_strips_answer_key(env) -> None:
+    client, fdb = env
+    doc = _assessment_set_doc("v1", utcnow())
+    fdb.quiz_sessions.docs.append(doc)
+
+    resp = client.get(f"/api/v1/quiz/sets/{doc['_id']}", headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["session_id"] == str(doc["_id"])
+    assert data["mode"] == "assessment"
+    assert data["total_questions"] == 3
+    assert data["topics"] == sorted(["Arrays", "Loops", "Recursion"])
+    for q in data["questions"]:
+        assert "correct_option_id" not in q
+        assert "explanation" not in q
+        assert q["options"]
+
+
+def test_quiz_set_unknown_and_invalid_ids(env) -> None:
+    client, _ = env
+    resp_missing = client.get(
+        "/api/v1/quiz/sets/507f1f77bcf86cd799439011", headers=AUTH_HEADER
+    )
+    assert resp_missing.status_code == 404
+    resp_bad = client.get("/api/v1/quiz/sets/not-an-objectid", headers=AUTH_HEADER)
+    assert resp_bad.status_code == 400
+
+
+def test_quiz_set_owned_by_another_student_is_404(env) -> None:
+    client, fdb = env
+    other = _assessment_set_doc("o1", utcnow())
+    other["student_id"] = "507f1f77bcf86cd799439abc"
+    fdb.quiz_sessions.docs.append(other)
+
+    resp = client.get(f"/api/v1/quiz/sets/{other['_id']}", headers=AUTH_HEADER)
+    assert resp.status_code == 404

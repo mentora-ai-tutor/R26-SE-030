@@ -56,7 +56,7 @@ class StartQuizRequest(BaseModel):
         default=None,
         description="Optional review job this skill-check runs alongside (for analytics).",
     )
-    max_questions: Optional[int] = Field(default=None, ge=1, le=20)
+    max_questions: Optional[int] = Field(default=None, ge=1, le=100)
 
 
 class AnswerQuizRequest(BaseModel):

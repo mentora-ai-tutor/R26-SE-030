@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone
 
 from app.core.constants import QUIZ_DIFFICULTY_ORDER, QUIZ_SCHEMA_VERSION
-from app.models.quiz import QuizResultRecord
+from app.models.quiz import QuizResultRecord, StartQuizRequest
 from app.models.schemas import QuizPerformance
 from app.services import concept_graph as cg
 from app.services import quiz_store
@@ -290,3 +290,110 @@ def test_build_assessment_pool_topped_up_by_seed_when_rungs_missing(monkeypatch)
     difficulties = {q["difficulty"] for q in pool["questions"]}
     assert difficulties == set(QUIZ_DIFFICULTY_ORDER)
     assert {q["source"] for q in pool["questions"]} == {"generated", "seed"}
+
+
+# ---------------------------------------------------- assessment serves full pool
+def _fake_assessment_store(pool: list[dict]):
+    """A minimal get_database stand-in usable by create_session/retake_set."""
+
+    class _Collections:
+        def __init__(self):
+            self.docs = []
+
+        async def insert_one(self, doc: dict):
+            doc["_id"] = f"id-{len(self.docs)}"
+            self.docs.append(doc)
+            return type("R", (), {"inserted_id": doc["_id"]})()
+
+        async def insert_many(self, docs: list, ordered: bool = False, *args, **kwargs):
+            for doc in docs:
+                await self.insert_one(doc)
+
+        async def find_one(self, query: dict, *args, **kwargs):
+            return next((d for d in self.docs if _matches(d, query)), None)
+
+    class _FakeDB:
+        def __init__(self, pool):
+            self.pool = pool
+            self.quiz_sessions = _Collections()
+            self.quiz_question_bank = _Collections()
+
+    return _FakeDB(pool)
+
+
+def _matches(doc: dict, query: dict) -> bool:
+    return all(doc.get(k) == v for k, v in query.items())
+
+
+def _assessment_pool_questions(n: int) -> list[dict]:
+    return [
+        {
+            "qid": f"q{i}",
+            "topic": f"T{i}", "difficulty": "easy", "type": "mcq",
+            "question": f"Q{i}?",
+            "code_snippet": None,
+            "options": [
+                {"id": "A", "text": "a"}, {"id": "B", "text": "b"},
+                {"id": "C", "text": "c"}, {"id": "D", "text": "d"},
+            ],
+            "correct_option_id": "A", "explanation": "e", "concept_tested": "c",
+            "source": "generated",
+        }
+        for i in range(n)
+    ]
+
+
+def test_create_session_assessment_serves_whole_pool(monkeypatch):
+    pool = _assessment_pool_questions(33)  # the full syllabus-sized pool
+    fdb = _fake_assessment_store(pool)
+
+    async def fake_build_quiz_pool(*, topics=None, mode=None):
+        return {
+            "questions": pool, "source": "generated", "degraded": False,
+            "topics": [t["topic"] for t in pool],
+            "covered_topics": [t["topic"] for t in pool],
+        }
+
+    monkeypatch.setattr(quiz_store, "build_quiz_pool", fake_build_quiz_pool)
+    monkeypatch.setattr(quiz_store, "get_database", lambda: fdb)
+
+    class _Student:
+        id = "s-internal"
+        student_id = "IT22201232"
+
+    # Frontend may pass a low cap, but assessment ignores it and serves the full pool.
+    req = StartQuizRequest(mode="assessment", max_questions=20)
+    out = asyncio.run(quiz_store.create_session(_Student(), req))
+    assert out["total_planned"] == len(pool) == 33
+    assert out["question"] is not None
+    assert "correct_option_id" not in out["question"]
+
+
+def test_retake_set_reuses_source_pool_in_new_session(monkeypatch):
+    source_pool = _assessment_pool_questions(5)
+    fdb = _fake_assessment_store([])
+    from bson import ObjectId
+
+    source_id = str(ObjectId())
+    source_doc = {
+        "_id": ObjectId(source_id),
+        "student_id": "s-internal", "public_student_id": "IT22201232",
+        "mode": "assessment", "topics": ["T0"], "covered_topics": ["T0", "T1", "T2", "T3", "T4"],
+        "job_id": None, "status": "active", "source": "generated", "degraded": False,
+        "current_difficulty": "easy", "max_questions": 5,
+        "pool": source_pool, "asked": [], "answers": [],
+    }
+    fdb.quiz_sessions.docs.append(source_doc)
+    monkeypatch.setattr(quiz_store, "get_database", lambda: fdb)
+
+    class _Student:
+        id = "s-internal"
+        student_id = "IT22201232"
+
+    out = asyncio.run(quiz_store.retake_set(_Student(), source_id))
+    assert out["total_planned"] == 5
+    assert fdb.quiz_sessions.docs[-1]["retaken_from"] == source_id
+    assert fdb.quiz_sessions.docs[-1]["status"] == "active"
+    assert {q["qid"] for q in fdb.quiz_sessions.docs[-1]["pool"]}.isdisjoint(
+        {q["qid"] for q in source_pool}
+    )

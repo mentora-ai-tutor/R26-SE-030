@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mentora — Deployment Report</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   ROOT & RESET
+   ═══════════════════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b1120;--bg2:#111827;--bg3:#1e293b;--bg4:#263248;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --teal:#0d9488;--teal-l:#14b8a6;--teal-d:#0f766e;
+  --cyan:#06b6d4;--cyan-l:#22d3ee;
+  --amber:#f59e0b;--red:#ef4444;--green:#22c55e;--blue:#3b82f6;--purple:#a855f7;
+  --radius:12px;--radius-sm:8px;
+  --shadow:0 4px 24px rgba(0,0,0,.4);
+  --shadow-lg:0 8px 48px rgba(0,0,0,.5);
+}
+html{scroll-behavior:smooth;font-size:15px}
+body{font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.65;overflow-x:hidden}
+a{color:var(--teal-l);text-decoration:none}
+a:hover{text-decoration:underline}
+::selection{background:var(--teal);color:#fff}
+@media print{body{background:#fff;color:#111} .no-print{display:none!important}}
+
+/* ═══════════════════════════════════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════════════════════════════════ */
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(11,17,32,.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.06);padding:0 2rem;display:flex;align-items:center;height:56px;gap:1.5rem}
+nav .logo{font-weight:800;font-size:1.1rem;color:#fff;white-space:nowrap;letter-spacing:-.02em}
+nav .logo span{color:var(--teal-l)}
+nav .links{display:flex;gap:.25rem;overflow-x:auto;scrollbar-width:none;flex:1}
+nav .links::-webkit-scrollbar{display:none}
+nav .links a{font-size:.75rem;font-weight:600;color:var(--text2);padding:.35rem .65rem;border-radius:6px;white-space:nowrap;transition:all .2s}
+nav .links a:hover,nav .links a.active{background:var(--teal);color:#fff;text-decoration:none}
+@media(max-width:768px){nav{padding:0 1rem} nav .links a{font-size:.65rem;padding:.3rem .5rem}}
+@media print{nav{display:none}}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HERO
+   ═══════════════════════════════════════════════════════════════════ */
+.hero{padding:7rem 2rem 4rem;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-40%;left:-20%;width:140%;height:140%;background:radial-gradient(ellipse at 50% 0%,rgba(13,148,136,.15),transparent 70%);pointer-events:none}
+.hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:900;letter-spacing:-.03em;background:linear-gradient(135deg,#fff 0%,var(--teal-l) 50%,var(--cyan) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.75rem}
+.hero .sub{color:var(--text2);font-size:1.05rem;max-width:600px;margin:0 auto 2rem}
+.hero .meta{display:flex;gap:2rem;justify-content:center;flex-wrap:wrap}
+.hero .meta span{font-size:.8rem;color:var(--text3);display:flex;align-items:center;gap:.35rem}
+.hero .meta span b{color:var(--text2);font-weight:700}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAT CARDS (hero row)
+   ═══════════════════════════════════════════════════════════════════ */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;max-width:900px;margin:2.5rem auto 0;padding:0 1rem}
+.stat-card{background:var(--bg3);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:1.25rem;text-align:center;transition:transform .2s,border-color .2s}
+.stat-card:hover{transform:translateY(-3px);border-color:var(--teal)}
+.stat-card .num{font-size:2rem;font-weight:900;color:var(--teal-l);line-height:1}
+.stat-card .label{font-size:.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-top:.35rem}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTIONS
+   ═══════════════════════════════════════════════════════════════════ */
+section{max-width:1100px;margin:0 auto;padding:3rem 1.5rem}
+section h2{font-size:1.5rem;font-weight:800;margin-bottom:1.25rem;display:flex;align-items:center;gap:.6rem;letter-spacing:-.02em}
+section h2 .icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+section h3{font-size:1.1rem;font-weight:700;margin:1.5rem 0 .75rem;color:var(--text)}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CARDS & PANELS
+   ═══════════════════════════════════════════════════════════════════ */
+.panel{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:1.5rem;margin-bottom:1.25rem}
+.panel-accent{border-left:3px solid var(--teal)}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TABLES
+   ═══════════════════════════════════════════════════════════════════ */
+.tbl-wrap{overflow-x:auto;margin:1rem 0;border-radius:var(--radius);border:1px solid rgba(255,255,255,.06)}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+thead{background:var(--bg4)}
+th{padding:.7rem 1rem;text-align:left;font-weight:700;color:var(--text2);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+td{padding:.65rem 1rem;border-top:1px solid rgba(255,255,255,.04);vertical-align:top}
+tr:hover td{background:rgba(13,148,136,.04)}
+.badge{display:inline-block;font-size:.65rem;font-weight:700;padding:.15rem .5rem;border-radius:4px;white-space:nowrap}
+.badge-teal{background:rgba(13,148,136,.15);color:var(--teal-l)}
+.badge-cyan{background:rgba(6,182,212,.15);color:var(--cyan-l)}
+.badge-amber{background:rgba(245,158,11,.15);color:var(--amber)}
+.badge-green{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-purple{background:rgba(168,85,247,.15);color:var(--purple)}
+.badge-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ARCHITECTURE DIAGRAM
+   ═══════════════════════════════════════════════════════════════════ */
+.arch{position:relative;background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:2rem;overflow:hidden}
+.arch svg{width:100%;height:auto;max-height:520px}
+.arch svg text{font-family:inherit;fill:var(--text)}
+.arch svg .node-rect{rx:10;ry:10;stroke-width:1.5;transition:all .2s}
+.arch svg .node-rect:hover{filter:brightness(1.2);cursor:pointer}
+.arch svg .edge{stroke:rgba(255,255,255,.12);stroke-width:1.5;fill:none;marker-end:url(#arrow)}
+.arch svg .ext-rect{rx:10;ry:10;stroke-dasharray:6 3;stroke-width:1.5}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PIPELINE FLOW
+   ═══════════════════════════════════════════════════════════════════ */
+.pipeline{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;align-items:flex-start;padding:1rem 0}
+.pipe-stage{background:var(--bg3);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);padding:1rem 1.25rem;min-width:180px;flex:0 1 220px;text-align:center;position:relative;transition:border-color .2s}
+.pipe-stage:hover{border-color:var(--teal)}
+.pipe-stage .pipe-icon{width:40px;height:40px;border-radius:10px;margin:0 auto .6rem;display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+.pipe-stage h4{font-size:.85rem;font-weight:700;margin-bottom:.3rem}
+.pipe-stage p{font-size:.72rem;color:var(--text3);line-height:1.4}
+.pipe-arrow{font-size:1.5rem;color:var(--text3);align-self:center;flex-shrink:0}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COLLAPSIBLE ACCORDION
+   ═══════════════════════════════════════════════════════════════════ */
+.accordion{margin:1rem 0}
+.acc-item{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);margin-bottom:.5rem;overflow:hidden}
+.acc-header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.15rem;cursor:pointer;user-select:none;transition:background .15s}
+.acc-header:hover{background:rgba(255,255,255,.03)}
+.acc-header h4{font-size:.9rem;font-weight:700;display:flex;align-items:center;gap:.5rem}
+.acc-header .chevron{width:20px;height:20px;color:var(--text3);transition:transform .25s}
+.acc-item.open .acc-header .chevron{transform:rotate(180deg)}
+.acc-body{max-height:0;overflow:hidden;transition:max-height .35s ease}
+.acc-item.open .acc-body{max-height:3000px}
+.acc-body-inner{padding:0 1.15rem 1rem;font-size:.85rem;color:var(--text2);line-height:1.65}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SERVICE CARDS
+   ═══════════════════════════════════════════════════════════════════ */
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin:1rem 0}
+.svc-card{background:var(--bg3);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:1.25rem;transition:transform .2s,border-color .2s}
+.svc-card:hover{transform:translateY(-2px);border-color:var(--teal)}
+.svc-card .svc-head{display:flex;align-items:center;gap:.7rem;margin-bottom:.75rem}
+.svc-card .svc-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+.svc-card .svc-name{font-weight:800;font-size:.95rem}
+.svc-card .svc-lang{font-size:.7rem;color:var(--text3);margin-top:.1rem}
+.svc-card .svc-desc{font-size:.8rem;color:var(--text2);line-height:1.55}
+.svc-card .svc-tags{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.75rem}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PORT BAR CHART
+   ═══════════════════════════════════════════════════════════════════ */
+.port-bars{display:flex;flex-direction:column;gap:.5rem;margin:1rem 0}
+.port-row{display:flex;align-items:center;gap:.75rem}
+.port-label{width:160px;font-size:.8rem;font-weight:600;text-align:right;flex-shrink:0}
+.port-bar-bg{flex:1;height:28px;background:var(--bg4);border-radius:6px;overflow:hidden;position:relative}
+.port-bar{height:100%;border-radius:6px;display:flex;align-items:center;padding:0 .75rem;font-size:.7rem;font-weight:700;color:#fff;transition:width .8s ease;width:0}
+.port-bar-label{font-size:.7rem;color:var(--text3);width:80px;flex-shrink:0}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COST TABLE
+   ═══════════════════════════════════════════════════════════════════ */
+.cost-bar{display:flex;align-items:center;gap:.5rem;margin:.25rem 0}
+.cost-fill{height:18px;border-radius:4px;display:flex;align-items:center;padding:0 .5rem;font-size:.65rem;font-weight:700;color:#fff;white-space:nowrap;transition:width .8s ease;width:0}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CODE BLOCKS
+   ═══════════════════════════════════════════════════════════════════ */
+pre{background:var(--bg);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);padding:1rem 1.25rem;overflow-x:auto;font-size:.78rem;line-height:1.6;color:var(--text2);margin:1rem 0;font-family:'Fira Code','Cascadia Code','JetBrains Mono',monospace}
+code{font-family:'Fira Code','Cascadia Code','JetBrains Mono',monospace;font-size:.82em}
+code:not(pre code){background:rgba(13,148,136,.1);color:var(--teal-l);padding:.1rem .35rem;border-radius:4px;font-size:.78rem}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DIVIDERS & MISC
+   ═══════════════════════════════════════════════════════════════════ */
+hr{border:none;height:1px;background:rgba(255,255,255,.06);margin:2rem 0}
+.tag-list{display:flex;flex-wrap:wrap;gap:.4rem}
+.tag{font-size:.68rem;font-weight:600;padding:.2rem .55rem;border-radius:5px;background:rgba(255,255,255,.05);color:var(--text2)}
+.note{background:rgba(6,182,212,.06);border:1px solid rgba(6,182,212,.15);border-radius:var(--radius-sm);padding:.85rem 1rem;font-size:.82rem;color:var(--cyan-l);margin:1rem 0}
+.note::before{content:'ℹ ';font-weight:700}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════════ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.animate{opacity:0;animation:fadeUp .5s ease forwards}
+.delay-1{animation-delay:.1s}.delay-2{animation-delay:.2s}.delay-3{animation-delay:.3s}.delay-4{animation-delay:.4s}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════════════ */
+footer{text-align:center;padding:3rem 1rem;border-top:1px solid rgba(255,255,255,.04);color:var(--text3);font-size:.75rem}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════ NAV ════════════════════════════════ -->
+<nav class="no-print">
+  <div class="logo"><span>M</span>ENTORA</div>
+  <div class="links">
+    <a href="#overview" class="active">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#services">Services</a>
+    <a href="#containerisation">Containers</a>
+    <a href="#cicd">CI/CD</a>
+    <a href="#orchestration">Compose</a>
+    <a href="#env">Config</a>
+    <a href="#dependencies">Dependencies</a>
+    <a href="#ports">Ports</a>
+    <a href="#deploy">Deploy</a>
+    <a href="#infra">Infrastructure</a>
+    <a href="#limitations">Roadmap</a>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════ HERO ═══════════════════════════════ -->
+<header class="hero" id="overview">
+  <h1>Deployment Report</h1>
+  <p class="sub">A comprehensive overview of the Mentora microservices deployment architecture, CI/CD pipeline, containerisation strategy, and production infrastructure requirements.</p>
+  <div class="meta">
+    <span>Version <b>1.0</b></span>
+    <span>Date <b>August 2026</b></span>
+    <span>Stack <b>Docker · GitHub Actions · GHCR</b></span>
+  </div>
+  <div class="stats-row">
+    <div class="stat-card animate"><div class="num" data-count="6">0</div><div class="label">Microservices</div></div>
+    <div class="stat-card animate delay-1"><div class="num" data-count="6">0</div><div class="label">Docker Images</div></div>
+    <div class="stat-card animate delay-2"><div class="num" data-count="5">0</div><div class="label">Pipeline Jobs</div></div>
+    <div class="stat-card animate delay-3"><div class="num" data-count="33">0</div><div class="label">Concept Topics</div></div>
+    <div class="stat-card animate delay-4"><div class="num" data-count="6">0</div><div class="label">Health Endpoints</div></div>
+  </div>
+</header>
+
+<!-- ════════════════════════════ ARCHITECTURE ══════════════════════════ -->
+<section id="architecture">
+  <h2><span class="icon" style="background:rgba(13,148,136,.15);color:var(--teal-l)">⬡</span> System Architecture</h2>
+
+  <div class="arch animate">
+    <svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,.25)"/></marker>
+        <linearGradient id="gTeal" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0d9488"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient>
+        <linearGradient id="gCyan" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient>
+        <linearGradient id="gAmber" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient>
+        <linearGradient id="gGreen" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#22c55e"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient>
+        <linearGradient id="gPurple" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient>
+        <linearGradient id="gBlue" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient>
+      </defs>
+
+      <!-- Frontend -->
+      <rect class="node-rect" x="280" y="15" width="340" height="52" fill="rgba(13,148,136,.12)" stroke="rgba(13,148,136,.4)"/>
+      <text x="450" y="38" text-anchor="middle" font-size="12" font-weight="800" fill="#14b8a6">FRONTEND</text>
+      <text x="450" y="55" text-anchor="middle" font-size="9" fill="#94a3b8">Next.js · Vercel · https://mentora.kaweesha.com</text>
+
+      <!-- Arrows from frontend -->
+      <line class="edge" x1="350" y1="67" x2="140" y2="118"/>
+      <line class="edge" x1="390" y1="67" x2="300" y2="118"/>
+      <line class="edge" x1="450" y1="67" x2="450" y2="118"/>
+      <line class="edge" x1="510" y1="67" x2="590" y2="118"/>
+      <line class="edge" x1="550" y1="67" x2="730" y2="118"/>
+
+      <!-- Row 1: Backend services -->
+      <rect class="node-rect" x="40" y="118" width="200" height="52" fill="rgba(34,197,94,.1)" stroke="rgba(34,197,94,.35)"/>
+      <text x="140" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="#22c55e">USER SERVICE</text>
+      <text x="140" y="156" text-anchor="middle" font-size="8.5" fill="#94a3b8">Node.js · Express · :3001</text>
+
+      <rect class="node-rect" x="260" y="118" width="200" height="52" fill="rgba(6,182,212,.1)" stroke="rgba(6,182,212,.35)"/>
+      <text x="360" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="#22d3ee">LMG SERVICE</text>
+      <text x="360" y="156" text-anchor="middle" font-size="8.5" fill="#94a3b8">Node.js · Express · :5012</text>
+
+      <rect class="node-rect" x="350" y="195" width="200" height="52" fill="rgba(59,130,246,.1)" stroke="rgba(59,130,246,.35)"/>
+      <text x="450" y="217" text-anchor="middle" font-size="11" font-weight="700" fill="#3b82f6">AME AGENT</text>
+      <text x="450" y="233" text-anchor="middle" font-size="8.5" fill="#94a3b8">Node.js · Express · :5002</text>
+
+      <rect class="node-rect" x="480" y="118" width="200" height="52" fill="rgba(168,85,247,.1)" stroke="rgba(168,85,247,.35)"/>
+      <text x="580" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="#a855f7">KAA</text>
+      <text x="580" y="156" text-anchor="middle" font-size="8.5" fill="#94a3b8">Python · FastAPI · :5007</text>
+
+      <rect class="node-rect" x="700" y="118" width="170" height="52" fill="rgba(236,72,153,.1)" stroke="rgba(236,72,153,.35)"/>
+      <text x="785" y="140" text-anchor="middle" font-size="11" font-weight="700" fill="#ec4899">AI ENGINE</text>
+      <text x="785" y="156" text-anchor="middle" font-size="8.5" fill="#94a3b8">Python · FastAPI · :5010</text>
+
+      <!-- Peer Learning (offset) -->
+      <rect class="node-rect" x="700" y="195" width="170" height="52" fill="rgba(13,148,136,.08)" stroke="rgba(13,148,136,.3)"/>
+      <text x="785" y="217" text-anchor="middle" font-size="11" font-weight="700" fill="#14b8a6">PEER LEARNING</text>
+      <text x="785" y="233" text-anchor="middle" font-size="8.5" fill="#94a3b8">Python · FastAPI · :8000</text>
+
+      <!-- Inter-service arrows -->
+      <line class="edge" x1="180" y1="170" x2="180" y2="195" stroke-dasharray="4 3"/>
+      <line class="edge" x1="400" y1="170" x2="420" y2="195" stroke-dasharray="4 3"/>
+      <line class="edge" x1="610" y1="170" x2="785" y2="195" stroke-dasharray="4 3"/>
+      <text x="175" y="188" font-size="7" fill="#64748b">depends</text>
+
+      <!-- External deps -->
+      <rect class="ext-rect" x="60" y="300" width="180" height="48" fill="rgba(245,158,11,.08)" stroke="rgba(245,158,11,.3)"/>
+      <text x="150" y="320" text-anchor="middle" font-size="10" font-weight="700" fill="#f59e0b">MONGODB</text>
+      <text x="150" y="335" text-anchor="middle" font-size="8" fill="#94a3b8">Atlas / Self-hosted</text>
+
+      <rect class="ext-rect" x="300" y="300" width="180" height="48" fill="rgba(245,158,11,.08)" stroke="rgba(245,158,11,.3)"/>
+      <text x="390" y="320" text-anchor="middle" font-size="10" font-weight="700" fill="#f59e0b">OLLAMA</text>
+      <text x="390" y="335" text-anchor="middle" font-size="8" fill="#94a3b8">llama3:8b · qwen2.5-coder · :11434</text>
+
+      <rect class="ext-rect" x="540" y="300" width="180" height="48" fill="rgba(245,158,11,.08)" stroke="rgba(245,158,11,.3)"/>
+      <text x="630" y="320" text-anchor="middle" font-size="10" font-weight="700" fill="#f59e0b">N8N</text>
+      <text x="630" y="335" text-anchor="middle" font-size="8" fill="#94a3b8">Workflow Engine · :5678</text>
+
+      <rect class="ext-rect" x="300" y="380" width="180" height="48" fill="rgba(245,158,11,.08)" stroke="rgba(245,158,11,.3)"/>
+      <text x="390" y="400" text-anchor="middle" font-size="10" font-weight="700" fill="#f59e0b">GOOGLE GEMINI</text>
+      <text x="390" y="415" text-anchor="middle" font-size="8" fill="#94a3b8">KAA fallback LLM tier</text>
+
+      <rect class="ext-rect" x="540" y="380" width="180" height="48" fill="rgba(245,158,11,.08)" stroke="rgba(245,158,11,.3)"/>
+      <text x="630" y="400" text-anchor="middle" font-size="10" font-weight="700" fill="#f59e0b">GITHUB API</text>
+      <text x="630" y="415" text-anchor="middle" font-size="8" fill="#94a3b8">OAuth · Repo Analysis</text>
+
+      <!-- External arrows -->
+      <line class="edge" x1="140" y1="170" x2="140" y2="295"/>
+      <line class="edge" x1="390" y1="170" x2="390" y2="295"/>
+      <line class="edge" x1="580" y1="170" x2="630" y2="295"/>
+      <line class="edge" x1="620" y1="247" x2="630" y2="295"/>
+    </svg>
+  </div>
+</section>
+
+<!-- ════════════════════════════ SERVICES ══════════════════════════════ -->
+<section id="services">
+  <h2><span class="icon" style="background:rgba(6,182,212,.15);color:var(--cyan-l)">◈</span> Microservices Inventory</h2>
+
+  <div class="svc-grid">
+    <!-- user-service -->
+    <div class="svc-card">
+      <div class="svc-head">
+        <div class="svc-icon" style="background:rgba(34,197,94,.15);color:#22c55e">👤</div>
+        <div><div class="svc-name">User Service</div><div class="svc-lang">Node.js 20 · Express</div></div>
+      </div>
+      <div class="svc-desc">Central identity provider. JWT authentication, student accounts, GitHub OAuth, profile management. All other services validate tokens through this service.</div>
+      <div class="svc-tags">
+        <span class="badge badge-green">:3001</span>
+        <span class="badge badge-green">GET /health</span>
+        <span class="badge badge-teal">MongoDB</span>
+        <span class="badge badge-purple">Redis (opt.)</span>
+      </div>
+    </div>
+
+    <!-- lmg -->
+    <div class="svc-card">
+      <div class="svc-head">
+        <div class="svc-icon" style="background:rgba(6,182,212,.15);color:#22d3ee">📚</div>
+        <div><div class="svc-name">LMG Service</div><div class="svc-lang">Node.js 20 · Express</div></div>
+      </div>
+      <div class="svc-desc">Learning Material Generator. Receives mastery profiles, queues generation jobs via n8n, stores structured materials (lessons, quizzes, flashcards, code examples).</div>
+      <div class="svc-tags">
+        <span class="badge badge-cyan">:5012</span>
+        <span class="badge badge-green">GET /health</span>
+        <span class="badge badge-teal">MongoDB</span>
+        <span class="badge badge-amber">n8n</span>
+      </div>
+    </div>
+
+    <!-- ame -->
+    <div class="svc-card">
+      <div class="svc-head">
+        <div class="svc-icon" style="background:rgba(59,130,246,.15);color:#3b82f6">📊</div>
+        <div><div class="svc-name">Assessment Agent (AME)</div><div class="svc-lang">Node.js 20 · Express</div></div>
+      </div>
+      <div class="svc-desc">Assessment & Mastery Evaluation. RAG-based concept coverage scoring, Ollama-powered embedding and inference, n8n workflow triggers for material generation.</div>
+      <div class="svc-tags">
+        <span class="badge badge-blue">:5002</span>
+        <span class="badge badge-green">GET /health</span>
+        <span class="badge badge-amber">Ollama</span>
+        <span class="badge badge-amber">n8n</span>
+      </div>
+    </div>
+
+    <!-- peer -->
+    <div class="svc-card">
+      <div class="svc-head">
+        <div class="svc-icon" style="background:rgba(13,148,136,.15);color:#14b8a6">👥</div>
+        <div><div class="svc-name">Peer Learning</div><div class="svc-lang">Python 3.11 · FastAPI</div></div>
+      </div>
+      <div class="svc-desc">Collaborative peer learning features. Matches students, facilitates study groups, and manages shared learning challenges and progress tracking.</div>
+      <div class="svc-tags">
+        <span class="badge badge-teal">:8000</span>
+        <span class="badge badge-teal">MongoDB</span>
+      </div>
+    </div>
+
+    <!-- kaa -->
+    <div class="svc-card">
+      <div class="svc-head">
+        <div class="svc-icon" style="background:rgba(168,85,247,.15);color:#a855f7">🧠</div>
+        <div><div class="svc-name">Knowledge Analysis (KAA)</div><div class="svc-lang">Python 3.11 · FastAPI</div></div>
+      </div>
+      <div class="svc-desc">GitHub repo analysis, adaptive quiz engine, mastery profiling, concept-graph diagnostics. Routes between Gemini and Ollama with automatic fallback to seed bank.</div>
+      <div class="svc-tags">
+        <span class="badge badge-purple">:5007</span>
+        <span class="badge badge-green">GET /health</span>
+        <span class="badge badge-teal">MongoDB</span>
+        <span class="badge badge-amber">Gemini</span>
+        <span class="badge badge-amber">Ollama</span>
+      </div>
+    </div>
+
+    <!-- ai-engine -->
+    <div class="svc-card">
+      <div class="svc-head">
+        <div class="svc-icon" style="background:rgba(236,72,153,.15);color:#ec4899">⚡</div>
+        <div><div class="svc-name">AI Engine</div><div class="svc-lang">Python 3.11 · FastAPI · JDK</div></div>
+      </div>
+      <div class="svc-desc">Java code execution engine. Compiles and runs Java in a sandboxed environment, powers the Code Sandbox and practice challenges with AI-powered feedback.</div>
+      <div class="svc-tags">
+        <span class="badge badge-purple">:5010</span>
+        <span class="badge badge-green">GET /health</span>
+        <span class="badge badge-red">JDK</span>
+        <span class="badge badge-amber">Ollama</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ CONTAINERISATION ══════════════════════ -->
+<section id="containerisation">
+  <h2><span class="icon" style="background:rgba(59,130,246,.15);color:var(--blue)">⬢</span> Containerisation Strategy</h2>
+
+  <p style="color:var(--text2);font-size:.9rem;margin-bottom:1rem">All six services are packaged as Docker images with lightweight base images. Each includes a <code>.dockerignore</code> to exclude test files, secrets, and IDE config.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Base Image</th><th>Install</th><th>Runtime</th><th>~Size</th></tr></thead>
+      <tbody>
+        <tr><td><strong>user-service</strong></td><td><code>node:20-alpine</code></td><td><code>npm ci --omit=dev</code></td><td><code>npm start</code></td><td><span class="badge badge-green">~120 MB</span></td></tr>
+        <tr><td><strong>lmg-service</strong></td><td><code>node:20-alpine</code></td><td><code>npm ci --only=production</code></td><td><code>node server.js</code></td><td><span class="badge badge-green">~130 MB</span></td></tr>
+        <tr><td><strong>assessment-agent</strong></td><td><code>node:20-alpine</code></td><td><code>npm ci --omit=dev</code></td><td><code>npm start</code></td><td><span class="badge badge-green">~120 MB</span></td></tr>
+        <tr><td><strong>peer-learning</strong></td><td><code>python:3.11-slim</code></td><td><code>pip install</code> + build-essential</td><td><code>uvicorn</code></td><td><span class="badge badge-cyan">~180 MB</span></td></tr>
+        <tr><td><strong>knowledge-analysis</strong></td><td><code>python:3.11-slim</code></td><td><code>pip install</code></td><td><code>uvicorn</code></td><td><span class="badge badge-cyan">~160 MB</span></td></tr>
+        <tr><td><strong>ai-engine</strong></td><td><code>python:3.11-slim</code></td><td><code>pip install</code> + JDK</td><td><code>uvicorn</code></td><td><span class="badge badge-cyan">~450 MB</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">The ai-engine is the largest image due to the JDK dependency required for compiling and executing student-submitted Java code at runtime.</div>
+</section>
+
+<!-- ════════════════════════════ CI/CD ═════════════════════════════════ -->
+<section id="cicd">
+  <h2><span class="icon" style="background:rgba(34,197,94,.15);color:var(--green)">⇄</span> CI/CD Pipeline</h2>
+
+  <p style="color:var(--text2);font-size:.9rem;margin-bottom:.75rem">
+    <strong>File:</strong> <code>.github/workflows/ci.yml</code> &nbsp;·&nbsp;
+    <strong>Trigger:</strong> Push to <code>main</code>, PRs, manual dispatch &nbsp;·&nbsp;
+    <strong>Registry:</strong> GitHub Container Registry (<code>ghcr.io</code>)
+  </p>
+
+  <div class="pipeline">
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(34,197,94,.15);color:#22c55e">✓</div>
+      <h4>test-node</h4>
+      <p>Node 22 LTS · Jest · node:test<br><strong>user-service</strong>, <strong>assessment-agent</strong>, <strong>learning-generator</strong></p>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(59,130,246,.15);color:#3b82f6">✓</div>
+      <h4>test-python</h4>
+      <p>Python 3.12 · pytest<br><strong>knowledge-analysis</strong>, <strong>peer-learning</strong>, <strong>ai-engine</strong></p>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage">
+      <div class="pipe-icon" style="background:rgba(245,158,11,.15);color:#f59e0b">⟳</div>
+      <h4>changes</h4>
+      <p><code>dorny/paths-filter@v3</code><br>Detects which service directories changed</p>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-stage" style="border-color:rgba(168,85,247,.3)">
+      <div class="pipe-icon" style="background:rgba(168,85,247,.15);color:#a855f6">▲</div>
+      <h4>build & push × 6</h4>
+      <p><code>docker/build-push-action@v5</code><br>GHCR · <code>:latest</code> + <code>:&lt;sha&gt;</code> tags<br>Only changed services rebuild</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:1rem">
+    <h3>Image Tagging Strategy</h3>
+    <div class="tbl-wrap" style="margin:0">
+      <table>
+        <thead><tr><th>Tag</th><th>Pattern</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-teal">latest</span></td><td><code>ghcr.io/&lt;repo&gt;/&lt;service&gt;:latest</code></td><td>Always points to most recent <code>main</code> build</td></tr>
+          <tr><td><span class="badge badge-purple">sha</span></td><td><code>ghcr.io/&lt;repo&gt;/&lt;service&gt;:&lt;commit-sha&gt;</code></td><td>Immutable — enables rollback to any specific commit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ ORCHESTRATION ═════════════════════════ -->
+<section id="orchestration">
+  <h2><span class="icon" style="background:rgba(168,85,247,.15);color:var(--purple)">⊞</span> Docker Compose Orchestration</h2>
+
+  <div class="svc-grid" style="grid-template-columns:1fr 1fr">
+    <div class="panel panel-accent">
+      <h3 style="margin-top:0;color:var(--teal-l)">Development</h3>
+      <p style="color:var(--text2);font-size:.85rem"><code>docker-compose.yml</code></p>
+      <ul style="color:var(--text2);font-size:.85rem;padding-left:1.2rem;margin-top:.5rem">
+        <li>Builds from local source</li>
+        <li>Hot-reload friendly</li>
+        <li>KAA port: <strong>5007</strong></li>
+        <li>External deps via <code>host.docker.internal</code></li>
+        <li>Full CORS for localhost dev</li>
+      </ul>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--purple)">
+      <h3 style="margin-top:0;color:var(--purple)">Production</h3>
+      <p style="color:var(--text2);font-size:.85rem"><code>docker-compose.prod.yml</code></p>
+      <ul style="color:var(--text2);font-size:.85rem;padding-left:1.2rem;margin-top:.5rem">
+        <li>Pulls pre-built images from GHCR</li>
+        <li>No build contexts — images fetched</li>
+        <li>KAA port: <strong>8001</strong></li>
+        <li>CORS restricted to <code>mentora.kaweesha.com</code></li>
+        <li>External TLS proxy assumed</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Service Startup Order</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:1rem 0;font-size:.82rem">
+    <span class="badge badge-green" style="font-size:.8rem;padding:.4rem .8rem">user-service</span>
+    <span style="color:var(--text3)">→</span>
+    <span class="badge badge-cyan" style="font-size:.8rem;padding:.4rem .8rem">lmg-service</span>
+    <span class="badge badge-blue" style="font-size:.8rem;padding:.4rem .8rem">assessment-agent</span>
+    <span style="color:var(--text3)">→</span>
+    <span class="badge badge-purple" style="font-size:.8rem;padding:.4rem .8rem">knowledge-analysis</span>
+    <span style="color:var(--text3)">←</span>
+    <span class="badge badge-red" style="font-size:.8rem;padding:.4rem .8rem">ai-engine</span>
+    <span style="margin-left:1.5rem;color:var(--text3)">|</span>
+    <span class="badge badge-teal" style="font-size:.8rem;padding:.4rem .8rem">peer-learning</span>
+    <span style="color:var(--text3)">(independent)</span>
+  </div>
+</section>
+
+<!-- ════════════════════════════ ENV CONFIG ════════════════════════════ -->
+<section id="env">
+  <h2><span class="icon" style="background:rgba(245,158,11,.15);color:var(--amber)">⚙</span> Environment Configuration</h2>
+
+  <div class="accordion">
+    <div class="acc-item open">
+      <div class="acc-header" onclick="toggleAcc(this)">
+        <h4><span class="badge badge-teal">Auth</span> JWT & Authentication Secrets</h4>
+        <svg class="chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+      </div>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p><strong>Services:</strong> user-service, assessment-agent, knowledge-analysis</p>
+        <p><code>JWT_SECRET</code> — Token signing secret (shared across services)<br>
+        <code>JWT_REFRESH_SECRET</code> — Refresh token signing secret<br>
+        <code>INTERNAL_SERVICE_KEY</code> — Inter-service authentication key<br>
+        <code>BCRYPT_SALT_ROUNDS</code> — Password hashing rounds</p>
+      </div></div>
+    </div>
+
+    <div class="acc-item">
+      <div class="acc-header" onclick="toggleAcc(this)">
+        <h4><span class="badge badge-amber">LLM</span> Ollama & Gemini Configuration</h4>
+        <svg class="chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+      </div>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p><strong>Services:</strong> lmg-service, assessment-agent, knowledge-analysis, ai-engine</p>
+        <p><code>OLLAMA_BASE_URL</code> — Ollama server URL (default: <code>http://host.docker.internal:11434</code>)<br>
+        <code>OLLAMA_MODEL</code> — Primary LLM model (default: <code>llama3:8b</code>)<br>
+        <code>OLLAMA_CODE_MODEL</code> — Code model (default: <code>qwen2.5-coder:7b</code>)<br>
+        <code>GOOGLE_APPLICATION_CREDENTIALS</code> — GCP service account key path (KAA only)</p>
+      </div></div>
+    </div>
+
+    <div class="acc-item">
+      <div class="acc-header" onclick="toggleAcc(this)">
+        <h4><span class="badge badge-blue">DB</span> MongoDB Connection</h4>
+        <svg class="chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+      </div>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p><strong>Services:</strong> user-service, lmg-service, assessment-agent, knowledge-analysis, peer-learning</p>
+        <p><code>MONGODB_URI</code> / <code>MONGODB_URL</code> — Connection string<br>
+        <code>MONGODB_DB</code> — Database name</p>
+      </div></div>
+    </div>
+
+    <div class="acc-item">
+      <div class="acc-header" onclick="toggleAcc(this)">
+        <h4><span class="badge badge-purple">Workflow</span> n8n & Webhooks</h4>
+        <svg class="chevron" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+      </div>
+      <div class="acc-body"><div class="acc-body-inner">
+        <p><strong>Services:</strong> lmg-service, assessment-agent</p>
+        <p><code>N8N_BASE_URL</code> — n8n workflow engine URL (default: <code>http://n8n-container:5678</code>)<br>
+        <code>N8N_WEBHOOK_*</code> — Individual webhook endpoint paths</p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ DEPENDENCIES ══════════════════════════ -->
+<section id="dependencies">
+  <h2><span class="icon" style="background:rgba(245,158,11,.15);color:var(--amber)">◉</span> External Dependencies</h2>
+
+  <div class="svc-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="panel" style="border-top:3px solid var(--amber)">
+      <h3 style="margin-top:0;color:var(--amber)">MongoDB</h3>
+      <p style="color:var(--text2);font-size:.85rem">Persistent storage for all stateful services — user accounts, mastery profiles, quiz sessions, learning materials, sandbox attempts, career predictions.</p>
+      <div class="svc-tags" style="margin-top:.75rem">
+        <span class="badge badge-teal">Atlas (free M0)</span>
+        <span class="badge badge-teal">Self-hosted</span>
+      </div>
+    </div>
+    <div class="panel" style="border-top:3px solid var(--amber)">
+      <h3 style="margin-top:0;color:var(--amber)">Ollama</h3>
+      <p style="color:var(--text2);font-size:.85rem">Local LLM inference engine. Runs <code>llama3:8b</code> for general NL tasks and <code>qwen2.5-coder:7b</code> for code understanding. Accessed via <code>host.docker.internal:11434</code>.</p>
+      <div class="svc-tags" style="margin-top:.75rem">
+        <span class="badge badge-green">8–16 GB RAM</span>
+        <span class="badge badge-purple">GPU optional</span>
+      </div>
+    </div>
+    <div class="panel" style="border-top:3px solid var(--amber)">
+      <h3 style="margin-top:0;color:var(--amber)">n8n</h3>
+      <p style="color:var(--text2);font-size:.85rem">Workflow automation engine. Triggers material generation pipelines for the LMG and assessment agents. Runs as a Docker container or n8n Cloud.</p>
+      <div class="svc-tags" style="margin-top:.75rem">
+        <span class="badge badge-cyan">Self-hosted</span>
+        <span class="badge badge-cyan">n8n Cloud</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ PORTS ═════════════════════════════════ -->
+<section id="ports">
+  <h2><span class="icon" style="background:rgba(6,182,212,.15);color:var(--cyan-l)">⊡</span> Port Mapping</h2>
+
+  <h3>Development</h3>
+  <div class="port-bars">
+    <div class="port-row"><span class="port-label">user-service</span><div class="port-bar-bg"><div class="port-bar" data-width="30" style="background:linear-gradient(90deg,#22c55e,#06b6d4)">3001</div></div><span class="port-bar-label">3001:3001</span></div>
+    <div class="port-row"><span class="port-label">lmg-service</span><div class="port-bar-bg"><div class="port-bar" data-width="50" style="background:linear-gradient(90deg,#06b6d4,#3b82f6)">5012</div></div><span class="port-bar-label">5012:3002</span></div>
+    <div class="port-row"><span class="port-label">assessment-agent</span><div class="port-bar-bg"><div class="port-bar" data-width="49" style="background:linear-gradient(90deg,#3b82f6,#8b5cf6)">5002</div></div><span class="port-bar-label">5002:5002</span></div>
+    <div class="port-row"><span class="port-label">peer-learning</span><div class="port-bar-bg"><div class="port-bar" data-width="78" style="background:linear-gradient(90deg,#14b8a6,#0d9488)">8000</div></div><span class="port-bar-label">8000:8000</span></div>
+    <div class="port-row"><span class="port-label">knowledge-analysis</span><div class="port-bar-bg"><div class="port-bar" data-width="49" style="background:linear-gradient(90deg,#a855f7,#ec4899)">5007</div></div><span class="port-bar-label">5007:8000</span></div>
+    <div class="port-row"><span class="port-label">ai-engine</span><div class="port-bar-bg"><div class="port-bar" data-width="49" style="background:linear-gradient(90deg,#ec4899,#f59e0b)">5010</div></div><span class="port-bar-label">5010:5010</span></div>
+  </div>
+
+  <h3>Production</h3>
+  <div class="note">In production, <code>knowledge-analysis</code> is mapped to host port <strong>8001</strong> (vs 5007 in dev). All other ports remain the same. An external reverse proxy (Nginx/Caddy) handles TLS termination and routes traffic to the appropriate service port.</div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Container</th><th>Host</th><th>URL</th></tr></thead>
+      <tbody>
+        <tr><td>user-service</td><td>3001</td><td><strong>3001</strong></td><td><code>https://mentora.kaweesha.com/api/auth/*</code></td></tr>
+        <tr><td>lmg-service</td><td>3002</td><td><strong>5012</strong></td><td><code>https://mentora.kaweesha.com/api/*</code></td></tr>
+        <tr><td>assessment-agent</td><td>5002</td><td><strong>5002</strong></td><td><code>https://mentora.kaweesha.com/api/*</code></td></tr>
+        <tr><td>peer-learning</td><td>8000</td><td><strong>8000</strong></td><td><code>https://mentora.kaweesha.com/api/*</code></td></tr>
+        <tr><td>knowledge-analysis</td><td>8000</td><td><strong>8001</strong></td><td><code>https://mentora.kaweesha.com/api/*</code></td></tr>
+        <tr><td>ai-engine</td><td>5010</td><td><strong>5010</strong></td><td>Internal only</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════════════════ DEPLOYMENT ════════════════════════════ -->
+<section id="deploy">
+  <h2><span class="icon" style="background:rgba(34,197,94,.15);color:var(--green)">▶</span> Deployment Workflow</h2>
+
+  <div class="svc-grid" style="grid-template-columns:1fr 1fr">
+    <div class="panel panel-accent">
+      <h3 style="margin-top:0;color:var(--teal-l)">Local Development</h3>
+      <pre style="margin:0;font-size:.72rem"># 1. Start external deps on host
+mongod --dbpath ./data/db &
+ollama serve &amp;
+docker run -d -p 5678:5678 n8nio/n8n &amp;
+
+# 2. Launch the full stack
+cd mentora-backend
+docker compose up --build -d
+
+# 3. Verify all services
+curl http://localhost:3001/health
+curl http://localhost:5012/health
+curl http://localhost:5007/health
+curl http://localhost:5010/health</pre>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--purple)">
+      <h3 style="margin-top:0;color:var(--purple)">Production (via GHCR)</h3>
+      <pre style="margin:0;font-size:.72rem"># 1. Clone on production host
+git clone https://github.com/&lt;owner&gt;/mentora-backend.git
+cd mentora-backend
+
+# 2. Configure environment
+cp services/user\ service/.env.example \
+   services/user\ service/.env
+# ... edit each .env with production values ...
+
+# 3. Deploy using pre-built images
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+
+# 4. Verify
+curl http://localhost:5007/health</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ INFRASTRUCTURE ════════════════════════ -->
+<section id="infra">
+  <h2><span class="icon" style="background:rgba(236,72,153,.15);color:#ec4899">◉</span> Infrastructure Requirements</h2>
+
+  <div class="svc-grid" style="grid-template-columns:1fr 1fr;margin-bottom:1.5rem">
+    <div class="panel" style="border-top:3px solid var(--green)">
+      <h3 style="margin-top:0;color:var(--green)">Minimum (Dev / Demo)</h3>
+      <div style="font-size:.85rem;color:var(--text2);display:flex;flex-direction:column;gap:.35rem">
+        <div>CPU: <strong>4 cores</strong></div>
+        <div>RAM: <strong>16 GB</strong> (Ollama 8 GB + Services 4 GB + OS 4 GB)</div>
+        <div>Disk: <strong>50 GB SSD</strong></div>
+        <div>OS: Ubuntu 22.04+ / macOS / Windows</div>
+      </div>
+    </div>
+    <div class="panel" style="border-top:3px solid var(--teal-l)">
+      <h3 style="margin-top:0;color:var(--teal-l)">Recommended (Production)</h3>
+      <div style="font-size:.85rem;color:var(--text2);display:flex;flex-direction:column;gap:.35rem">
+        <div>CPU: <strong>8 cores</strong></div>
+        <div>RAM: <strong>32 GB</strong></div>
+        <div>Disk: <strong>100 GB SSD</strong></div>
+        <div>GPU: <strong>NVIDIA T4</strong> or better (optional but recommended)</div>
+        <div>Network: Ports 80/443 open + Nginx reverse proxy</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Cloud Provider Cost Comparison</h3>
+  <div style="margin:1rem 0">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem">
+      <span style="width:180px;font-size:.82rem;font-weight:600;text-align:right">AWS EC2 g4dn.xlarge</span>
+      <div style="flex:1;height:24px;background:var(--bg4);border-radius:5px;overflow:hidden"><div class="cost-fill" data-width="35" style="background:linear-gradient(90deg,#f59e0b,#f97316);width:0">~$50–70/mo</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem">
+      <span style="width:180px;font-size:.82rem;font-weight:600;text-align:right">DigitalOcean GPU</span>
+      <div style="flex:1;height:24px;background:var(--bg4);border-radius:5px;overflow:hidden"><div class="cost-fill" data-width="30" style="background:linear-gradient(90deg,#3b82f6,#06b6d4);width:0">~$60/mo</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem">
+      <span style="width:180px;font-size:.82rem;font-weight:600;text-align:right">Hetzner CCX33</span>
+      <div style="flex:1;height:24px;background:var(--bg4);border-radius:5px;overflow:hidden"><div class="cost-fill" data-width="20" style="background:linear-gradient(90deg,#22c55e,#14b8a6);width:0">~$40/mo</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem">
+      <span style="width:180px;font-size:.82rem;font-weight:600;text-align:right">GCP e2-standard-8</span>
+      <div style="flex:1;height:24px;background:var(--bg4);border-radius:5px;overflow:hidden"><div class="cost-fill" data-width="100" style="background:linear-gradient(90deg,#ef4444,#f59e0b);width:0">~$250/mo (no GPU)</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem">
+      <span style="width:180px;font-size:.82rem;font-weight:600;text-align:right">RunPod (on-demand)</span>
+      <div style="flex:1;height:24px;background:var(--bg4);border-radius:5px;overflow:hidden"><div class="cost-fill" data-width="12" style="background:linear-gradient(90deg,#a855f7,#ec4899);width:0">~$0.40/hr</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ LIMITATIONS ═══════════════════════════ -->
+<section id="limitations">
+  <h2><span class="icon" style="background:rgba(239,68,68,.15);color:var(--red)">△</span> Known Limitations & Roadmap</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Area</th><th>Current State</th><th>Recommended Improvement</th><th>Priority</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Reverse proxy</strong></td><td>Not included in compose; external proxy assumed</td><td>Add Nginx/Caddy container with TLS termination and path-based routing</td><td><span class="badge badge-red">High</span></td></tr>
+        <tr><td><strong>MongoDB</strong></td><td>Not included in compose; expected externally</td><td>Add <code>mongo</code> service to compose for self-contained deployments</td><td><span class="badge badge-red">High</span></td></tr>
+        <tr><td><strong>n8n</strong></td><td>Not included in compose; expected externally</td><td>Add <code>n8n</code> service with persistent volume for workflow definitions</td><td><span class="badge badge-amber">Medium</span></td></tr>
+        <tr><td><strong>Health checks</strong></td><td><code>healthcheck</code> directives not configured</td><td>Add health checks with <code>depends_on.condition: service_healthy</code></td><td><span class="badge badge-amber">Medium</span></td></tr>
+        <tr><td><strong>DB migrations</strong></td><td>No migration system; schemas are implicit</td><td>Adopt <code>migrate-mongo</code> (Node) / <code>alembic</code> (Python)</td><td><span class="badge badge-amber">Medium</span></td></tr>
+        <tr><td><strong>Secrets</strong></td><td><code>.env</code> files in repo</td><td>Docker secrets, Vault, or cloud secret managers</td><td><span class="badge badge-red">High</span></td></tr>
+        <tr><td><strong>Monitoring</strong></td><td>No observability stack</td><td>Prometheus + Grafana; structured logging (Loki/ELK)</td><td><span class="badge badge-amber">Medium</span></td></tr>
+        <tr><td><strong>Rate limiting</strong></td><td>Not configured</td><td>Add rate limiting at reverse proxy layer</td><td><span class="badge badge-green">Low</span></td></tr>
+        <tr><td><strong>SSL/TLS</strong></td><td>External termination assumed</td><td>Automate with Let's Encrypt + Certbot in Nginx container</td><td><span class="badge badge-red">High</span></td></tr>
+        <tr><td><strong>Auto-scaling</strong></td><td>Single-host only</td><td>Kubernetes with HPA for higher load (sufficient for current scale)</td><td><span class="badge badge-green">Low</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════════════════════════════ FOOTER ════════════════════════════════ -->
+<footer>
+  <p>Mentora Deployment Report v1.0 · August 2026 · Generated from <code>.github/workflows/ci.yml</code>, <code>docker-compose.yml</code>, <code>docker-compose.prod.yml</code></p>
+</footer>
+
+<!-- ════════════════════════════════ JS ═════════════════════════════════ -->
+<script>
+// Accordion toggle
+function toggleAcc(header){header.closest('.acc-item').classList.toggle('open')}
+
+// Counter animation
+function animateCounters(){
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    const target=+el.dataset.count;let current=0;
+    const step=Math.max(1,Math.floor(target/25));
+    const timer=setInterval(()=>{current+=step;if(current>=target){current=target;clearInterval(timer)}el.textContent=current},30);
+  });
+}
+
+// Animate bars on scroll
+function animateBars(){
+  document.querySelectorAll('.port-bar[data-width],.cost-fill[data-width]').forEach(el=>{
+    const rect=el.getBoundingClientRect();
+    if(rect.top<window.innerHeight-50){el.style.width=el.dataset.width+'%'}
+  });
+}
+
+// Nav active state
+function updateNav(){
+  const links=document.querySelectorAll('nav .links a');
+  const sections=document.querySelectorAll('section[id],header[id]');
+  let current='';
+  sections.forEach(s=>{if(s.getBoundingClientRect().top<=80)current=s.id});
+  links.forEach(a=>{a.classList.toggle('active',a.getAttribute('href')==='#'+current)});
+}
+
+// Intersection observer for fade-up
+const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){e.target.style.animationPlayState='running';obs.unobserve(e.target)}})},{threshold:.1});
+document.querySelectorAll('.animate').forEach(el=>{el.style.animationPlayState='paused';obs.observe(el)});
+
+// Event listeners
+window.addEventListener('scroll',()=>{animateBars();updateNav()},{passive:true});
+window.addEventListener('load',()=>{animateCounters();animateBars()});
+</script>
+</body>
+</html>

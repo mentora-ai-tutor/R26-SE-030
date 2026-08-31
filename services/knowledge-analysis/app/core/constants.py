@@ -25,7 +25,9 @@ QUIZ_DIFFICULTY_ORDER = ["easy", "medium", "hard"]
 QUIZ_DEFAULT_MAX_QUESTIONS = 6
 # Assessment sessions serve many items because their pool spans the whole syllabus
 # (every concept-graph topic) — a 6-question run would only sample a few topics.
-QUIZ_ASSESSMENT_MAX_QUESTIONS = 20
+# The full syllabus is 33 concept-graph topics; an assessment serves every generated
+# question so the whole course is covered in one pass.
+QUIZ_ASSESSMENT_MAX_QUESTIONS = 33
 # Default Java topics for a profile-only (no-repo) skill check.
 QUIZ_DEFAULT_TOPICS = [
     "Loops",

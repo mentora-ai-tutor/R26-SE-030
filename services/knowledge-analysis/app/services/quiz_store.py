@@ -25,7 +25,6 @@ from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
 from app.core.constants import (
-    QUIZ_ASSESSMENT_MAX_QUESTIONS,
     QUIZ_DEFAULT_MAX_QUESTIONS,
     QUIZ_DIFFICULTY_ORDER,
     QUIZ_SCHEMA_VERSION,
@@ -205,14 +204,13 @@ async def create_session(student: Any, req: StartQuizRequest) -> dict[str, Any]:
     for q in pool:
         q["qid"] = str(ObjectId())
 
-    max_questions = min(
-        req.max_questions
-        or (
-            QUIZ_ASSESSMENT_MAX_QUESTIONS
-            if req.mode == "assessment"
-            else QUIZ_DEFAULT_MAX_QUESTIONS
-        ),
-        len(pool),
+    max_questions = (
+        len(pool)
+        if req.mode == "assessment"
+        else min(
+            req.max_questions or QUIZ_DEFAULT_MAX_QUESTIONS,
+            len(pool),
+        )
     )
     start_difficulty = QUIZ_DIFFICULTY_ORDER[0]  # always "simple to hard"
     first = select_next(pool, [], start_difficulty)
@@ -268,6 +266,87 @@ async def create_session(student: Any, req: StartQuizRequest) -> dict[str, Any]:
         "mode": req.mode,
         "source": pool_info["source"],
         "degraded": pool_info["degraded"],
+        "total_planned": max_questions,
+        "answered": 0,
+        "difficulty": start_difficulty,
+        "question": strip_question(first),
+    }
+
+
+async def retake_set(student: Any, source_session_id: str) -> dict[str, Any]:
+    """Re-answer one of the student's previously generated question sets.
+
+    A saved set's questions (the full pool, with the answer key) are copied into a
+    brand-new active session so the student can attempt the same questions again. The
+    retake keeps the source set's mode/topics/covered_topics and records ``retaken_from``
+    for provenance; it completes independently and writes its own quiz_results record.
+    """
+    db = get_database()
+    source = await _load_owned_session(student, source_session_id)
+    pool = [dict(q) for q in source.get("pool", [])]
+    if not pool:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="That set has no questions to retake.",
+        )
+
+    for q in pool:
+        q["qid"] = str(ObjectId())
+
+    max_questions = len(pool)
+    start_difficulty = QUIZ_DIFFICULTY_ORDER[0]
+    first = select_next(pool, [], start_difficulty)
+    now = _utcnow()
+
+    doc = {
+        "student_id": student.id,
+        "public_student_id": student.student_id,
+        "mode": source.get("mode"),
+        "topics": source.get("topics"),
+        "covered_topics": source.get("covered_topics"),
+        "job_id": source.get("job_id"),
+        "status": "active",
+        "source": source.get("source", "generated"),
+        "degraded": source.get("degraded", False),
+        "current_difficulty": start_difficulty,
+        "max_questions": max_questions,
+        "pool": pool,
+        "asked": [first["qid"]] if first else [],
+        "answers": [],
+        "retaken_from": str(source.get("_id")),
+        "schema_version": QUIZ_SCHEMA_VERSION,
+        "created_at": now,
+        "updated_at": now,
+    }
+    result = await db.quiz_sessions.insert_one(doc)
+    session_id = str(result.inserted_id)
+
+    try:
+        await db.quiz_question_bank.insert_many(
+            [
+                {
+                    "qid": q["qid"],
+                    "session_id": session_id,
+                    "topic": q.get("topic"),
+                    "difficulty": q.get("difficulty"),
+                    "type": q.get("type"),
+                    "payload": q,
+                    "source": q.get("source", doc["source"]),
+                    "verified_at": now if q.get("source") == "seed" else None,
+                    "created_at": now,
+                }
+                for q in pool
+            ],
+            ordered=False,
+        )
+    except Exception:  # pragma: no cover - bank is non-critical
+        pass
+
+    return {
+        "session_id": session_id,
+        "mode": doc["mode"],
+        "source": doc["source"],
+        "degraded": doc["degraded"],
         "total_planned": max_questions,
         "answered": 0,
         "difficulty": start_difficulty,

@@ -584,3 +584,51 @@ def test_quiz_set_owned_by_another_student_is_404(env) -> None:
 
     resp = client.get(f"/api/v1/quiz/sets/{other['_id']}", headers=AUTH_HEADER)
     assert resp.status_code == 404
+
+
+# ------------------------------------------------------------ retake a saved set
+def test_retake_creates_active_session_reusing_questions(env) -> None:
+    client, fdb = env
+    source = _assessment_set_doc("src", utcnow())
+    fdb.quiz_sessions.docs.append(source)
+    before = len(fdb.quiz_sessions.docs)
+
+    resp = client.post(
+        f"/api/v1/quiz/sets/{source['_id']}/retake", headers=AUTH_HEADER
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["mode"] == "assessment"
+    assert data["source"] == "generated"
+    # Reuses every question from the source pool, re-served as a fresh session.
+    assert data["total_planned"] == len(source["pool"]) == 3
+    assert data["answered"] == 0
+    assert data["question"] is not None
+    assert "correct_option_id" not in data["question"]
+
+    # A brand-new session doc was created, recording the provenance.
+    assert len(fdb.quiz_sessions.docs) == before + 1
+    new_doc = fdb.quiz_sessions.docs[-1]
+    assert new_doc["status"] == "active"
+    assert new_doc["retaken_from"] == str(source["_id"])
+    assert len(new_doc["pool"]) == len(source["pool"])
+    # Fresh qids on the retake pool avoid colliding with the source set's ids.
+    assert {q["qid"] for q in new_doc["pool"]}.isdisjoint(
+        {q["qid"] for q in source["pool"]}
+    )
+
+
+def test_retake_unknown_and_not_owned_is_404(env) -> None:
+    client, fdb = env
+    resp_missing = client.post(
+        "/api/v1/quiz/sets/507f1f77bcf86cd799439011/retake", headers=AUTH_HEADER
+    )
+    assert resp_missing.status_code == 404
+
+    other = _assessment_set_doc("o2", utcnow())
+    other["student_id"] = "507f1f77bcf86cd799439abc"
+    fdb.quiz_sessions.docs.append(other)
+    resp_other = client.post(
+        f"/api/v1/quiz/sets/{other['_id']}/retake", headers=AUTH_HEADER
+    )
+    assert resp_other.status_code == 404

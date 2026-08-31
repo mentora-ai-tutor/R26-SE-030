@@ -12,8 +12,10 @@ LLM output is dropped, not served.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import random
 from functools import lru_cache
 from pathlib import Path
@@ -27,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 _SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "seed_questions.json"
 _ALL_TYPES = ["mcq", "predict_output"]
+
+# Hard ceiling for a single LLM pool generation. The router demotes through
+# Gemini -> Ollama, and a slow local llama3 can sit generating a 6-question JSON
+# for minutes (Ollama's default HTTP timeout is 300s). A hung generation must
+# never stall a student's skill check — after this deadline we fall back to the
+# verified seed bank, which is always fast.
+QUIZ_GENERATION_TIMEOUT_SECONDS = float(os.getenv("QUIZ_GENERATION_TIMEOUT_SECONDS", "30"))
 
 
 # --------------------------------------------------------------------------- seed
@@ -147,9 +156,12 @@ async def build_quiz_pool(
 
     generated: list[dict[str, Any]] = []
     try:
-        generated = await _generate_with_llm(topics, types, per_difficulty)
-    except Exception as exc:  # broad: any LLM/router/validation failure -> seed bank
-        logger.warning("Quiz LLM generation failed (%s); using seed bank", exc)
+        generated = await asyncio.wait_for(
+            _generate_with_llm(topics, types, per_difficulty),
+            timeout=QUIZ_GENERATION_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # broad: any LLM/router/timeout/validation failure -> seed bank
+        logger.warning("Quiz LLM generation failed or timed out (%s); using seed bank", exc)
 
     grouped = _group_by_difficulty(generated)
     seed_topped_up = False

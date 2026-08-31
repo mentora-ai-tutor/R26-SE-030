@@ -186,7 +186,6 @@ def patch_database(monkeypatch, fdb: FakeDatabase) -> None:
     module namespace, not only in ``app.db.database``.
     """
     import app.db.database as db_mod
-    import app.api.routes as routes_mod
     import app.api.knowledge_profile_routes as kp_mod
     import app.api.github_review_routes as groutes_mod
     import app.services.mastery_profile_store as mps_mod
@@ -199,7 +198,6 @@ def patch_database(monkeypatch, fdb: FakeDatabase) -> None:
     monkeypatch.setattr(db_mod, "get_client", lambda: None)
     monkeypatch.setattr(db_mod, "get_database", lambda: fdb)
     for mod in (
-        routes_mod,
         kp_mod,
         groutes_mod,
         mps_mod,

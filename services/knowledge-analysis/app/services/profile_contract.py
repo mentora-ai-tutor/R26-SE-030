@@ -117,6 +117,17 @@ def _pct(value: Any) -> float:
     return round(max(0.0, min(number, 100.0)), 1)
 
 
+def _score(scores: dict[str, Any], key: str) -> Optional[float]:
+    """Signal score or None when the source is absent (no data, not 50%)."""
+    value = scores.get(key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _topic_meta(topic: str) -> dict[str, Any]:
     return TOPIC_CATALOG.get(topic, DEFAULT_TOPIC)
 
@@ -141,22 +152,24 @@ def _weak_subskills(
 ) -> list[dict[str, Any]]:
     subskills = topic_meta.get("subskills", DEFAULT_TOPIC["subskills"])
     error_frequency = profile.get("error_frequency", {}).get(topic, {})
-    quiz_score = float(scores.get("quiz_score", 0.5))
-    sandbox_score = float(scores.get("sandbox_score", 0.5))
+    quiz_score = _score(scores, "quiz_score")
+    sandbox_score = _score(scores, "sandbox_score")
 
     weak_indexes: set[int] = set()
-    if quiz_score < 0.75:
+    if quiz_score is not None and quiz_score < 0.75:
         weak_indexes.add(0)
-    if sandbox_score < 0.75:
+    if sandbox_score is not None and sandbox_score < 0.75:
         weak_indexes.add(min(1, len(subskills) - 1))
     if error_frequency.get("logical", 0) >= 0.25 or error_frequency.get("runtime", 0) >= 0.25:
         weak_indexes.add(min(len(subskills) - 1, 1))
     if error_frequency.get("syntax", 0) >= 0.25:
         weak_indexes.add(0)
-    if quiz_score < 0.50 or sandbox_score < 0.50:
+    if (quiz_score is not None and quiz_score < 0.50) or (sandbox_score is not None and sandbox_score < 0.50):
         weak_indexes.update(range(min(2, len(subskills))))
 
-    if not weak_indexes and (quiz_score < 0.85 or sandbox_score < 0.85):
+    quiz_deficient = quiz_score is not None and quiz_score < 0.85
+    sandbox_deficient = sandbox_score is not None and sandbox_score < 0.85
+    if not weak_indexes and (quiz_deficient or sandbox_deficient):
         weak_indexes.add(0)
 
     evidence = _subskill_evidence(topic, scores, profile)
@@ -208,7 +221,7 @@ def _misconceptions(
         if item["subskill_id"] in meta_by_id
     ]
 
-    if scores.get("quiz_score", 1) < 0.5:
+    if (quiz_score := _score(scores, "quiz_score")) is not None and quiz_score < 0.5:
         misconceptions.append("answers conceptual questions incorrectly")
     if topic in profile.get("misconception_clusters", {}).get("AI_Dependency", []):
         misconceptions.append("submitted correct-looking code but needs independent understanding verification")
@@ -224,7 +237,8 @@ def _observed_error_patterns(
 ) -> dict[str, list[str]]:
     error_frequency = profile.get("error_frequency", {}).get(topic, {})
     sandbox = []
-    if scores.get("sandbox_score", 1) < 0.75:
+    sandbox_score = _score(scores, "sandbox_score")
+    if sandbox_score is not None and sandbox_score < 0.75:
         sandbox.append("low sandbox success signal")
     if error_frequency.get("syntax", 0) >= 0.25:
         sandbox.append("recurring syntax errors")
@@ -234,14 +248,16 @@ def _observed_error_patterns(
         sandbox.append("runtime failures during execution")
 
     quizzes = []
-    if scores.get("quiz_score", 1) < 0.75:
+    quiz_score = _score(scores, "quiz_score")
+    if quiz_score is not None and quiz_score < 0.75:
         quizzes.append("low quiz correctness for this topic")
-    if scores.get("quiz_score", 1) < 0.5:
+    if quiz_score is not None and quiz_score < 0.5:
         quizzes.append("major conceptual misunderstanding signal")
 
     github = []
     if data_sources["github"] == "available":
-        if scores.get("forensic_score", 1) < 0.5:
+        forensic_score = _score(scores, "forensic_score")
+        if forensic_score is not None and forensic_score < 0.5:
             github.append("low forensic confidence for incremental learning")
         if topic in profile.get("misconception_clusters", {}).get("AI_Dependency", []):
             github.append("authorship-risk signal from commit or editing pattern")
@@ -255,10 +271,12 @@ def _observed_error_patterns(
 
 def _subskill_evidence(topic: str, scores: dict[str, Any], profile: dict[str, Any]) -> str:
     parts = []
-    if scores.get("quiz_score", 1) < 0.75:
-        parts.append(f"quiz score is {_pct(scores.get('quiz_score', 0))}")
-    if scores.get("sandbox_score", 1) < 0.75:
-        parts.append(f"sandbox score is {_pct(scores.get('sandbox_score', 0))}")
+    quiz_score = _score(scores, "quiz_score")
+    if quiz_score is not None and quiz_score < 0.75:
+        parts.append(f"quiz score is {_pct(quiz_score)}")
+    sandbox_score = _score(scores, "sandbox_score")
+    if sandbox_score is not None and sandbox_score < 0.75:
+        parts.append(f"sandbox score is {_pct(sandbox_score)}")
     error_frequency = profile.get("error_frequency", {}).get(topic, {})
     error_parts = [
         name
@@ -279,11 +297,17 @@ def _evidence_summary(
 ) -> str:
     chunks = [
         f"{topic} mastery is {mastery_score}/100.",
-        f"Quiz signal {_pct(scores.get('quiz_score', 0))}/100.",
-        f"Sandbox signal {_pct(scores.get('sandbox_score', 0))}/100.",
     ]
+    quiz_score = _score(scores, "quiz_score")
+    sandbox_score = _score(scores, "sandbox_score")
+    if quiz_score is not None:
+        chunks.append(f"Quiz signal {_pct(quiz_score)}/100.")
+    if sandbox_score is not None:
+        chunks.append(f"Sandbox signal {_pct(sandbox_score)}/100.")
+    if quiz_score is None and sandbox_score is None:
+        chunks.append("Neither quiz nor sandbox evidence is available for this topic.")
     if data_sources["github"] == "available":
-        chunks.append(f"GitHub forensic signal {_pct(scores.get('forensic_score', 0))}/100.")
+        chunks.append(f"GitHub forensic signal {_pct(_score(scores, 'forensic_score') or 0)}/100.")
     else:
         chunks.append("GitHub evidence unavailable; diagnosis uses sandbox and quiz signals.")
     if topic in profile.get("misconception_clusters", {}).get("AI_Dependency", []):
@@ -299,10 +323,17 @@ def _strength_summary(
 ) -> str:
     parts = [
         f"{topic} is currently a strength with mastery {mastery_score}/100.",
-        f"Quiz signal {_pct(scores.get('quiz_score', 0))}/100 and sandbox signal {_pct(scores.get('sandbox_score', 0))}/100.",
     ]
+    quiz_score = _score(scores, "quiz_score")
+    sandbox_score = _score(scores, "sandbox_score")
+    if quiz_score is not None or sandbox_score is not None:
+        summary = f"{_pct(quiz_score)}/100" if quiz_score is not None else "n/a"
+        s_summary = f"{_pct(sandbox_score)}/100" if sandbox_score is not None else "n/a"
+        parts.append(f"Quiz signal {summary} and sandbox signal {s_summary}.")
+    else:
+        parts.append("Evidence is limited to the signals currently available.")
     if data_sources["github"] == "available":
-        parts.append(f"GitHub forensic signal {_pct(scores.get('forensic_score', 0))}/100.")
+        parts.append(f"GitHub forensic signal {_pct(_score(scores, 'forensic_score') or 0)}/100.")
     return " ".join(parts)
 
 
@@ -381,7 +412,17 @@ def _confidence(
     base = float(validation.get("confidence", 0.75))
     available_sources = 2 + (1 if data_sources["github"] == "available" else 0)
     source_factor = available_sources / 3
-    agreement_bonus = 0.06 if weak_subskills and scores.get("quiz_score", 1) < 0.75 and scores.get("sandbox_score", 1) < 0.75 else 0
+    quiz_score = _score(scores, "quiz_score")
+    sandbox_score = _score(scores, "sandbox_score")
+    agreement_bonus = (
+        0.06
+        if weak_subskills
+        and quiz_score is not None
+        and quiz_score < 0.75
+        and sandbox_score is not None
+        and sandbox_score < 0.75
+        else 0
+    )
     return round(max(0.35, min(base * source_factor + agreement_bonus, 0.99)), 2)
 
 

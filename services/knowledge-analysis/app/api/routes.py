@@ -4,10 +4,10 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, status
 from starlette.concurrency import run_in_threadpool
 
-from app.db.database import get_database
-from app.models.schemas import LearnerInput, QuizPerformance, SandboxSession
+from app.models.schemas import LearnerInput
 from app.services.diagnostic_report import build_diagnostic_report
 from app.services.github_review_service import verify_student_from_authorization
+from app.services.mastery_from_reviews import rebuild_mastery_profile_from_reviews
 from app.services.mastery_profile_store import save_mastery_profile
 from app.services.pipeline import run_full_pipeline
 from app.services.quiz_engine import generate_quiz
@@ -45,139 +45,45 @@ async def analyze(data: LearnerInput) -> dict:
 async def analyze_auto(
     authorization: Optional[str] = Header(default=None),
 ) -> dict:
-    """Auto-analyze using stored data: reads completed quiz_sessions and sandbox_attempts
-    from MongoDB for the authenticated student, then runs the full pipeline and saves a
-    mastery profile. Triggered automatically after quiz completion."""
+    """Auto-analyze using stored data: delegates to the github_review_bridge, the single
+    profile writer. It fuses GitHub repo reviews, completed quiz_sessions and
+    sandbox_attempts from MongoDB into one canonical mastery profile, so every event
+    (quiz, sandbox run, review) produces the exact same profile shape and no source can
+    overwrite another's evidence."""
     student = await verify_student_from_authorization(authorization)
-    db = get_database()
 
-    # ── 1. Quiz performance from completed sessions ──────────────────────────
-    quiz_docs = await db.quiz_sessions.find(
-        {"student_id": student.id, "status": "completed"}
-    ).sort("completed_at", -1).limit(10).to_list(length=10)
-
-    quiz_by_topic: dict = {}
-    for doc in quiz_docs:
-        for ans in doc.get("answers", []):
-            topic = ans.get("topic", "Unknown")
-            b = quiz_by_topic.setdefault(topic, {"correct": 0, "total": 0, "time": 0.0})
-            b["total"] += 1
-            if ans.get("correct"):
-                b["correct"] += 1
-            b["time"] += float(ans.get("time_seconds", 0) or 0)
-
-    quiz_sessions_input = [
-        QuizPerformance(
-            topic=t,
-            correct=s["correct"],
-            total=s["total"],
-            avg_time_seconds=round(s["time"] / s["total"], 1) if s["total"] else 0.0,
-            retry_count=0,
-        )
-        for t, s in quiz_by_topic.items()
-    ]
-
-    # ── 2. Sandbox performance aggregated from attempts ──────────────────────
-    attempt_docs = await db.sandbox_attempts.find(
-        {"student_id": student.id}
-    ).sort("created_at", -1).limit(50).to_list(length=50)
-
-    sandbox_by_topic: dict = {}
-    for att in attempt_docs:
-        topic = att.get("topic", "Unknown")
-        b = sandbox_by_topic.setdefault(topic, {
-            "compile_attempts": 0,
-            "runtime_errors": 0,
-            "syntax_errors": 0,
-            "logical_errors": 0,
-            "success_ms": [],
-            "fail_ms": [],
-            "latest_code": "",
-        })
-        b["compile_attempts"] += 1
-        err = (att.get("error") or "").lower()
-        passed = att.get("passed", False)
-        success = att.get("success", False)
-        ms = float(att.get("runtime_ms") or 0)
-        if not success:
-            if any(k in err for k in ("compileerror", "syntax", "cannot find symbol", "error:")):
-                b["syntax_errors"] += 1
-            else:
-                b["runtime_errors"] += 1
-            b["fail_ms"].append(ms)
-        elif not passed:
-            b["logical_errors"] += 1
-            b["fail_ms"].append(ms)
-        else:
-            b["success_ms"].append(ms)
-        if att.get("code"):
-            b["latest_code"] = att["code"]
-
-    sandbox_sessions_input = []
-    for topic, b in sandbox_by_topic.items():
-        time_to_success = (
-            sum(b["success_ms"]) / 1000.0 if b["success_ms"]
-            else sum(b["fail_ms"]) / 1000.0 if b["fail_ms"]
-            else 60.0
-        )
-        ecl = (
-            sum(b["fail_ms"]) / len(b["fail_ms"]) / 1000.0 if b["fail_ms"] else 10.0
-        )
-        lines = max(len(b["latest_code"].split("\n")) if b["latest_code"] else 30, 10)
-        sandbox_sessions_input.append(
-            SandboxSession(
-                topic=topic,
-                compile_attempts=b["compile_attempts"],
-                runtime_errors=b["runtime_errors"],
-                syntax_errors=b["syntax_errors"],
-                logical_errors=b["logical_errors"],
-                time_to_success_seconds=round(time_to_success, 1),
-                error_correction_latency=round(ecl, 1),
-                keystroke_burst_score=0.5,
-                lines_of_code=lines,
-            )
-        )
-
-    if not quiz_sessions_input and not sandbox_sessions_input:
+    saved = await rebuild_mastery_profile_from_reviews(
+        student_object_id=student.id,
+        public_student_id=student.student_id,
+    )
+    if saved is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="No completed quizzes or sandbox attempts found yet. Finish at least one quiz or run some sandbox code first.",
+            detail="No completed quizzes, sandbox attempts or repo reviews found yet. Finish at least one quiz, run some sandbox code, or complete a repo review first.",
         )
-
-    # ── 3. Run pipeline and persist ──────────────────────────────────────────
-    data = LearnerInput(
-        student_id=student.student_id,
-        github_enabled=False,
-        quiz_sessions=quiz_sessions_input,
-        sandbox_sessions=sandbox_sessions_input,
-    )
-    result = await run_in_threadpool(run_full_pipeline, data)
-    diagnostic_report = build_diagnostic_report(data, result["final_output"])
-    try:
-        saved_profile = await save_mastery_profile(
-            result["final_output"],
-            raw_analysis_payload=result.get("pipeline", {}),
-            diagnostic_report=diagnostic_report,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Mastery profile could not be saved: {exc}",
-        ) from exc
-
-    result["diagnostic_report"] = diagnostic_report
-    result["persistence"] = {
-        "saved": True,
-        "profile_id": saved_profile.get("profile_id"),
-        "latest_profile_url": f"/api/v1/mastery-profiles/{student.student_id}/latest",
-        "quiz_topics": [q.topic for q in quiz_sessions_input],
-        "sandbox_topics": [s.topic for s in sandbox_sessions_input],
+    payload = saved.get("raw_analysis_payload") or {}
+    fused = payload.get("evidence_fused", {})
+    result = {
+        "pipeline": {
+            "mode": "github_review_bridge",
+            "repo_review_jobs": int(payload.get("jobs_considered", 0)),
+        },
+        "final_output": saved,
+        "diagnostic_report": None,
+        "persistence": {
+            "saved": True,
+            "profile_id": saved.get("profile_id"),
+            "latest_profile_url": f"/api/v1/mastery-profiles/{student.student_id}/latest",
+            "quiz_topics": fused.get("quiz_topics", []),
+            "sandbox_topics": fused.get("sandbox_topics", []),
+            "source": "github_review_bridge",
+        },
     }
     logger.info(
-        "Auto-analyze complete for %s: mastery=%s profile=%s",
+        "Auto-analyze complete for %s via github_review_bridge: mastery=%s profile=%s",
         student.student_id,
-        result["final_output"].get("overall_mastery_score"),
-        saved_profile.get("profile_id"),
+        saved.get("overall_mastery_score"),
+        saved.get("profile_id"),
     )
     return result
 

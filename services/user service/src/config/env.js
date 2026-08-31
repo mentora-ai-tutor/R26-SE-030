@@ -67,7 +67,7 @@ const config = {
       ),
     ),
   },
-  frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  frontendOrigins: (process.env.FRONTEND_ORIGIN || 'http://localhost:3000').split(',').map((origin) => origin.trim()).filter(Boolean),
 };
 
 if (config.nodeEnv === 'development' && config.jwt.secret.length < 32) {

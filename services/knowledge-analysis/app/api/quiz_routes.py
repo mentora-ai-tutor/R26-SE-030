@@ -78,6 +78,17 @@ async def get_question_set(
     return {"status": "success", "data": data}
 
 
+@router.post("/sets/{session_id}/retake")
+async def retake_question_set(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+) -> dict[str, Any]:
+    """Re-answer a previously generated question set in a new, active session."""
+    student = await verify_student_from_authorization(authorization)
+    data = await quiz_store.retake_set(student, session_id)
+    return {"status": "success", "data": data}
+
+
 # ---- Cross-team result reads -------------------------------------------------
 # Open reads by student id, mirroring the mastery-profile read endpoints, so other
 # services/agents can consume MCQ outcomes. (Internal-key enforcement on KAA read

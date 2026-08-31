@@ -54,6 +54,30 @@ async def get_session(
     return {"status": "success", "data": data}
 
 
+# ---- Generated question-set history (assessment review + regenerate) ----------
+# Every session is a stored set of generated questions; these read endpoints let the
+# student list their past question sets and re-open one to see the questions again.
+@router.get("/sets")
+async def list_question_sets(
+    authorization: Optional[str] = Header(default=None),
+) -> dict[str, Any]:
+    """Recent generated question sets (quiz sessions) for the student, newest first."""
+    student = await verify_student_from_authorization(authorization)
+    data = await quiz_store.list_sets(student)
+    return {"status": "success", "data": data}
+
+
+@router.get("/sets/{session_id}")
+async def get_question_set(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+) -> dict[str, Any]:
+    """Read-only view of one generated question set (client-safe questions)."""
+    student = await verify_student_from_authorization(authorization)
+    data = await quiz_store.get_set_view(student, session_id)
+    return {"status": "success", "data": data}
+
+
 # ---- Cross-team result reads -------------------------------------------------
 # Open reads by student id, mirroring the mastery-profile read endpoints, so other
 # services/agents can consume MCQ outcomes. (Internal-key enforcement on KAA read

@@ -18,6 +18,7 @@ from app.models.schemas import QuizPerformance
 Difficulty = Literal["easy", "medium", "hard"]
 QuestionType = Literal["mcq", "predict_output"]
 OptionId = Literal["A", "B", "C", "D"]
+QuizMode = Literal["repo-aware", "sandbox", "onboarding", "assessment"]
 
 
 class MCQOption(BaseModel):
@@ -46,7 +47,7 @@ class GeneratedQuestionBatch(BaseModel):
 
 # ---- API request models ------------------------------------------------------
 class StartQuizRequest(BaseModel):
-    mode: Literal["repo-aware", "sandbox", "onboarding"] = "sandbox"
+    mode: QuizMode = "sandbox"
     topics: Optional[List[str]] = Field(
         default=None,
         description="Java topics to draw from. Defaults to the core set when omitted.",

@@ -127,6 +127,19 @@ def topic_node_by_id(node_id: str | None) -> Optional[dict[str, Any]]:
     return _nodes().get(node_id)
 
 
+def graph_topic_labels() -> list[str]:
+    """Labels of every topic node in the graph (the full syllabus, all week areas).
+
+    Used to build assessment pools that must cover *all* concepts, not just the few
+    core topics the sandbox quiz emphasises.
+    """
+    return sorted(
+        label
+        for node in _nodes().values()
+        if (label := node.get("label"))
+    )
+
+
 def topic_id(name: str | None) -> Optional[str]:
     node = topic_node(name)
     return node["id"] if node else None

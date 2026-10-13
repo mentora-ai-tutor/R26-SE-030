@@ -4,7 +4,11 @@ const logger = require('../utils/logger');
 const { activity } = require('../utils/activityLogger');
 
 const getMe = async (req, res) => {
-  await activity.profileView(req.student._id, req);
+  activity
+    .profileView(req.student._id, req)
+    .catch((err) => {
+      logger.warn('Failed to log profile view:', err.message);
+    });
   return sendSuccess(res, req.student.toSafeObject());
 };
 

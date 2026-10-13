@@ -26,11 +26,12 @@ const getCoverage = async (req, res, next) => {
 
     const unitCategory = req.query.category || 'OOP';
 
-    const coverage = await conceptGraphService.computeCoverage(studentId, unitCategory);
-
-    const latestProfile = await MasteryProfile.findOne({
-      student_id: studentId,
-    }).sort({ submitted_at: -1 });
+    const [coverage, latestProfile] = await Promise.all([
+      conceptGraphService.computeCoverage(studentId, unitCategory),
+      MasteryProfile.findOne({
+        student_id: studentId,
+      }).sort({ submitted_at: -1 }),
+    ]);
 
     const augmented = latestProfile?.augmented_profile;
     const implicitGaps = augmented?.implicit_gaps || [];

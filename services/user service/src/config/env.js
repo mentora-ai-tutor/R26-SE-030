@@ -67,6 +67,14 @@ const config = {
       ),
     ),
   },
+  // Google OAuth (login / signup). Optional — the service boots without it,
+  // but the endpoints report "not configured" until these are provided.
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    scope: process.env.GOOGLE_OAUTH_SCOPE || 'openid email profile',
+    callbackUrl: process.env.GOOGLE_OAUTH_CALLBACK_URL || 'http://localhost:3001/api/auth/google/callback',
+  },
   frontendOrigins: (process.env.FRONTEND_ORIGIN || 'http://localhost:3000').split(',').map((origin) => origin.trim()).filter(Boolean),
 };
 

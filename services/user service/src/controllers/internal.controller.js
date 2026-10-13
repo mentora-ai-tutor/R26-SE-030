@@ -57,7 +57,11 @@ const verifyToken = async (req, res, _next) => {
       logger.warn('Failed to update last_active:', err.message);
     });
 
-    await logAuth.tokenVerified(student._id, req, req.requestId);
+    logAuth
+      .tokenVerified(student._id, req, req.requestId)
+      .catch((err) => {
+        logger.warn('Failed to log token verification:', err.message);
+      });
 
     logger.info(`Token verified for student: ${student.student_id} by internal service`);
 

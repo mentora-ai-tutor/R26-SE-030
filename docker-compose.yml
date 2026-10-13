@@ -1,4 +1,16 @@
 services:
+  # ── n8n Workflow Automation ──
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n-container
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - /Volumes/My Data/n8n-data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # ── User Service ──
   user-service:
     build:

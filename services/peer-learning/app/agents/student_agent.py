@@ -45,6 +45,19 @@ class PeerCodingTaskListSchema(BaseModel):
     tasks: List[PeerCodingTaskSchema]
 
 
+class QuestionSummarySchema(BaseModel):
+    task_number: int
+    task_type: str
+    what_went_well: str
+    areas_for_improvement: str
+    how_to_answer: str
+
+
+class SessionSummaryOutputSchema(BaseModel):
+    key_points: List[str]
+    question_summaries: List[QuestionSummarySchema]
+
+
 def generate_diagnostic_quiz(
     topic_id: str, topic: str, subskill: str
 ) -> dict:
@@ -723,3 +736,94 @@ def _fallback_coding_tasks(topic: str, subskill: str, difficulty_level: str) -> 
             ],
         },
     ]
+
+
+def summarize_diagnostic_session(
+    topic: str,
+    subskill: str,
+    tasks: List[dict],
+    results: List[dict],
+) -> dict:
+    """Generate a learning-oriented summary of the completed diagnostic session.
+
+    Produces discussion-style key points plus a per-question breakdown of what
+    went well, what needs improvement, and how to answer. No score is reported.
+    """
+    task_descriptions = ""
+    for task in tasks:
+        task_descriptions += (
+            f"Task {task.get('task_number', task.get('task_type', ''))}\n"
+            f"  Type: {task.get('task_type', '')}\n"
+            f"  Description: {task.get('task_description', '')}\n"
+            f"  Requirements: {task.get('requirements', [])}\n"
+        )
+
+    result_descriptions = ""
+    for res in results:
+        passed = "passed" if res.get("passed") else "failed"
+        result_descriptions += (
+            f"Task {res.get('task_number', '')} [{passed}]\n"
+            f"  Feedback: {res.get('feedback', '')}\n"
+            f"  Sample Approach: {res.get('sample_approach', '')}\n"
+        )
+
+    prompt = f"""
+    You are a Java Pedagogy AI Agent helping a student review a completed
+    diagnostic assessment on the topic "{topic}" and subskill "{subskill}".
+
+    The session consisted of 7 coding tasks, and here are the results:
+
+    TASKS:
+    {task_descriptions}
+
+    STUDENT RESULTS:
+    {result_descriptions}
+
+    Generate a concise, discussion-style learning summary (NO score percentages).
+    Respond with:
+
+    - key_points: a list of 4-6 discussion-style takeaways the student should
+      remember about {subskill} in {topic}.
+    - question_summaries: one entry per task, each containing:
+      - task_number: the task number
+      - task_type: the task type
+      - what_went_well: what the student did well on that task
+      - areas_for_improvement: specific areas to improve
+      - how_to_answer: a clear explanation of how the task should be answered
+        correctly, highlighting the right approach and key concepts.
+
+    Focus on helping the learner understand the correct approach for each task.
+    """
+
+    try:
+        response = client.beta.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a specialized Java Learning Summary Agent.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format=SessionSummaryOutputSchema,
+        )
+        summary_data = response.choices[0].message.parsed
+        return summary_data.model_dump()
+    except Exception as e:
+        print(f"⚠️ OpenAI Summary Error: {str(e)}")
+        return {
+            "key_points": [],
+            "question_summaries": [
+                {
+                    "task_number": res.get("task_number"),
+                    "task_type": next(
+                        (t.get("task_type") for t in tasks if t.get("task_number") == res.get("task_number")),
+                        "",
+                    ),
+                    "what_went_well": "",
+                    "areas_for_improvement": "",
+                    "how_to_answer": f"Review the correct approach for demonstrating {subskill} in {topic}.",
+                }
+                for res in results
+            ],
+        }

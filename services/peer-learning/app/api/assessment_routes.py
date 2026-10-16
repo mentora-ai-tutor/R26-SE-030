@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.api.student_routes import get_latest_student_analysis, verify_jwt_student
 from app.agents.assessment_agent import assessment_agent
-from app.agents.student_agent import grade_coding_submission
+from app.agents.student_agent import grade_coding_submission, summarize_diagnostic_session
 from app.api.collab_routes import collab_manager
 from app.services.mongodb import get_collection, save_assessment
 
@@ -156,6 +156,32 @@ async def evaluate_code(
             })
             await collab_manager.broadcast_all(progress_message, room["room_id"])
 
+            if sequence_complete:
+                summary = summarize_diagnostic_session(
+                    topic=topic,
+                    subskill=subskill,
+                    tasks=tasks,
+                    results=room.get("results", []),
+                )
+                return {
+                    "status": "session_complete",
+                    "evaluation_type": "collaborative_task",
+                    "task_evaluation": grade_result,
+                    "task_number": current_task,
+                    "passed": passed,
+                    "current_task": next_task,
+                    "sequence_complete": True,
+                    "student_id": token_student_id,
+                    "message": "Collaborative session complete! All tasks answered.",
+                    "session_summary": {
+                        "total_tasks": len(tasks),
+                        "task_progress": progress,
+                        "results": room.get("results", []),
+                        "key_points": summary.get("key_points", []),
+                        "question_summaries": summary.get("question_summaries", []),
+                    },
+                }
+
             return {
                 **result,
                 "evaluation_type": "collaborative_task",
@@ -246,6 +272,33 @@ async def evaluate_code(
                 },
             },
         )
+
+        if sequence_complete:
+            completed_session = sessions.find_one({"_id": session["_id"]})
+            all_results = completed_session.get("results", []) if completed_session else []
+            summary = summarize_diagnostic_session(
+                topic=topic,
+                subskill=subskill,
+                tasks=tasks,
+                results=all_results,
+            )
+            return {
+                "status": "session_complete",
+                "evaluation_type": "diagnostic_task",
+                "task_evaluation": grade_result,
+                "task_number": current_index + 1,
+                "passed": passed,
+                "next_task_available": False,
+                "student_id": token_student_id,
+                "message": "Diagnostic session complete! All tasks answered.",
+                "session_summary": {
+                    "total_tasks": len(tasks),
+                    "task_progress": task_progress,
+                    "results": all_results,
+                    "key_points": summary.get("key_points", []),
+                    "question_summaries": summary.get("question_summaries", []),
+                },
+            }
 
         return {
             **result,

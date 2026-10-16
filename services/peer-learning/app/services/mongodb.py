@@ -28,6 +28,17 @@ COLLECTIONS = {
     "collab_chat_messages": [("room_id", ASCENDING), ("timestamp", ASCENDING)],
     "peer_teaching_history": [("student_id", ASCENDING), ("topic", ASCENDING)],
     "knowledge_chunks": [("chunk_index", ASCENDING)],
+    "workspaces": [("workspace_id", ASCENDING), ("owner_student_id", ASCENDING)],
+    "workspace_members": [("workspace_id", ASCENDING), ("student_id", ASCENDING)],
+    "workspace_invites": [("workspace_id", ASCENDING), ("token_hash", ASCENDING)],
+    "workspace_join_keys": [("workspace_id", ASCENDING), ("key_hash", ASCENDING)],
+    "workspace_files": [("workspace_id", ASCENDING), ("path", ASCENDING)],
+    "workspace_file_versions": [("workspace_id", ASCENDING), ("file_id", ASCENDING)],
+    "workspace_chat_messages": [("workspace_id", ASCENDING), ("timestamp", ASCENDING)],
+    "workspace_code_comments": [("workspace_id", ASCENDING), ("file_id", ASCENDING)],
+    "workspace_tasks": [("workspace_id", ASCENDING), ("status", ASCENDING)],
+    "workspace_activity_log": [("workspace_id", ASCENDING), ("timestamp", ASCENDING)],
+    "workspace_notifications": [("recipient_student_id", ASCENDING), ("status", ASCENDING)],
 }
 
 
@@ -129,6 +140,17 @@ def save_peer_match(data: Dict[str, Any]) -> Optional[str]:
 
 def save_chat_session(data: Dict[str, Any]) -> Optional[str]:
     return insert_record("chat_sessions", data)
+
+
+def log_workspace_activity(workspace_id: str, actor_student_id: str, action: str, detail: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Append an entry to the workspace activity log. Never raises."""
+    return insert_record("workspace_activity_log", {
+        "workspace_id": workspace_id,
+        "actor_student_id": actor_student_id,
+        "action": action,
+        "detail": detail or {},
+        "timestamp": _utcnow(),
+    })
 
 
 def upsert_collab_room(room_id: str, code: str, active_users: int = 0) -> bool:

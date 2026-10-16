@@ -237,6 +237,8 @@ The backend performs:
 
 A task passes only when both syntax validation and AI grading pass.
 
+When the last task (Task 7) is submitted and passes, the response immediately returns `status: "session_complete"`. The `session_summary` contains no score; instead it provides a discussion-style learning review: `key_points` (general takeaways about the subskill) and `question_summaries` (per-task breakdown of what went well, areas for improvement, and how to answer each task correctly). No additional call to `onboard-and-diagnose` is required to retrieve the summary.
+
 ### Sequential progression rules
 
 - Task 1 is available when the session starts.

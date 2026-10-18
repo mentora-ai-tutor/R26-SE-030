@@ -1,19 +1,19 @@
 import hashlib
+import io
 import logging
 import os
 import re
 import secrets
 import string
-import subprocess
-import tempfile
 import uuid
+import zipfile
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
-from app.agents.assessment_agent import assessment_agent
 from app.agents.workspace_assistant import workspace_assistant
 from app.api.student_routes import verify_jwt_student
 from app.models.workspace_schemas import (
@@ -37,6 +37,7 @@ from app.models.workspace_schemas import (
     WorkspaceCreateRequest,
     WorkspaceUpdateRequest,
 )
+from app.services import code_sandbox
 from app.services.mongodb import get_collection, log_workspace_activity
 
 logger = logging.getLogger("workspace_routes")
@@ -1619,7 +1620,7 @@ def ask_assistant(
 ):
     """Asks the workspace AI assistant, optionally with file/code context."""
     _require_workspace(workspace_id)
-    _require_member(workspace_id, token_student_id)
+    member = _require_member(workspace_id, token_student_id)
 
     context_parts: List[str] = []
     code = request.code
@@ -1637,8 +1638,16 @@ def ask_assistant(
     result = workspace_assistant.ask(request.question, context="\n\n".join(context_parts), student_id=token_student_id)
     reply = result.get("reply", "")
 
+    question_doc = persist_chat_message(
+        workspace_id,
+        token_student_id,
+        _student_display_name(token_student_id),
+        member.get("role"),
+        request.question,
+        "ai_question",
+    )
     doc = persist_chat_message(
-        workspace_id, "WORKSPACE_AI", "AI Study Assistant", "ai", reply, "ai",
+        workspace_id, "WORKSPACE_AI", "AI Study Assistant", "ai", reply, "ai", question_doc["message_id"],
     )
     log_workspace_activity(
         workspace_id, token_student_id, "assistant_query", {"message_id": doc["message_id"]}
@@ -1648,6 +1657,7 @@ def ask_assistant(
         "reply": reply,
         "ai_status": result.get("status"),
         "message_id": doc["message_id"],
+        "question": _clean(question_doc),
     }
 
 
@@ -1921,53 +1931,119 @@ def purge_workspace(
 
 
 # ==========================================
-# 15. Sandboxed Code Run
+# 15. ZIP export
+# ==========================================
+
+_ZIP_UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9._/-]")
+
+
+def _zip_entry_name(entry: dict) -> str:
+    """Turn a stored workspace path into a safe, archive-relative path."""
+    raw = str(entry.get("path") or entry.get("name") or "").replace("\\", "/").strip("/")
+    parts = [part for part in raw.split("/") if part not in ("", ".", "..")]
+    if not parts:
+        return ""
+    parts = [_ZIP_UNSAFE_CHARS.sub("_", part)[:160] or "_" for part in parts]
+    return "/".join(parts)
+
+
+def _archive_filename(workspace: dict) -> str:
+    slug = _ZIP_UNSAFE_CHARS.sub("_", str(workspace.get("name") or "workspace")).strip("._") or "workspace"
+    return f"{slug[:60]}_{workspace.get('workspace_id', 'workspace')}.zip"
+
+
+@router.get("/{workspace_id}/export")
+def export_workspace_zip(
+    workspace_id: str,
+    token_student_id: str = Depends(verify_jwt_student),
+):
+    """Download every file and folder in the workspace as a ZIP archive."""
+    workspace = _require_workspace(workspace_id)
+    _require_member(workspace_id, token_student_id)
+
+    entries = list(
+        get_collection("workspace_files")
+        .find({"workspace_id": workspace_id, "status": "active"})
+        .sort("path", 1)
+    )
+
+    buffer = io.BytesIO()
+    used = set()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for entry in entries:
+            name = _zip_entry_name(entry)
+            if not name:
+                continue
+            if name in used:
+                stem, dot, ext = name.partition(".")
+                suffix = 1
+                while f"{stem}_{suffix}{dot}{ext}" in used:
+                    suffix += 1
+                name = f"{stem}_{suffix}{dot}{ext}"
+            used.add(name)
+
+            if entry.get("type") == "folder":
+                archive.writestr(f"{name}/", "")
+            else:
+                archive.writestr(name, str(entry.get("content") or ""))
+
+        if not used:
+            archive.writestr(
+                "README.txt",
+                f"Workspace: {workspace.get('name', workspace_id)}\n"
+                f"ID: {workspace_id}\n\nThis workspace does not contain any files yet.\n",
+            )
+
+    buffer.seek(0)
+    log_workspace_activity(workspace_id, token_student_id, "export_zip", {"file_count": len(entries)})
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_archive_filename(workspace)}"',
+            "Content-Length": str(buffer.getbuffer().nbytes),
+        },
+    )
+
+
+# ==========================================
+# 16. Sandboxed Code Run
 # ==========================================
 
 def _code_run_enabled() -> bool:
     return os.getenv("WORKSPACE_CODE_RUN_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _execute_java(code: str, stdin_data: str, timeout: int = 10) -> dict:
-    class_match = re.search(r"(?:public\s+)?class\s+([A-Za-z0-9_]+)", code)
-    class_name = class_match.group(1) if class_match else "Main"
+_MAX_ACTIVE_CODE_CHARS = 20000
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        source_path = os.path.join(temp_dir, f"{class_name}.java")
-        with open(source_path, "w", encoding="utf-8") as handle:
-            handle.write(code)
-        try:
-            compile_result = subprocess.run(["javac", source_path], capture_output=True, text=True, timeout=timeout)
-        except FileNotFoundError:
-            return {"compiled": False, "compile_errors": ["javac not found on the server."], "output": "", "exit_code": None}
-        except subprocess.TimeoutExpired:
-            return {"compiled": False, "compile_errors": ["Compilation timed out."], "output": "", "exit_code": None}
 
-        if compile_result.returncode != 0:
-            return {
-                "compiled": False,
-                "compile_errors": compile_result.stderr.strip().splitlines(),
-                "output": "",
-                "exit_code": compile_result.returncode,
-            }
+def _java_sources(workspace_id: str, active_file_id: Optional[str], active_code: str):
+    """Collect the workspace's .java files, overlaying the editor's unsaved buffer."""
+    docs = list(
+        get_collection("workspace_files").find(
+            {"workspace_id": workspace_id, "status": "active", "type": "file"}
+        )
+    )
 
-        try:
-            run_result = subprocess.run(
-                ["java", "-cp", temp_dir, class_name],
-                input=stdin_data, capture_output=True, text=True, timeout=timeout,
-            )
-        except FileNotFoundError:
-            return {"compiled": True, "compile_errors": [], "output": "", "error": "java runtime not found.", "exit_code": None}
-        except subprocess.TimeoutExpired:
-            return {"compiled": True, "compile_errors": [], "output": "", "error": "Execution timed out.", "exit_code": None}
+    sources: Dict[str, str] = {}
+    active_name: Optional[str] = None
 
-        return {
-            "compiled": True,
-            "compile_errors": [],
-            "output": run_result.stdout,
-            "error": run_result.stderr,
-            "exit_code": run_result.returncode,
-        }
+    for doc in docs:
+        name = str(doc.get("name") or "").strip()
+        if not name or not name.lower().endswith(".java"):
+            continue
+        is_active = bool(active_file_id) and doc.get("file_id") == active_file_id
+        if is_active:
+            active_name = name
+            sources[name] = active_code
+        else:
+            sources[name] = str(doc.get("content") or "")
+
+    if not sources and active_code.strip():
+        sources["Main.java"] = active_code
+        active_name = "Main.java"
+
+    return sources, active_name
 
 
 @router.post("/{workspace_id}/run")
@@ -1976,39 +2052,62 @@ def run_workspace_code(
     request: CodeRunRequest,
     token_student_id: str = Depends(verify_jwt_student),
 ):
-    """Compiles Java code; executes it only when WORKSPACE_CODE_RUN_ENABLED=true."""
+    """Compile the workspace's Java sources in a sandbox and run the entry point.
+
+    Compilation always uses the real ``javac`` so the diagnostics read exactly like a
+    terminal in VS Code.  Execution only happens when ``WORKSPACE_CODE_RUN_ENABLED``
+    is true; otherwise the request is compile-only.
+    """
     _require_workspace(workspace_id)
     member = _require_member(workspace_id, token_student_id)
     _require_role(member, WRITE_ROLES)
 
-    if len(request.code) > 20000:
+    code = request.code or ""
+    if len(code) > _MAX_ACTIVE_CODE_CHARS:
         raise HTTPException(status_code=413, detail="Code exceeds the 20,000 character limit.")
+    if not code.strip():
+        raise HTTPException(status_code=400, detail="Nothing to run: the file is empty.")
 
-    evaluation = assessment_agent.evaluate_java_code(token_student_id, request.code).get("evaluation", {})
-    compiled = evaluation.get("is_valid", False)
-    compile_errors = evaluation.get("errors", [])
+    sources, active_name = _java_sources(workspace_id, request.file_id, code)
+    if not sources:
+        raise HTTPException(status_code=400, detail="No .java file to compile. Create a Java file to run code.")
 
-    if not _code_run_enabled():
-        return {
-            "status": "success",
-            "execution_enabled": False,
-            "compiled": compiled,
-            "compile_errors": compile_errors,
-            "output": "",
-            "exit_code": None,
-            "message": "Code execution is disabled. Set WORKSPACE_CODE_RUN_ENABLED=true to enable sandboxed runs.",
-        }
+    execute = _code_run_enabled()
+    scope = "project" if len(sources) > 1 else "file"
+    main_class = code_sandbox.detect_main_class(sources)
+    result = code_sandbox.compile_and_run(
+        sources,
+        main_class=main_class,
+        stdin_data=request.stdin or "",
+        execute=execute,
+    )
 
-    if not compiled:
-        return {
-            "status": "success",
-            "execution_enabled": True,
-            "compiled": False,
-            "compile_errors": compile_errors,
-            "output": "",
-            "exit_code": None,
-        }
+    # Independent files in one workspace may legitimately declare the same class, which
+    # makes a whole-project compile fail. Fall back to compiling just the open file.
+    if not result.get("compiled") and len(sources) > 1 and active_name and active_name in sources:
+        single = {active_name: sources[active_name]}
+        fallback = code_sandbox.compile_and_run(
+            single,
+            main_class=code_sandbox.detect_main_class(single),
+            stdin_data=request.stdin or "",
+            execute=execute,
+        )
+        if fallback.get("compiled"):
+            result = fallback
+            scope = "file"
 
-    result = _execute_java(request.code, request.stdin or "")
-    log_workspace_activity(workspace_id, token_student_id, "code_run", {"compiled": result.get("compiled")})
-    return {"status": "success", "execution_enabled": True, **result}
+    log_workspace_activity(
+        workspace_id,
+        token_student_id,
+        "code_run",
+        {
+            "compiled": bool(result.get("compiled")),
+            "scope": scope,
+            "exit_code": result.get("exit_code"),
+        },
+    )
+
+    payload: Dict[str, Any] = {"status": "success", "execution_enabled": execute, "scope": scope, **result}
+    if not execute:
+        payload["message"] = "Compilation only — set WORKSPACE_CODE_RUN_ENABLED=true to execute programs."
+    return payload

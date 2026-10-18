@@ -161,6 +161,7 @@ class AssistantAskRequest(BaseModel):
 class CodeRunRequest(BaseModel):
     code: str = Field(..., min_length=1)
     stdin: Optional[str] = ""
+    file_id: Optional[str] = None
 
 
 # ==========================================

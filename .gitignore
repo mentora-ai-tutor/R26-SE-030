@@ -51,6 +51,7 @@ docker-compose.override.yml
 
 # Local dev
 *.local
+services/knowledge-analysis/gcp-sa copy.json
 
 # Secrets — never commit
 secrets/

@@ -72,6 +72,9 @@ async def evaluate_code(
                     task_description=task.get("task_description", ""),
                     evaluation_criteria=task.get("evaluation_criteria", ""),
                     submitted_code=request.code,
+                    requirements=task.get("requirements", []),
+                    starter_code=task.get("starter_code", ""),
+                    task_type=task.get("task_type", ""),
                 )
             except Exception as grade_error:
                 grade_result = {
@@ -138,6 +141,8 @@ async def evaluate_code(
             if update_result.matched_count != 1:
                 raise HTTPException(status_code=409, detail="Task state changed; reload the room and try again.")
 
+            updated_results = [*room.get("results", []), result_entry]
+
             collab_manager.room_task_index[room["room_id"]] = next_task - 1
             if passed and not sequence_complete:
                 collab_manager.update_code_state(room["room_id"], tasks[next_task - 1].get("starter_code", ""))
@@ -161,7 +166,7 @@ async def evaluate_code(
                     topic=topic,
                     subskill=subskill,
                     tasks=tasks,
-                    results=room.get("results", []),
+                    results=updated_results,
                 )
                 return {
                     "status": "session_complete",
@@ -176,7 +181,7 @@ async def evaluate_code(
                     "session_summary": {
                         "total_tasks": len(tasks),
                         "task_progress": progress,
-                        "results": room.get("results", []),
+                        "results": updated_results,
                         "key_points": summary.get("key_points", []),
                         "question_summaries": summary.get("question_summaries", []),
                     },
@@ -216,6 +221,9 @@ async def evaluate_code(
                 task_description=task.get("task_description", ""),
                 evaluation_criteria=task.get("evaluation_criteria", ""),
                 submitted_code=request.code,
+                requirements=task.get("requirements", []),
+                starter_code=task.get("starter_code", ""),
+                task_type=task.get("task_type", ""),
             )
         except Exception as grade_error:
             grade_result = {

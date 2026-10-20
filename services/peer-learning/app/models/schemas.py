@@ -151,10 +151,10 @@ class SubmitAnswerRequest(BaseModel):
 class AnswerFeedbackResponse(BaseModel):
     status: str
     is_correct: bool
-    correct_answer: str
     explanation: str
     next_question: Optional[OpenQuestionItem] = None
     is_quiz_completed: bool = False
+    session_summary: Optional[Dict[str, Any]] = None
 
 
 class QuizSummaryResponse(BaseModel):
@@ -166,3 +166,6 @@ class QuizSummaryResponse(BaseModel):
     correct_answers: int
     score_percentage: float
     detailed_history: List[Dict[str, Any]]
+    correct_on_first_attempt: Optional[int] = None
+    mastery_score: Optional[int] = None
+    overall_mastery_score: Optional[int] = None

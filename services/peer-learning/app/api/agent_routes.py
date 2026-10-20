@@ -130,6 +130,9 @@ def evaluate_code(
                 task_description=task_description,
                 evaluation_criteria=evaluation_criteria,
                 submitted_code=request.code,
+                requirements=task.get("requirements", []),
+                starter_code=task.get("starter_code", ""),
+                task_type=task.get("task_type", ""),
             )
             print(f"✅ Grading complete: grade={grade_result.get('grade')}")
         except Exception as grade_err:

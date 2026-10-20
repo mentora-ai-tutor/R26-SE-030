@@ -4,6 +4,7 @@ import os
 import random
 import re
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from langchain_core.prompts import PromptTemplate
@@ -18,6 +19,7 @@ from app.models.schemas import (
     QuizSummaryResponse,
     SubmitAnswerRequest,
 )
+from app.services.mongodb import get_collection
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +99,15 @@ def start_individual_quiz(
         questions = generate_random_7_questions(request.topic, request.difficulty_level)
 
         QUIZ_SESSIONS[session_id] = {
+            "session_id": session_id,
             "student_id": request.student_id,
             "topic": request.topic,
             "questions": questions,
             "current_index": 0,
             "score": 0,
-            "answers_history": []
+            "answers_history": [],
+            "first_attempt_results": {},
+            "question_attempts": {},
         }
         CURRENT_SESSIONS[request.student_id] = session_id
 
@@ -157,11 +162,17 @@ def submit_quiz_answer(
         student_answer=request.student_answer
     )
 
-    is_correct = eval_result.get("is_correct", False)
-    ai_feedback = eval_result.get("feedback", current_q["explanation"])
+    is_correct = eval_result.get("is_correct") is True
+    learner_feedback = "Correct." if is_correct else "Not quite. Continue to the next question."
 
-    if is_correct:
-        session["score"] += 1
+    question_id = str(current_q["id"])
+    first_attempt_results = session.setdefault("first_attempt_results", {})
+    question_attempts = session.setdefault("question_attempts", {})
+    if question_id not in first_attempt_results:
+        first_attempt_results[question_id] = is_correct
+    question_attempts[question_id] = question_attempts.get(question_id, 0) + 1
+
+    session["score"] += int(is_correct)
 
     session["answers_history"].append({
         "question_id": current_q["id"],
@@ -169,30 +180,50 @@ def submit_quiz_answer(
         "student_answer": request.student_answer,
         "expected_answer": current_q["expected_answer"],
         "is_correct": is_correct,
-        "feedback": ai_feedback
+        "feedback": learner_feedback,
+        "attempt_number": question_attempts[question_id],
+        "first_attempt": question_attempts[question_id] == 1,
     })
 
     next_idx = curr_idx + 1
+    session["current_index"] = next_idx
     next_question = None
-    is_completed = False
+    is_completed = next_idx >= len(questions)
+    session_summary = None
 
-    if next_idx < len(questions):
-        session["current_index"] = next_idx
+    if not is_completed:
+        next_q = questions[next_idx]
         next_question = OpenQuestionItem(
-            id=questions[next_idx]["id"],
-            question=questions[next_idx]["question"],
-            hint=questions[next_idx].get("hint", "")
+            id=next_q["id"],
+            question=next_q["question"],
+            hint=next_q.get("hint", "")
         )
     else:
-        is_completed = True
+        session["status"] = "completed"
+        total_questions = len(questions)
+        mastery_score = _calculate_mastery_score(session)
+        overall_mastery_score = _persist_mastery_score(session, mastery_score)
+        session_summary = {
+            "status": "success",
+            "session_id": session_id,
+            "student_id": session["student_id"],
+            "topic": session["topic"],
+            "total_questions": total_questions,
+            "correct_answers": session["score"],
+            "correct_on_first_attempt": sum(first_attempt_results.values()),
+            "score_percentage": mastery_score,
+            "mastery_score": mastery_score,
+            "overall_mastery_score": overall_mastery_score,
+            "detailed_history": _public_answer_history(session),
+        }
 
     return AnswerFeedbackResponse(
         status="success",
         is_correct=is_correct,
-        correct_answer=current_q["expected_answer"],
-        explanation=ai_feedback,
+        explanation=learner_feedback,
         next_question=next_question,
-        is_quiz_completed=is_completed
+        is_quiz_completed=is_completed,
+        session_summary=session_summary,
     )
 
 
@@ -204,7 +235,7 @@ def get_quiz_summary(session_id: str):
 
     total_q = len(session["questions"])
     correct_count = session["score"]
-    score_percentage = round((correct_count / total_q) * 100, 2)
+    mastery_score = _calculate_mastery_score(session)
 
     return QuizSummaryResponse(
         status="success",
@@ -213,14 +244,86 @@ def get_quiz_summary(session_id: str):
         topic=session["topic"],
         total_questions=total_q,
         correct_answers=correct_count,
-        score_percentage=score_percentage,
-        detailed_history=session["answers_history"]
+        score_percentage=mastery_score,
+        detailed_history=_public_answer_history(session),
+        correct_on_first_attempt=sum(session.get("first_attempt_results", {}).values()),
+        mastery_score=mastery_score,
+        overall_mastery_score=session.get("overall_mastery_score"),
     )
 
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+def _calculate_mastery_score(session: Dict[str, Any]) -> int:
+    first_attempt_results = session.get("first_attempt_results", {})
+    total_questions = len(session.get("questions", []))
+    if total_questions == 0:
+        return 0
+    correct_first_attempts = sum(first_attempt_results.values())
+    return round(correct_first_attempts / total_questions * 100)
+
+
+def _persist_mastery_score(session: Dict[str, Any], mastery_score: int) -> Optional[int]:
+    analysis_id = session.get("analysis_id")
+    if analysis_id is None:
+        return None
+
+    try:
+        analyses = get_collection("student_analyses")
+        analysis = analyses.find_one({"_id": analysis_id})
+        if not analysis:
+            return None
+
+        profile = dict(analysis.get("mastery_profile") or {})
+        profile_gaps = profile.get("knowledge_gaps") or []
+        top_level_gaps = analysis.get("knowledge_gaps") or []
+        gaps = [dict(gap) for gap in (profile_gaps or top_level_gaps)]
+        target_topic = str(session.get("topic", "")).strip().casefold()
+
+        for gap in gaps:
+            if str(gap.get("topic", "")).strip().casefold() == target_topic:
+                gap["mastery_score"] = mastery_score
+
+        if gaps:
+            profile["knowledge_gaps"] = gaps
+            overall_mastery_score = round(
+                sum(float(gap.get("mastery_score", 0) or 0) for gap in gaps) / len(gaps)
+            )
+        else:
+            overall_mastery_score = mastery_score
+
+        profile["overall_mastery_score"] = overall_mastery_score
+        now = datetime.now(timezone.utc).isoformat()
+        analyses.update_one(
+            {"_id": analysis_id, "student_id": session["student_id"]},
+            {"$set": {
+                "mastery_profile": profile,
+                "knowledge_gaps": gaps,
+                "overall_mastery_score": overall_mastery_score,
+                "mastery_verification": {
+                    "session_id": session.get("session_id"),
+                    "topic": session.get("topic"),
+                    "mastery_score": mastery_score,
+                    "verified_at": now,
+                },
+                "updated_at": now,
+            }},
+        )
+        session["overall_mastery_score"] = overall_mastery_score
+        return overall_mastery_score
+    except Exception as exc:
+        logger.warning("Could not persist mastery verification score: %s", exc)
+        return None
+
+
+def _public_answer_history(session: Dict[str, Any]) -> list:
+    return [
+        {key: value for key, value in answer.items() if key != "expected_answer"}
+        for answer in session.get("answers_history", [])
+    ]
+
 
 def start_auto_quiz_session(student_id: str) -> IndividualQuizStartResponse:
     """Start a quiz using the authenticated student's analysis data, without a request body."""
@@ -248,13 +351,17 @@ def start_auto_quiz_session(student_id: str) -> IndividualQuizStartResponse:
     questions = generate_random_7_questions(topic, difficulty)
 
     QUIZ_SESSIONS[session_id] = {
+        "session_id": session_id,
         "student_id": student_id,
         "topic": topic,
         "difficulty_level": difficulty,
         "questions": questions,
         "current_index": 0,
         "score": 0,
-        "answers_history": []
+        "answers_history": [],
+        "first_attempt_results": {},
+        "question_attempts": {},
+        "analysis_id": analysis.get("_id"),
     }
     CURRENT_SESSIONS[student_id] = session_id
 
@@ -315,6 +422,12 @@ def generate_random_7_questions(topic: str, difficulty: str) -> list:
 
 
 def evaluate_student_answer(question: str, expected_answer: str, student_answer: str) -> dict:
+    def normalize(value: str) -> str:
+        return re.sub(r"\s+", "", str(value or "").strip().strip("`")).lower()
+
+    if normalize(student_answer) and normalize(student_answer) == normalize(expected_answer):
+        return {"is_correct": True, "feedback": "Correct answer."}
+
     api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
 
     if not api_key or api_key == "dummy_key":

@@ -169,8 +169,10 @@ class AssessmentAgent:
             "status": "success",
             "student_id": student_id,
             "language": "java",
+            "tests_executed": False,
             "evaluation": {
                 "is_valid": is_valid,
+                "tests_executed": False,
                 "feedback": feedback,
                 "complexity": complexity,
                 "passed_tests": passed_tests,

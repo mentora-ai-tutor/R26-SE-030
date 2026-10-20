@@ -1,15 +1,91 @@
-from fastapi import APIRouter
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Header, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 
 from app.models.schemas import LearnerInput
+from app.services.diagnostic_report import build_diagnostic_report
+from app.services.github_review_service import verify_student_from_authorization
+from app.services.mastery_from_reviews import rebuild_mastery_profile_from_reviews
+from app.services.mastery_profile_store import save_mastery_profile
 from app.services.pipeline import run_full_pipeline
 from app.services.quiz_engine import generate_quiz
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.post("/analyze")
-def analyze(data: LearnerInput) -> dict:
-    return run_full_pipeline(data)
+async def analyze(data: LearnerInput) -> dict:
+    result = await run_in_threadpool(run_full_pipeline, data)
+    diagnostic_report = build_diagnostic_report(data, result["final_output"])
+    try:
+        saved_profile = await save_mastery_profile(
+            result["final_output"],
+            raw_analysis_payload=result.get("pipeline", {}),
+            diagnostic_report=diagnostic_report,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Mastery profile could not be saved: {exc}",
+        ) from exc
+
+    result["diagnostic_report"] = diagnostic_report
+    result["persistence"] = {
+        "saved": True,
+        "profile_id": saved_profile.get("profile_id"),
+        "latest_profile_url": f"/api/v1/mastery-profiles/{data.student_id}/latest",
+    }
+    return result
+
+
+@router.post("/analyze/auto")
+async def analyze_auto(
+    authorization: Optional[str] = Header(default=None),
+) -> dict:
+    """Auto-analyze using stored data: delegates to the github_review_bridge, the single
+    profile writer. It fuses GitHub repo reviews, completed quiz_sessions and
+    sandbox_attempts from MongoDB into one canonical mastery profile, so every event
+    (quiz, sandbox run, review) produces the exact same profile shape and no source can
+    overwrite another's evidence."""
+    student = await verify_student_from_authorization(authorization)
+
+    saved = await rebuild_mastery_profile_from_reviews(
+        student_object_id=student.id,
+        public_student_id=student.student_id,
+    )
+    if saved is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No completed quizzes, sandbox attempts or repo reviews found yet. Finish at least one quiz, run some sandbox code, or complete a repo review first.",
+        )
+    payload = saved.get("raw_analysis_payload") or {}
+    fused = payload.get("evidence_fused", {})
+    result = {
+        "pipeline": {
+            "mode": "github_review_bridge",
+            "repo_review_jobs": int(payload.get("jobs_considered", 0)),
+        },
+        "final_output": saved,
+        "diagnostic_report": None,
+        "persistence": {
+            "saved": True,
+            "profile_id": saved.get("profile_id"),
+            "latest_profile_url": f"/api/v1/mastery-profiles/{student.student_id}/latest",
+            "quiz_topics": fused.get("quiz_topics", []),
+            "sandbox_topics": fused.get("sandbox_topics", []),
+            "source": "github_review_bridge",
+        },
+    }
+    logger.info(
+        "Auto-analyze complete for %s via github_review_bridge: mastery=%s profile=%s",
+        student.student_id,
+        saved.get("overall_mastery_score"),
+        saved.get("profile_id"),
+    )
+    return result
 
 
 @router.post("/quiz/generate")

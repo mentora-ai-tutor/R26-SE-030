@@ -5,7 +5,7 @@ const logger = require('../utils/logger');
 const buildMaterialQuery = (studentId, queryParams) => {
   const filter = {
     'structured_material.student_id': studentId,
-    'structured_material.quality_flags': { $ne: 'deleted' },
+    'structured_material.quality_flags.deleted': { $ne: true },
   };
 
   if (queryParams.topic) {

@@ -17,6 +17,8 @@ const authRoutes = require('./routes/auth.routes');
 const studentRoutes = require('./routes/student.routes');
 const internalRoutes = require('./routes/internal.routes');
 const adminRoutes = require('./routes/admin.routes');
+const githubOAuthRoutes = require('./routes/githubOAuth.routes');
+const googleOAuthRoutes = require('./routes/googleOAuth.routes');
 
 const app = express();
 
@@ -99,12 +101,21 @@ app.use('/api/students', protect, apiLimiter, studentRoutes);
 // Admin routes
 app.use('/api/admin', protect, apiLimiter, adminRoutes);
 
+// GitHub OAuth routes. Auth is applied per route so the callback stays public.
+app.use('/api/github', apiLimiter, githubOAuthRoutes);
+
+// Google OAuth routes (login / signup). All routes are public; the callback is
+// a top-level browser redirect from Google.
+app.use('/api/auth/google', authLimiter, googleOAuthRoutes);
+
 // Internal service routes
 app.use('/internal', internalOnly, internalRoutes);
 
 // API v1 prefix (for versioning)
 app.use('/v1/auth', authLimiter, authRoutes);
 app.use('/v1/students', protect, apiLimiter, studentRoutes);
+app.use('/v1/github', apiLimiter, githubOAuthRoutes);
+app.use('/v1/auth/google', authLimiter, googleOAuthRoutes);
 app.use('/v1/admin', protect, apiLimiter, adminRoutes);
 
 // 404 handler

@@ -1,0 +1,19 @@
+{
+  "name": "mentora-backend-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Central test suites: unit, integration and performance tests for every backend service",
+  "scripts": {
+    "test": "npm run test:user-service && npm run test:assessment-agent && npm run test:learning-generator",
+    "test:user-service": "jest --silent user-service",
+    "test:assessment-agent": "jest --silent assessment-agent",
+    "test:learning-generator": "node --test --test-reporter=dot \"learning-generator/**/*.test.js\"",
+    "test:knowledge-analysis": "cd ../services/knowledge-analysis && python3 -m pytest ../../test/knowledge-analysis -q",
+    "test:peer-learning": "cd ../services/peer-learning && python3 -m pytest ../../test/peer-learning -q",
+    "test:ai-engine": "cd ../ai-engine/learning-generator && python3 -m pytest ../../test/ai-engine -q"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.1.0"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "model_version": "numpy-softmax-seed42",
+  "n_samples": 12000,
+  "epochs": 1500,
+  "temperature": 0.8883,
+  "test_top1_acc": 0.8743,
+  "test_top3_acc": 1.0,
+  "macro_f1": 0.8743,
+  "ece_before": 0.1304,
+  "ece_after": 0.1155,
+  "final_train_loss": 0.5399,
+  "final_val_acc": 0.8797,
+  "per_class_f1": {
+    "Junior Java / Backend Developer": 0.8301,
+    "General Software Engineer": 0.8029,
+    "DSA / Algorithms-focused Engineer": 0.9282,
+    "Systems / Concurrency Engineer": 0.9004,
+    "QA / Test Automation Engineer": 0.9097
+  },
+  "confusion_matrix": [
+    [
+      298,
+      32,
+      5,
+      20,
+      18
+    ],
+    [
+      20,
+      275,
+      18,
+      12,
+      13
+    ],
+    [
+      2,
+      10,
+      291,
+      2,
+      0
+    ],
+    [
+      19,
+      25,
+      8,
+      443,
+      10
+    ],
+    [
+      6,
+      5,
+      0,
+      2,
+      272
+    ]
+  ]
+}

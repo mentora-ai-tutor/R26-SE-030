@@ -138,6 +138,17 @@ const login = async (req, res, next) => {
       return sendError(res, 'Account has been deactivated', 403, 'ACCOUNT_DEACTIVATED');
     }
 
+    // Accounts created through Google have no password — steer them to Google.
+    if (!student.password) {
+      await logAuth.loginFailed(email, req, requestId, 'OAuth-only account (Google)');
+      return sendError(
+        res,
+        'This account uses Google sign-in. Please continue with Google.',
+        401,
+        'USE_GOOGLE_SIGNIN'
+      );
+    }
+
     const isPasswordValid = await student.comparePassword(password);
 
     if (!isPasswordValid) {
@@ -490,4 +501,5 @@ module.exports = {
   resendVerification,
   getSessions,
   revokeSession,
+  generateTokens,
 };

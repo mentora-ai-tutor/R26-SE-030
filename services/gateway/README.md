@@ -1,1 +1,0 @@
-# Placeholder for gateway service

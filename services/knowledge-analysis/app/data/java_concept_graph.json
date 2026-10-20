@@ -1,0 +1,924 @@
+{
+  "schema_version": "kaa-concept-graph-v1.0",
+  "language": "java",
+  "generated_for": "knowledge-analysis-agent",
+  "description": "Reference knowledge graph used by the Knowledge Analysis Agent to resolve mastery at exact concept level, sequence gaps via prerequisites, and hand precise learning-material hints to the Learning Generator / Content agents. Concept nodes carry signal_patterns that map raw error/evidence text (review findings, sandbox errors, quiz misses) to the specific Java concept the student struggles with.",
+  "nodes": {
+    "CS101-VAR": {
+      "id": "CS101-VAR",
+      "label": "Variables",
+      "kind": "topic",
+      "difficulty": 1,
+      "week_area": "W01 - Language Basics",
+      "description": "Declaring, initializing and assigning primitive/reference variables.",
+      "prerequisites": [],
+      "related": ["CS101-TYPES"],
+      "concepts": [
+        {
+          "id": "CS101-VAR-DECLARE",
+          "label": "variable declaration and assignment",
+          "difficulty": 1,
+          "focus": "Review data types, declaration syntax and assignment semantics.",
+          "misconception": "declares variables without initializing them before use",
+          "signal_patterns": ["declar", "initializ", "uninitialized", "local variable", "assign"]
+        },
+        {
+          "id": "CS101-VAR-SCOPE",
+          "label": "variable scope and shadowing",
+          "difficulty": 2,
+          "focus": "Practice block scope, shadowing and variable lifetimes.",
+          "misconception": "expects a block-scoped variable to be visible outside its block",
+          "signal_patterns": ["scope", "shadow", "out of scope", "variable not defined", "cannot be resolved"]
+        }
+      ]
+    },
+    "CS101-TYPES": {
+      "id": "CS101-TYPES",
+      "label": "Types & Operators",
+      "kind": "topic",
+      "difficulty": 1,
+      "week_area": "W01 - Language Basics",
+      "description": "Primitive types, wrappers, type conversion and operators.",
+      "prerequisites": ["CS101-VAR"],
+      "related": ["CS101-COND"],
+      "concepts": [
+        {
+          "id": "CS101-TYPES-CAST",
+          "label": "type conversion and casting",
+          "difficulty": 2,
+          "focus": "Practice implicit vs explicit casts and overflow behaviour.",
+          "misconception": "assumes division always yields a fractional result",
+          "signal_patterns": ["cast", "truncat", "integer division", "overflow", "precision", "double", "int to"]
+        }
+      ]
+    },
+    "CS101-COND": {
+      "id": "CS101-COND",
+      "label": "Conditionals",
+      "kind": "topic",
+      "difficulty": 1,
+      "week_area": "W02 - Control Flow",
+      "description": "if-else, switch and boolean expressions.",
+      "prerequisites": ["CS101-TYPES"],
+      "related": ["CS101-LOOP"],
+      "concepts": [
+        {
+          "id": "CS101-COND-BRANCH",
+          "label": "if-else and switch logic",
+          "difficulty": 1,
+          "focus": "Trace branch coverage and chained conditions.",
+          "misconception": "misorders conditions so later branches are unreachable",
+          "signal_patterns": ["if-else", "condition", "unreachable branch", "switch", "boolean", "comparison"]
+        },
+        {
+          "id": "CS101-COND-NULL",
+          "label": "null-safe conditionals",
+          "difficulty": 2,
+          "focus": "Guard against null references before dereferencing.",
+          "misconception": "forgets null checks on method return values",
+          "signal_patterns": ["null pointer", "npe", "null check", "nullpointerexception"]
+        }
+      ]
+    },
+    "CS101-LOOP": {
+      "id": "CS101-LOOP",
+      "label": "Loops",
+      "kind": "topic",
+      "difficulty": 1,
+      "week_area": "W02 - Control Flow",
+      "description": "for, while and do-while loops including nesting and boundaries.",
+      "prerequisites": ["CS101-COND"],
+      "related": ["CS101-ARR", "CS101-ITER"],
+      "concepts": [
+        {
+          "id": "CS101-LOOP-BASIC",
+          "label": "basic loop syntax",
+          "difficulty": 1,
+          "focus": "Review for/while loop structure and counter updates.",
+          "misconception": "confuses loop initialization, condition, and update order",
+          "signal_patterns": ["loop", "for loop", "while loop", "for-each", "for each", "do-while", "iteration", "counter"]
+        },
+        {
+          "id": "CS101-LOOP-NESTED",
+          "label": "nested loops",
+          "difficulty": 2,
+          "focus": "Use row-column tracing and dry-run tables.",
+          "misconception": "does not trace inner loop execution correctly",
+          "signal_patterns": ["nested", "inner loop", "outer loop", "row", "column"]
+        },
+        {
+          "id": "CS101-LOOP-BOUNDARY",
+          "label": "loop boundary conditions",
+          "difficulty": 2,
+          "focus": "Practice start/end values and inclusive versus exclusive bounds.",
+          "misconception": "uses incorrect loop termination boundaries",
+          "signal_patterns": ["off-by-one", "off by one", "boundary", "loop condition", "termination", "fencepost", "last element", "first element", "inclusive bound", "exclusive bound", "strict bound", "limit condition", "infinite loop", "never processed"]
+        }
+      ]
+    },
+    "CS101-ARR": {
+      "id": "CS101-ARR",
+      "label": "Arrays",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W03 - Arrays & Strings",
+      "description": "Array indexing, traversal and bounds handling.",
+      "prerequisites": ["CS101-LOOP"],
+      "related": ["CS201-DS", "CS101-ITER"],
+      "concepts": [
+        {
+          "id": "CS101-ARR-INDEX",
+          "label": "array indexing",
+          "difficulty": 2,
+          "focus": "Practice zero-based indexing and valid index ranges.",
+          "misconception": "confuses array length with the last valid index",
+          "signal_patterns": ["arrayindexoutofbounds", "index out of bounds", "array index", "indexoutofboundsexception", "length - 1", "last index"]
+        },
+        {
+          "id": "CS101-ARR-TRAVERSE",
+          "label": "array traversal",
+          "difficulty": 2,
+          "focus": "Trace arrays with loop counters and bounds.",
+          "misconception": "skips or repeats elements while traversing arrays",
+          "signal_patterns": ["travers", "iterate", "foreach", "skip element", "repeat element"]
+        }
+      ]
+    },
+    "CS101-ITER": {
+      "id": "CS101-ITER",
+      "label": "Iteration Patterns",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W03 - Arrays & Strings",
+      "description": "Accumulators, searching and transform loops over collections of values.",
+      "prerequisites": ["CS101-LOOP", "CS101-ARR"],
+      "related": ["CS201-ALG"],
+      "concepts": [
+        {
+          "id": "CS101-ITER-AGG",
+          "label": "accumulator and aggregate loops",
+          "difficulty": 2,
+          "focus": "Practice sum/count/min/max accumulation invariants.",
+          "misconception": "resets the accumulator inside the loop body",
+          "signal_patterns": ["accumul", "sum of", "aggregate", "count of", "max", "min"]
+        },
+        {
+          "id": "CS101-ITER-SEARCH",
+          "label": "linear search",
+          "difficulty": 2,
+          "focus": "Track found-flag/early-return patterns.",
+          "misconception": "does not break or return once the target is found",
+          "signal_patterns": ["search", "find", "contains", "found flag", "early return"]
+        }
+      ]
+    },
+    "CS101-FUNC": {
+      "id": "CS101-FUNC",
+      "label": "Methods & Functions",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W04 - Methods & Call Stack",
+      "description": "Method signatures, parameters, return values and overloading.",
+      "prerequisites": ["CS101-COND", "CS101-LOOP"],
+      "related": ["CS101-STACK"],
+      "concepts": [
+        {
+          "id": "CS101-FUNC-SIGN",
+          "label": "method signature and return values",
+          "difficulty": 2,
+          "focus": "Practice defining clear parameters and return contracts.",
+          "misconception": "returns wrong type or forgets the return path",
+          "signal_patterns": ["method", "signature", "return", "parameter", "argument", "overload"]
+        },
+        {
+          "id": "CS101-FUNC-OVERLOAD",
+          "label": "method overloading",
+          "difficulty": 2,
+          "focus": "Compare overloads resolved at compile time.",
+          "misconception": "confuses overloading with overriding",
+          "signal_patterns": ["overload", "same method name"]
+        }
+      ]
+    },
+    "CS101-STACK": {
+      "id": "CS101-STACK",
+      "label": "Call Stack",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W04 - Methods & Call Stack",
+      "description": "How method calls, frames and returns work at runtime.",
+      "prerequisites": ["CS101-FUNC"],
+      "related": ["CS101-REC", "CS101-FUNC"],
+      "concepts": [
+        {
+          "id": "CS101-STACK-FRAME",
+          "label": "stack frame tracing",
+          "difficulty": 2,
+          "focus": "Trace frames, locals and return addresses for nested calls.",
+          "misconception": "cannot explain how nested calls unwind",
+          "signal_patterns": ["stack frame", "call stack", "nesting", "unwind", "stackoverflow"]
+        }
+      ]
+    },
+    "CS201-CLASS": {
+      "id": "CS201-CLASS",
+      "label": "Classes & Objects",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W05 - OOP Basics",
+      "description": "Class fields, constructors, objects and state.",
+      "prerequisites": ["CS101-FUNC"],
+      "related": ["CS201-OOP", "CS201-CTOR"],
+      "concepts": [
+        {
+          "id": "CS201-CLASS-DESIGN",
+          "label": "class design and state",
+          "difficulty": 2,
+          "focus": "Separate fields, constructors, and methods clearly.",
+          "misconception": "mixes object state with local method variables",
+          "signal_patterns": ["class design", "field", "instance state", "encapsulat"]
+        }
+      ]
+    },
+    "CS201-CTOR": {
+      "id": "CS201-CTOR",
+      "label": "Constructors",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W05 - OOP Basics",
+      "description": "Constructor initialization order and chaining.",
+      "prerequisites": ["CS201-CLASS"],
+      "related": ["CS201-INH"],
+      "concepts": [
+        {
+          "id": "CS201-CTOR-CHAIN",
+          "label": "constructor chaining",
+          "difficulty": 3,
+          "focus": "Practice super() calls and parent initialization order.",
+          "misconception": "does not understand when parent constructors run",
+          "signal_patterns": ["constructor", "super()", "initialization order", "default constructor"]
+        }
+      ]
+    },
+    "CS201-OOP": {
+      "id": "CS201-OOP",
+      "label": "OOP & Class Design",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W05 - OOP Basics",
+      "description": "Encapsulation, object design and polymorphism foundations.",
+      "prerequisites": ["CS201-CLASS", "CS101-FUNC"],
+      "related": ["CS201-INH", "CS201-IFACE"],
+      "concepts": [
+        {
+          "id": "CS201-OOP-CLASS",
+          "label": "class design",
+          "difficulty": 2,
+          "focus": "Separate fields, constructors, and methods clearly.",
+          "misconception": "mixes object state with local method variables",
+          "signal_patterns": ["class design", "encapsulat", "getter", "setter", "instance variable", "private field"]
+        },
+        {
+          "id": "CS201-OOP-POLY",
+          "label": "polymorphism",
+          "difficulty": 3,
+          "focus": "Practice dynamic dispatch and overriding behaviour.",
+          "misconception": "expects static type methods at runtime",
+          "signal_patterns": ["polymorph", "dynamic dispatch", "override", "runtime type"]
+        }
+      ]
+    },
+    "CS201-INH": {
+      "id": "CS201-INH",
+      "label": "OOP - Inheritance",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W06 - Inheritance & Interfaces",
+      "description": "Class hierarchies, super calls and overriding.",
+      "prerequisites": ["CS201-CTOR"],
+      "related": ["CS201-POLY", "CS201-IFACE"],
+      "concepts": [
+        {
+          "id": "CS201-INH-SUPER",
+          "label": "constructor chaining",
+          "difficulty": 3,
+          "focus": "Practice super() calls and parent initialization order.",
+          "misconception": "does not understand when parent constructors run",
+          "signal_patterns": ["constructor chaining", "super()", "parent constructor", "inheritance"]
+        },
+        {
+          "id": "CS201-INH-OVERRIDE",
+          "label": "method overriding",
+          "difficulty": 3,
+          "focus": "Compare overriding with overloading through small examples.",
+          "misconception": "confuses overriding with overloading",
+          "signal_patterns": ["override", "overrid", "@Override", "method signature match"]
+        }
+      ]
+    },
+    "CS201-POLY": {
+      "id": "CS201-POLY",
+      "label": "Polymorphism",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W06 - Inheritance & Interfaces",
+      "description": "Dynamic dispatch across an inheritance hierarchy.",
+      "prerequisites": ["CS201-INH"],
+      "related": ["CS201-IFACE"],
+      "concepts": [
+        {
+          "id": "CS201-POLY-DISPATCH",
+          "label": "dynamic dispatch",
+          "difficulty": 3,
+          "focus": "Trace which overridden method runs for each runtime type.",
+          "misconception": "binds calls to the static type instead of the runtime type",
+          "signal_patterns": ["dynamic dispatch", "runtime method", "polymorphic call"]
+        }
+      ]
+    },
+    "CS201-IFACE": {
+      "id": "CS201-IFACE",
+      "label": "Interfaces & Abstraction",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W06 - Inheritance & Interfaces",
+      "description": "Interface contracts and programming to abstractions.",
+      "prerequisites": ["CS201-OOP"],
+      "related": ["CS201-OOP", "SE-ARCH"],
+      "concepts": [
+        {
+          "id": "CS201-IFACE-DESIGN",
+          "label": "interface design",
+          "difficulty": 3,
+          "focus": "Define small, cohesive interfaces that capture one role.",
+          "misconception": "creates interfaces without a clear single responsibility",
+          "signal_patterns": ["interface", "contract", "interface design", "abstraction"]
+        },
+        {
+          "id": "CS201-IFACE-ABS",
+          "label": "programming to abstractions",
+          "difficulty": 3,
+          "focus": "Depend on interfaces rather than concrete classes.",
+          "misconception": "couples callers to concrete implementations",
+          "signal_patterns": ["depend on", "implementation", "concrete class", "decoupl", "abstraction"]
+        }
+      ]
+    },
+    "CS102-EXC": {
+      "id": "CS102-EXC",
+      "label": "Exception Handling",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "W07 - Exception Handling",
+      "description": "Checked/unchecked exceptions and try-catch-finally flow.",
+      "prerequisites": ["CS101-COND", "CS101-FUNC"],
+      "related": ["CS102-FILE", "CS101-COND-NULL"],
+      "concepts": [
+        {
+          "id": "CS102-EXC-CHECKED",
+          "label": "checked versus unchecked exceptions",
+          "difficulty": 2,
+          "focus": "Compare compile-time handling requirements.",
+          "misconception": "confuses checked and unchecked exception rules",
+          "signal_patterns": ["checked", "unchecked", "compile-time exception", "must be caught", "throws clause", "ioexception"]
+        },
+        {
+          "id": "CS102-EXC-FLOW",
+          "label": "try-catch-finally control flow",
+          "difficulty": 2,
+          "focus": "Trace execution through try, catch, and finally blocks.",
+          "misconception": "does not predict which block executes after an exception",
+          "signal_patterns": ["try-catch", "catch block", "finally", "exception type", "swallow", "error handling"]
+        }
+      ]
+    },
+    "CS102-FILE": {
+      "id": "CS102-FILE",
+      "label": "File I/O & Resources",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W07 - File I/O",
+      "description": "Reading/writing files and managing resources safely.",
+      "prerequisites": ["CS102-EXC"],
+      "related": ["CS102-STREAM", "CS102-SERIAL"],
+      "concepts": [
+        {
+          "id": "CS102-FILE-RW",
+          "label": "file read/write flow",
+          "difficulty": 3,
+          "focus": "Practice opening, reading/writing, and closing resources.",
+          "misconception": "does not manage resources across success and failure paths",
+          "signal_patterns": ["try-with-resources", "did not close", "unclosed", "resource leak", "scanner", "read file", "write file"]
+        },
+        {
+          "id": "CS102-FILE-EXC",
+          "label": "file exception handling",
+          "difficulty": 3,
+          "focus": "Handle missing files and permission failures explicitly.",
+          "misconception": "ignores file operation failure modes",
+          "signal_patterns": ["filenotfound", "permission", "file not found", "io error"]
+        }
+      ]
+    },
+    "CS102-STREAM": {
+      "id": "CS102-STREAM",
+      "label": "Streams",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W08 - I/O Streams",
+      "description": "Input/output streams and buffered processing.",
+      "prerequisites": ["CS102-FILE"],
+      "related": ["CS102-SERIAL"],
+      "concepts": [
+        {
+          "id": "CS102-STREAM-CHAIN",
+          "label": "stream chaining and flushing",
+          "difficulty": 3,
+          "focus": "Close streams in the right order and flush buffers.",
+          "misconception": "loses data because the stream is never flushed or closed",
+          "signal_patterns": ["stream", "flush", "buffer", "close", "reader", "writer", "inputstream", "outputstream"]
+        }
+      ]
+    },
+    "CS102-SERIAL": {
+      "id": "CS102-SERIAL",
+      "label": "Serialization",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W08 - I/O Streams",
+      "description": "Persisting object state between runs.",
+      "prerequisites": ["CS102-FILE"],
+      "related": ["CS102-STREAM"],
+      "concepts": [
+        {
+          "id": "CS102-SERIAL-SERIALID",
+          "label": "serializable contracts",
+          "difficulty": 3,
+          "focus": "Declare SerialVersionUID and handle transient fields.",
+          "misconception": "ignores serialization versioning and transient state",
+          "signal_patterns": ["serializ", "serialversionuid", "transient"]
+        }
+      ]
+    },
+    "CS201-DS": {
+      "id": "CS201-DS",
+      "label": "Collections & Data Structures",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W08 - Collections",
+      "description": "Lists, maps, sets, generics and the Collections framework.",
+      "prerequisites": ["CS201-OOP", "CS101-ARR"],
+      "related": ["CS201-ALG", "CS101-ITER"],
+      "concepts": [
+        {
+          "id": "CS201-DS-SELECT",
+          "label": "data structure selection",
+          "difficulty": 3,
+          "focus": "Compare lists, maps, sets, and trees by operation.",
+          "misconception": "chooses structures without considering access patterns",
+          "signal_patterns": ["arraylist", "hashmap", "collection", "chose", "selection", "linkedlist", "data structure"]
+        },
+        {
+          "id": "CS201-DS-COMPLEXITY",
+          "label": "operation complexity",
+          "difficulty": 3,
+          "focus": "Connect common operations to time complexity.",
+          "misconception": "does not connect operations to performance cost",
+          "signal_patterns": ["complexity", "o(n", "performance", "expensive", "inefficient", "n^2"]
+        }
+      ]
+    },
+    "CS101-REC": {
+      "id": "CS101-REC",
+      "label": "Recursion",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W09 - Recursion",
+      "description": "Base cases, stack frames and recursive result composition.",
+      "prerequisites": ["CS101-LOOP", "CS101-FUNC", "CS101-STACK"],
+      "related": ["CS201-TREE", "CS101-REC"],
+      "concepts": [
+        {
+          "id": "CS101-REC-BASE",
+          "label": "base case identification",
+          "difficulty": 3,
+          "focus": "Practice identifying stopping conditions before writing code.",
+          "misconception": "treats the base case as optional or secondary",
+          "signal_patterns": ["base case", "missing base", "infinite recursion", "no termination", "recursive call"]
+        },
+        {
+          "id": "CS101-REC-STACK",
+          "label": "stack frame tracing",
+          "difficulty": 3,
+          "focus": "Trace call frames, return values, and recursion depth.",
+          "misconception": "cannot explain how recursive calls return",
+          "signal_patterns": ["stack overflow", "stack frame", "recursion depth", "stacktrace", "call stack"]
+        },
+        {
+          "id": "CS101-REC-RETURN",
+          "label": "recursive return composition",
+          "difficulty": 3,
+          "focus": "Practice combining recursive results correctly.",
+          "misconception": "loses return values across recursive calls",
+          "signal_patterns": ["return value", "composition", "combine result", "recursive result"]
+        }
+      ]
+    },
+    "CS201-TREE": {
+      "id": "CS201-TREE",
+      "label": "Trees",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W09 - Trees",
+      "description": "Tree structure, nodes and traversal foundations.",
+      "prerequisites": ["CS101-REC", "CS201-DS"],
+      "related": ["CS201-BST", "CS201-ALG"],
+      "concepts": [
+        {
+          "id": "CS201-TREE-BASIC",
+          "label": "tree structure and node references",
+          "difficulty": 3,
+          "focus": "Trace parent/child links and recursive definitions.",
+          "misconception": "confuses node objects with their values",
+          "signal_patterns": ["tree", "node", "root", "leaf", "child", "parent"]
+        },
+        {
+          "id": "CS201-TREE-TRAVERSE",
+          "label": "tree traversal",
+          "difficulty": 3,
+          "focus": "Trace depth-first traversal recursion.",
+          "misconception": "handles null child subtrees incorrectly",
+          "signal_patterns": ["traversal", "preorder", "inorder", "postorder", "dfs", "depth-first"]
+        }
+      ]
+    },
+    "CS201-BST": {
+      "id": "CS201-BST",
+      "label": "Binary Search Trees",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W09 - Trees / BST",
+      "description": "BST invariants, search/insert and deletion cases.",
+      "prerequisites": ["CS101-REC", "CS201-TREE"],
+      "related": ["CS201-ALG", "CS201-HASH"],
+      "concepts": [
+        {
+          "id": "CS201-BST-SEARCH",
+          "label": "BST insertion and search",
+          "difficulty": 3,
+          "focus": "Trace comparisons from root to leaf.",
+          "misconception": "does not preserve the left-less/right-greater invariant",
+          "signal_patterns": ["bst", "binary search tree", "invariant", "insert", "search", "comparison"]
+        },
+        {
+          "id": "CS201-BST-DELETE",
+          "label": "BST deletion cases",
+          "difficulty": 3,
+          "focus": "Practice leaf, one-child, and two-child deletion separately.",
+          "misconception": "cannot handle deletion for nodes with two children",
+          "signal_patterns": ["deletion", "delete", "two children", "inorder successor", "replacement"]
+        },
+        {
+          "id": "CS201-BST-TRAVERSE",
+          "label": "tree traversal order",
+          "difficulty": 3,
+          "focus": "Trace inorder, preorder, and postorder outputs.",
+          "misconception": "confuses traversal order and output sequence",
+          "signal_patterns": ["inorder", "preorder", "postorder", "traversal order"]
+        }
+      ]
+    },
+    "CS201-HASH": {
+      "id": "CS201-HASH",
+      "label": "Hash Tables",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W08 - Collections",
+      "description": "Hash-based lookups, collisions and equals/hashCode.",
+      "prerequisites": ["CS201-DS"],
+      "related": ["CS201-BST", "CS201-ALG"],
+      "concepts": [
+        {
+          "id": "CS201-HASH-CONTRACT",
+          "label": "equals and hashCode contract",
+          "difficulty": 3,
+          "focus": "Keep equals/hashCode consistent for map keys.",
+          "misconception": "breaks map lookups by overriding equals without hashCode",
+          "signal_patterns": ["hashcode", "equals", "collision", "hash"]
+        }
+      ]
+    },
+    "CS201-ALG": {
+      "id": "CS201-ALG",
+      "label": "Algorithms & Complexity",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "W10 - Algorithms & Complexity",
+      "description": "Sorting/searching and time complexity reasoning.",
+      "prerequisites": ["CS101-LOOP", "CS101-ARR"],
+      "related": ["CS201-DS", "CS201-ALG"],
+      "concepts": [
+        {
+          "id": "CS201-ALG-TRACE",
+          "label": "algorithm tracing",
+          "difficulty": 3,
+          "focus": "Dry-run algorithm state step by step.",
+          "misconception": "jumps to final answers without tracing state changes",
+          "signal_patterns": ["algorithm", "trace", "sort", "search", "dry run"]
+        },
+        {
+          "id": "CS201-ALG-COMPLEXITY",
+          "label": "complexity reasoning",
+          "difficulty": 3,
+          "focus": "Estimate time complexity from loops and recursive calls.",
+          "misconception": "counts statements without understanding growth rate",
+          "signal_patterns": ["time complexity", "o(n", "big-o", "growth", "nested loop", "exponential"]
+        }
+      ]
+    },
+    "CS301-CONC": {
+      "id": "CS301-CONC",
+      "label": "Concurrency & Threads",
+      "kind": "topic",
+      "difficulty": 4,
+      "week_area": "W11 - Concurrency",
+      "description": "Thread safety, synchronization and coordination primitives.",
+      "prerequisites": ["CS201-OOP", "CS101-FUNC"],
+      "related": ["CS102-EXC", "CS301-PERF"],
+      "concepts": [
+        {
+          "id": "CS301-CONC-SAFETY",
+          "label": "thread safety",
+          "difficulty": 4,
+          "focus": "Guard shared mutable state with synchronization or immutability.",
+          "misconception": "assumes shared state is safe without synchronization",
+          "signal_patterns": ["thread safety", "race condition", "synchroniz", "shared state", "volatile", "concurrent"]
+        },
+        {
+          "id": "CS301-CONC-COORD",
+          "label": "coordination primitives",
+          "difficulty": 4,
+          "focus": "Practice locks, executors, and atomic operations on small examples.",
+          "misconception": "uses raw threads without understanding coordination",
+          "signal_patterns": ["deadlock", "lock", "executor", "atomic", "wait", "notify"]
+        }
+      ]
+    },
+    "CS301-PERF": {
+      "id": "CS301-PERF",
+      "label": "Performance",
+      "kind": "topic",
+      "difficulty": 4,
+      "week_area": "W12 - Performance",
+      "description": "Avoiding unnecessary work and hot-path costs.",
+      "prerequisites": ["CS201-ALG"],
+      "related": ["CS301-CONC"],
+      "concepts": [
+        {
+          "id": "CS301-PERF-HOT",
+          "label": "hot-path optimisation",
+          "difficulty": 4,
+          "focus": "Profile before optimising; avoid repeated allocations.",
+          "misconception": "optimises without evidence from profiling",
+          "signal_patterns": ["performance", "profile", "hot path", "allocation", "latency", "throughput"]
+        }
+      ]
+    },
+    "SE-TEST": {
+      "id": "SE-TEST",
+      "label": "Testing & Verification",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "Engineering Practice",
+      "description": "Unit tests, assertions and coverage.",
+      "prerequisites": ["CS201-OOP"],
+      "related": ["CS101-DEBUG"],
+      "concepts": [
+        {
+          "id": "SE-TEST-COVER",
+          "label": "test coverage",
+          "difficulty": 2,
+          "focus": "Add unit tests for core paths and edge cases.",
+          "misconception": "treats manual runs as sufficient verification",
+          "signal_patterns": ["coverage", "no test", "lacks tests", "test class", "junit", "unit test"]
+        },
+        {
+          "id": "SE-TEST-ASSERT",
+          "label": "assertion design",
+          "difficulty": 2,
+          "focus": "Write focused assertions that pin down expected behaviour.",
+          "misconception": "writes tests without meaningful assertions",
+          "signal_patterns": ["assert", "meaningful assertions", "assert without", "test case"]
+        }
+      ]
+    },
+    "CS101-DEBUG": {
+      "id": "CS101-DEBUG",
+      "label": "Debugging",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "Engineering Practice",
+      "description": "Systematic debugging using traces and breakpoints.",
+      "prerequisites": ["CS101-COND", "CS101-LOOP"],
+      "related": ["SE-TEST"],
+      "concepts": [
+        {
+          "id": "CS101-DEBUG-TRACE",
+          "label": "systematic tracing",
+          "difficulty": 2,
+          "focus": "Reproduce, isolate, and fix failures incrementally.",
+          "misconception": "guesses at fixes without reproducing the failure",
+          "signal_patterns": ["debug", "trace", "breakpoint", "reproduce", "failed test"]
+        }
+      ]
+    },
+    "SE-STYLE": {
+      "id": "SE-STYLE",
+      "label": "Code Style & Readability",
+      "kind": "topic",
+      "difficulty": 1,
+      "week_area": "Engineering Practice",
+      "description": "Naming, structure and maintainability conventions.",
+      "prerequisites": ["CS101-VAR"],
+      "related": ["SE-HYGIENE", "CS-GEN"],
+      "concepts": [
+        {
+          "id": "SE-STYLE-NAME",
+          "label": "naming and conventions",
+          "difficulty": 1,
+          "focus": "Use descriptive names and consistent conventions.",
+          "misconception": "uses unclear or inconsistent names",
+          "signal_patterns": ["naming", "convention", "variable name", "method name", "magic number"]
+        },
+        {
+          "id": "SE-STYLE-READ",
+          "label": "readable structure",
+          "difficulty": 2,
+          "focus": "Keep methods short and avoid magic numbers.",
+          "misconception": "writes long methods with unexplained constants",
+          "signal_patterns": ["readab", "long method", "magic number", "comment", "formatting"]
+        }
+      ]
+    },
+    "SE-HYGIENE": {
+      "id": "SE-HYGIENE",
+      "label": "Project Hygiene & Security",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "Engineering Practice",
+      "description": "Secrets, .gitignore and repo cleanliness.",
+      "prerequisites": ["CS101-VAR"],
+      "related": ["SE-STYLE"],
+      "concepts": [
+        {
+          "id": "SE-HYGIENE-SECRET",
+          "label": "secret management",
+          "difficulty": 2,
+          "focus": "Keep secrets out of source control; use env vars and ignore files.",
+          "misconception": "commits credentials or .env files to the repository",
+          "signal_patterns": ["secret", "credential", "api key", ".env file", "password committed", "hard-coded"]
+        },
+        {
+          "id": "SE-HYGIENE-REPO",
+          "label": "repository hygiene",
+          "difficulty": 1,
+          "focus": "Ignore dependencies and build artifacts via .gitignore.",
+          "misconception": "commits build output instead of ignoring them",
+          "signal_patterns": [".gitignore", "node_modules", "build artifact", ".class", "commit large"]
+        }
+      ]
+    },
+    "SE-VALID": {
+      "id": "SE-VALID",
+      "label": "Input Validation & Robustness",
+      "kind": "topic",
+      "difficulty": 2,
+      "week_area": "Engineering Practice",
+      "description": "Validating input and handling edge cases.",
+      "prerequisites": ["CS101-COND"],
+      "related": ["CS102-EXC", "CS101-COND-NULL"],
+      "concepts": [
+        {
+          "id": "SE-VALID-INPUT",
+          "label": "input validation",
+          "difficulty": 2,
+          "focus": "Validate and reject bad input before using it.",
+          "misconception": "trusts external input without checks",
+          "signal_patterns": ["validat", "sanitiz", "user input", "guard clause", "reject"]
+        },
+        {
+          "id": "SE-VALID-EDGE",
+          "label": "edge-case handling",
+          "difficulty": 2,
+          "focus": "Enumerate boundary and empty cases explicitly.",
+          "misconception": "handles only the happy path",
+          "signal_patterns": ["edge case", "boundary", "empty", "null input", "empty list"]
+        }
+      ]
+    },
+    "SE-ARCH": {
+      "id": "SE-ARCH",
+      "label": "API & Architecture Design",
+      "kind": "topic",
+      "difficulty": 3,
+      "week_area": "Engineering Practice",
+      "description": "Layering, separation of concerns and dependency management.",
+      "prerequisites": ["CS201-OOP", "CS201-IFACE"],
+      "related": ["CS201-OOP", "CS201-IFACE"],
+      "concepts": [
+        {
+          "id": "SE-ARCH-SOC",
+          "label": "separation of concerns",
+          "difficulty": 3,
+          "focus": "Split responsibilities across cohesive components.",
+          "misconception": "mixes unrelated concerns in one class",
+          "signal_patterns": ["separation of concerns", "layering", "single responsibility", "module"]
+        },
+        {
+          "id": "SE-ARCH-DEP",
+          "label": "dependency management",
+          "difficulty": 3,
+          "focus": "Reduce coupling by depending on abstractions.",
+          "misconception": "hard-wires dependencies between layers",
+          "signal_patterns": ["coupling", "dependency injection", "depend on", "tight coupling"]
+        }
+      ]
+    },
+    "CS-GEN": {
+      "id": "CS-GEN",
+      "label": "General Code Quality",
+      "kind": "topic",
+      "difficulty": 1,
+      "week_area": "Engineering Practice",
+      "description": "Fallback bucket for general code-quality findings.",
+      "prerequisites": ["CS101-VAR"],
+      "related": ["SE-STYLE"],
+      "concepts": [
+        {
+          "id": "CS-GEN-CORE",
+          "label": "core concept application",
+          "difficulty": 1,
+          "focus": "Review the flagged concept with small traceable examples.",
+          "misconception": "cannot reliably apply the concept independently",
+          "signal_patterns": []
+        }
+      ]
+    }
+  },
+  "edges": [
+    {"from": "CS101-VAR", "to": "CS101-TYPES", "type": "prerequisite"},
+    {"from": "CS101-TYPES", "to": "CS101-COND", "type": "prerequisite"},
+    {"from": "CS101-COND", "to": "CS101-LOOP", "type": "prerequisite"},
+    {"from": "CS101-LOOP", "to": "CS101-ARR", "type": "prerequisite"},
+    {"from": "CS101-LOOP", "to": "CS101-ITER", "type": "prerequisite"},
+    {"from": "CS101-ARR", "to": "CS101-ITER", "type": "prerequisite"},
+    {"from": "CS101-COND", "to": "CS101-FUNC", "type": "prerequisite"},
+    {"from": "CS101-LOOP", "to": "CS101-FUNC", "type": "prerequisite"},
+    {"from": "CS101-FUNC", "to": "CS101-STACK", "type": "prerequisite"},
+    {"from": "CS101-FUNC", "to": "CS201-CLASS", "type": "prerequisite"},
+    {"from": "CS201-CLASS", "to": "CS201-CTOR", "type": "prerequisite"},
+    {"from": "CS201-CTOR", "to": "CS201-INH", "type": "prerequisite"},
+    {"from": "CS201-CLASS", "to": "CS201-OOP", "type": "prerequisite"},
+    {"from": "CS201-OOP", "to": "CS201-IFACE", "type": "prerequisite"},
+    {"from": "CS201-INH", "to": "CS201-POLY", "type": "prerequisite"},
+    {"from": "CS101-COND", "to": "CS102-EXC", "type": "prerequisite"},
+    {"from": "CS101-COND", "to": "SE-VALID", "type": "prerequisite"},
+    {"from": "CS102-EXC", "to": "CS102-FILE", "type": "prerequisite"},
+    {"from": "CS102-FILE", "to": "CS102-STREAM", "type": "prerequisite"},
+    {"from": "CS102-FILE", "to": "CS102-SERIAL", "type": "prerequisite"},
+    {"from": "CS201-OOP", "to": "CS201-DS", "type": "prerequisite"},
+    {"from": "CS101-ARR", "to": "CS201-DS", "type": "prerequisite"},
+    {"from": "CS101-LOOP", "to": "CS101-REC", "type": "prerequisite"},
+    {"from": "CS101-FUNC", "to": "CS101-REC", "type": "prerequisite"},
+    {"from": "CS101-STACK", "to": "CS101-REC", "type": "prerequisite"},
+    {"from": "CS101-REC", "to": "CS201-TREE", "type": "prerequisite"},
+    {"from": "CS201-DS", "to": "CS201-TREE", "type": "prerequisite"},
+    {"from": "CS201-TREE", "to": "CS201-BST", "type": "prerequisite"},
+    {"from": "CS101-REC", "to": "CS201-BST", "type": "prerequisite"},
+    {"from": "CS201-DS", "to": "CS201-HASH", "type": "prerequisite"},
+    {"from": "CS101-LOOP", "to": "CS201-ALG", "type": "prerequisite"},
+    {"from": "CS101-ARR", "to": "CS201-ALG", "type": "prerequisite"},
+    {"from": "CS201-OOP", "to": "CS301-CONC", "type": "prerequisite"},
+    {"from": "CS201-ALG", "to": "CS301-PERF", "type": "prerequisite"},
+    {"from": "CS201-OOP", "to": "SE-TEST", "type": "prerequisite"},
+    {"from": "SE-TEST", "to": "CS101-DEBUG", "type": "prerequisite"},
+
+    {"from": "CS101-ARR", "to": "CS201-DS", "type": "related"},
+    {"from": "CS101-ITER", "to": "CS201-ALG", "type": "related"},
+    {"from": "CS101-STACK", "to": "CS101-REC", "type": "related"},
+    {"from": "CS201-INH", "to": "CS201-IFACE", "type": "related"},
+    {"from": "CS201-POLY", "to": "CS201-IFACE", "type": "related"},
+    {"from": "CS102-EXC", "to": "CS102-FILE", "type": "related"},
+    {"from": "CS102-EXC", "to": "CS301-CONC", "type": "related"},
+    {"from": "CS201-DS", "to": "CS201-ALG", "type": "related"},
+    {"from": "CS201-BST", "to": "CS201-ALG", "type": "related"},
+    {"from": "CS201-BST", "to": "CS201-HASH", "type": "related"},
+    {"from": "CS201-HASH", "to": "CS201-ALG", "type": "related"},
+    {"from": "SE-STYLE", "to": "SE-HYGIENE", "type": "related"},
+    {"from": "SE-VALID", "to": "CS102-EXC", "type": "related"},
+    {"from": "CS101-DEBUG", "to": "SE-TEST", "type": "related"},
+    {"from": "SE-ARCH", "to": "CS201-IFACE", "type": "related"},
+    {"from": "CS101-COND", "to": "SE-VALID", "type": "related"},
+    {"from": "CS101-COND", "to": "CS101-LOOP", "type": "related"}
+  ]
+}

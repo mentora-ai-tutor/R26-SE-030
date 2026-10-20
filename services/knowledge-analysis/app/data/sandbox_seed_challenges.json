@@ -1,0 +1,62 @@
+[
+  {
+    "id": "seed-sum-even",
+    "title": "Sum even numbers",
+    "topic": "Loops",
+    "difficulty": "easy",
+    "prompt": "Print the sum of all even numbers from 1 to 10.",
+    "expected_output": "30",
+    "stdin": null,
+    "starter_code": "public class Main {\n    public static void main(String[] args) {\n        int total = 0;\n\n        for (int i = 1; i <= 10; i++) {\n            // add only even numbers\n        }\n\n        System.out.println(total);\n    }\n}"
+  },
+  {
+    "id": "seed-reverse-word",
+    "title": "Reverse a word",
+    "topic": "Strings",
+    "difficulty": "easy",
+    "prompt": "Read one word from input and print it in reverse order.",
+    "expected_output": "arotnem",
+    "stdin": "mentora",
+    "starter_code": "import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        String word = scanner.next();\n        String reversed = \"\";\n\n        for (int i = word.length() - 1; i >= 0; i--) {\n            // build the reversed string\n        }\n\n        System.out.println(reversed);\n    }\n}"
+  },
+  {
+    "id": "seed-max-array",
+    "title": "Find max value",
+    "topic": "Arrays",
+    "difficulty": "easy",
+    "prompt": "Print the largest number in the array { 12, 7, 42, 19, 3 }.",
+    "expected_output": "42",
+    "stdin": null,
+    "starter_code": "public class Main {\n    public static void main(String[] args) {\n        int[] values = { 12, 7, 42, 19, 3 };\n        int max = values[0];\n\n        for (int i = 1; i < values.length; i++) {\n            // update max when needed\n        }\n\n        System.out.println(max);\n    }\n}"
+  },
+  {
+    "id": "seed-count-vowels",
+    "title": "Count the vowels",
+    "topic": "Strings",
+    "difficulty": "medium",
+    "prompt": "Read a word from input and print how many vowels (a, e, i, o, u) it contains.",
+    "expected_output": "5",
+    "stdin": "education",
+    "starter_code": "import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        String word = scanner.next();\n        int vowels = 0;\n\n        for (int i = 0; i < word.length(); i++) {\n            // count vowels here\n        }\n\n        System.out.println(vowels);\n    }\n}"
+  },
+  {
+    "id": "seed-factorial",
+    "title": "Factorial of five",
+    "topic": "Recursion",
+    "difficulty": "medium",
+    "prompt": "Print the factorial of 5 (that is, 5 * 4 * 3 * 2 * 1).",
+    "expected_output": "120",
+    "stdin": null,
+    "starter_code": "public class Main {\n    public static void main(String[] args) {\n        int n = 5;\n        int factorial = 1;\n\n        // multiply factorial by each value from 1 to n\n\n        System.out.println(factorial);\n    }\n}"
+  },
+  {
+    "id": "seed-sum-1-100",
+    "title": "Sum 1 to 100",
+    "topic": "Loops",
+    "difficulty": "hard",
+    "prompt": "Print the sum of all integers from 1 to 100.",
+    "expected_output": "5050",
+    "stdin": null,
+    "starter_code": "public class Main {\n    public static void main(String[] args) {\n        int total = 0;\n\n        for (int i = 1; i <= 100; i++) {\n            // accumulate the running total\n        }\n\n        System.out.println(total);\n    }\n}"
+  }
+]

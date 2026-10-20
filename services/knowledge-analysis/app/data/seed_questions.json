@@ -1,0 +1,281 @@
+[
+  {
+    "topic": "Loops",
+    "difficulty": "easy",
+    "type": "mcq",
+    "question": "Which Java loop is guaranteed to execute its body at least once?",
+    "options": [
+      { "id": "A", "text": "for loop" },
+      { "id": "B", "text": "while loop" },
+      { "id": "C", "text": "do-while loop" },
+      { "id": "D", "text": "enhanced for-each loop" }
+    ],
+    "correct_option_id": "C",
+    "explanation": "A do-while loop checks its condition after running the body, so the body always runs at least once.",
+    "concept_tested": "loop semantics"
+  },
+  {
+    "topic": "Arrays",
+    "difficulty": "easy",
+    "type": "mcq",
+    "question": "What is the index of the first element of a Java array?",
+    "options": [
+      { "id": "A", "text": "1" },
+      { "id": "B", "text": "0" },
+      { "id": "C", "text": "-1" },
+      { "id": "D", "text": "It depends on the array type" }
+    ],
+    "correct_option_id": "B",
+    "explanation": "Java arrays are zero-indexed; the first element is at index 0 and the last is at length - 1.",
+    "concept_tested": "array indexing"
+  },
+  {
+    "topic": "OOP",
+    "difficulty": "easy",
+    "type": "mcq",
+    "question": "Which keyword creates a new object instance in Java?",
+    "options": [
+      { "id": "A", "text": "new" },
+      { "id": "B", "text": "class" },
+      { "id": "C", "text": "this" },
+      { "id": "D", "text": "object" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "The 'new' keyword allocates an object on the heap and invokes its constructor.",
+    "concept_tested": "object instantiation"
+  },
+  {
+    "topic": "Exception Handling",
+    "difficulty": "easy",
+    "type": "mcq",
+    "question": "Which block always executes whether or not an exception is thrown?",
+    "options": [
+      { "id": "A", "text": "try" },
+      { "id": "B", "text": "catch" },
+      { "id": "C", "text": "finally" },
+      { "id": "D", "text": "throw" }
+    ],
+    "correct_option_id": "C",
+    "explanation": "A finally block runs after try/catch regardless of whether an exception occurred (barring JVM exit).",
+    "concept_tested": "try-catch-finally control flow"
+  },
+  {
+    "topic": "Collections",
+    "difficulty": "easy",
+    "type": "mcq",
+    "question": "Which interface does java.util.ArrayList implement?",
+    "options": [
+      { "id": "A", "text": "Map" },
+      { "id": "B", "text": "List" },
+      { "id": "C", "text": "Set" },
+      { "id": "D", "text": "Queue" }
+    ],
+    "correct_option_id": "B",
+    "explanation": "ArrayList is a resizable-array implementation of the List interface, so it allows duplicates and indexed access.",
+    "concept_tested": "collections hierarchy"
+  },
+  {
+    "topic": "Loops",
+    "difficulty": "easy",
+    "type": "predict_output",
+    "question": "What does this snippet print?",
+    "code_snippet": "for (int i = 0; i < 3; i++) {\n    System.out.print(i);\n}",
+    "options": [
+      { "id": "A", "text": "012" },
+      { "id": "B", "text": "123" },
+      { "id": "C", "text": "0123" },
+      { "id": "D", "text": "0 1 2" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "i runs 0, 1, 2 and print (not println) writes them with no separator, producing 012.",
+    "concept_tested": "loop counter tracing"
+  },
+  {
+    "topic": "OOP",
+    "difficulty": "medium",
+    "type": "mcq",
+    "question": "What best describes method overriding in Java?",
+    "options": [
+      { "id": "A", "text": "Two methods in the same class with different parameter lists" },
+      { "id": "B", "text": "A subclass redefining a superclass method with the same signature" },
+      { "id": "C", "text": "Two unrelated classes declaring a method with the same name" },
+      { "id": "D", "text": "Changing a method's return type only" }
+    ],
+    "correct_option_id": "B",
+    "explanation": "Overriding is when a subclass provides its own implementation of an inherited method with an identical signature; same-class differing parameters is overloading.",
+    "concept_tested": "overriding vs overloading"
+  },
+  {
+    "topic": "Recursion",
+    "difficulty": "medium",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "static int f(int n) {\n    return n <= 1 ? 1 : n * f(n - 1);\n}\n// ...\nSystem.out.println(f(4));",
+    "options": [
+      { "id": "A", "text": "24" },
+      { "id": "B", "text": "12" },
+      { "id": "C", "text": "6" },
+      { "id": "D", "text": "4" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "f(4) = 4*3*2*1 = 24 — a standard factorial recursion bottoming out at the base case n <= 1.",
+    "concept_tested": "recursive return composition"
+  },
+  {
+    "topic": "Arrays",
+    "difficulty": "medium",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "int[] a = {1, 2, 3};\nint s = 0;\nfor (int x : a) {\n    s += x;\n}\nSystem.out.println(s);",
+    "options": [
+      { "id": "A", "text": "6" },
+      { "id": "B", "text": "123" },
+      { "id": "C", "text": "3" },
+      { "id": "D", "text": "0" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "The enhanced for-loop sums 1 + 2 + 3 = 6.",
+    "concept_tested": "array traversal"
+  },
+  {
+    "topic": "Collections",
+    "difficulty": "medium",
+    "type": "mcq",
+    "question": "Which Map implementation preserves insertion order of its keys?",
+    "options": [
+      { "id": "A", "text": "HashMap" },
+      { "id": "B", "text": "TreeMap" },
+      { "id": "C", "text": "LinkedHashMap" },
+      { "id": "D", "text": "Hashtable" }
+    ],
+    "correct_option_id": "C",
+    "explanation": "LinkedHashMap maintains a doubly-linked list across entries, iterating in insertion order; TreeMap sorts by key and HashMap gives no ordering guarantee.",
+    "concept_tested": "map implementations"
+  },
+  {
+    "topic": "Loops",
+    "difficulty": "medium",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "int i = 0;\nwhile (i < 5) {\n    i++;\n    if (i == 3) continue;\n    System.out.print(i);\n}",
+    "options": [
+      { "id": "A", "text": "1245" },
+      { "id": "B", "text": "12345" },
+      { "id": "C", "text": "123" },
+      { "id": "D", "text": "245" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "i increments first, so it prints 1, 2, skips 3 via continue, then prints 4, 5 -> 1245.",
+    "concept_tested": "continue and loop flow"
+  },
+  {
+    "topic": "Exception Handling",
+    "difficulty": "medium",
+    "type": "mcq",
+    "question": "Which of these is a checked exception in Java?",
+    "options": [
+      { "id": "A", "text": "NullPointerException" },
+      { "id": "B", "text": "ArrayIndexOutOfBoundsException" },
+      { "id": "C", "text": "IOException" },
+      { "id": "D", "text": "ArithmeticException" }
+    ],
+    "correct_option_id": "C",
+    "explanation": "IOException extends Exception (not RuntimeException), so the compiler forces it to be caught or declared; the others are unchecked RuntimeExceptions.",
+    "concept_tested": "checked vs unchecked exceptions"
+  },
+  {
+    "topic": "OOP",
+    "difficulty": "hard",
+    "type": "mcq",
+    "question": "If a subclass constructor does not explicitly call super(...), what happens?",
+    "options": [
+      { "id": "A", "text": "A compile error always occurs" },
+      { "id": "B", "text": "The compiler inserts an implicit no-arg super() call" },
+      { "id": "C", "text": "The parent class is never initialized" },
+      { "id": "D", "text": "A runtime exception is thrown" }
+    ],
+    "correct_option_id": "B",
+    "explanation": "The compiler inserts a no-arg super() as the first statement. It only fails if the parent has no accessible no-arg constructor.",
+    "concept_tested": "constructor chaining"
+  },
+  {
+    "topic": "Recursion",
+    "difficulty": "hard",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "static int m(int n) {\n    if (n == 0) return 0;\n    return n + m(n - 1);\n}\n// ...\nSystem.out.println(m(5));",
+    "options": [
+      { "id": "A", "text": "15" },
+      { "id": "B", "text": "10" },
+      { "id": "C", "text": "120" },
+      { "id": "D", "text": "5" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "m(5) = 5 + 4 + 3 + 2 + 1 + 0 = 15 — the triangular-number recursion.",
+    "concept_tested": "recursive accumulation"
+  },
+  {
+    "topic": "Collections",
+    "difficulty": "hard",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "Set<Integer> s = new HashSet<>();\ns.add(1);\ns.add(2);\ns.add(1);\nSystem.out.println(s.size());",
+    "options": [
+      { "id": "A", "text": "3" },
+      { "id": "B", "text": "2" },
+      { "id": "C", "text": "1" },
+      { "id": "D", "text": "0" }
+    ],
+    "correct_option_id": "B",
+    "explanation": "A Set rejects duplicates, so adding 1 twice keeps a single 1; the set is {1, 2} with size 2.",
+    "concept_tested": "set uniqueness"
+  },
+  {
+    "topic": "Arrays",
+    "difficulty": "hard",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "int[] a = {5, 3, 8, 1};\njava.util.Arrays.sort(a);\nSystem.out.println(a[0] + \",\" + a[3]);",
+    "options": [
+      { "id": "A", "text": "1,8" },
+      { "id": "B", "text": "5,1" },
+      { "id": "C", "text": "8,1" },
+      { "id": "D", "text": "1,5" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "Arrays.sort sorts ascending to {1, 3, 5, 8}, so a[0]=1 and a[3]=8 -> \"1,8\".",
+    "concept_tested": "sorting and indexing"
+  },
+  {
+    "topic": "Loops",
+    "difficulty": "hard",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "int c = 0;\nfor (int i = 0; i < 3; i++) {\n    for (int j = 0; j < 3; j++) {\n        if (i == j) c++;\n    }\n}\nSystem.out.println(c);",
+    "options": [
+      { "id": "A", "text": "3" },
+      { "id": "B", "text": "9" },
+      { "id": "C", "text": "6" },
+      { "id": "D", "text": "0" }
+    ],
+    "correct_option_id": "A",
+    "explanation": "The condition i == j is true only on the diagonal (0,0), (1,1), (2,2) -> 3 increments.",
+    "concept_tested": "nested loop tracing"
+  },
+  {
+    "topic": "Exception Handling",
+    "difficulty": "hard",
+    "type": "predict_output",
+    "question": "What is printed?",
+    "code_snippet": "try {\n    int[] x = new int[2];\n    x[5] = 1;\n    System.out.print(\"A\");\n} catch (ArrayIndexOutOfBoundsException e) {\n    System.out.print(\"B\");\n} finally {\n    System.out.print(\"C\");\n}",
+    "options": [
+      { "id": "A", "text": "ABC" },
+      { "id": "B", "text": "BC" },
+      { "id": "C", "text": "AC" },
+      { "id": "D", "text": "B" }
+    ],
+    "correct_option_id": "B",
+    "explanation": "x[5] throws before \"A\" prints, so catch prints B, then finally always prints C -> BC.",
+    "concept_tested": "exception flow with finally"
+  }
+]

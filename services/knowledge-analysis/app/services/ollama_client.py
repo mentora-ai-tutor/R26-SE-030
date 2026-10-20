@@ -3,11 +3,12 @@ Ollama LLM client for remote API calls.
 Handles communication with Ollama server for text generation.
 """
 
-import httpx
 import json
 import logging
 from typing import Dict, Any, Optional
 from datetime import timedelta
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class OllamaClient:
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
+        response_format: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Generate text using Ollama.
@@ -83,13 +85,18 @@ class OllamaClient:
             "stream": stream,
         }
 
-        # Add optional parameters if provided
+        if response_format is not None:
+            payload["format"] = response_format
+
+        options: Dict[str, Any] = {}
         if temperature is not None:
-            payload["temperature"] = temperature
+            options["temperature"] = temperature
         if top_p is not None:
-            payload["top_p"] = top_p
+            options["top_p"] = top_p
         if top_k is not None:
-            payload["top_k"] = top_k
+            options["top_k"] = top_k
+        if options:
+            payload["options"] = options
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -124,6 +131,7 @@ class OllamaClient:
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
+        response_format: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Synchronous version of generate.
@@ -135,12 +143,18 @@ class OllamaClient:
             "stream": stream,
         }
 
+        if response_format is not None:
+            payload["format"] = response_format
+
+        options: Dict[str, Any] = {}
         if temperature is not None:
-            payload["temperature"] = temperature
+            options["temperature"] = temperature
         if top_p is not None:
-            payload["top_p"] = top_p
+            options["top_p"] = top_p
         if top_k is not None:
-            payload["top_k"] = top_k
+            options["top_k"] = top_k
+        if options:
+            payload["options"] = options
 
         try:
             with httpx.Client(timeout=self.timeout) as client:

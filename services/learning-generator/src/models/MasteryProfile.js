@@ -1,5 +1,16 @@
 const mongoose = require('mongoose');
 
+const subskillSchema = new mongoose.Schema({
+  subskill: String,
+  subskill_id: String,
+  status: {
+    type: String,
+    enum: ['weak', 'mastered'],
+  },
+  evidence: String,
+  recommended_content_focus: String,
+}, { _id: false });
+
 const knowledgeGapSchema = new mongoose.Schema({
   topic: {
     type: String,
@@ -15,15 +26,53 @@ const knowledgeGapSchema = new mongoose.Schema({
     required: true,
   },
   confidence: Number,
+  mastery_score: Number,
+  weak_subskills: [subskillSchema],
+  known_subskills: [subskillSchema],
   misconceptions: [String],
   observed_error_patterns: mongoose.Schema.Types.Mixed,
   evidence_summary: String,
   prerequisite_topics: [String],
   related_topics: [String],
   suggested_intervention: mongoose.Schema.Types.Mixed,
+  resolved_concept_id: String,
+  resolution_method: {
+    type: String,
+    enum: ['exact', 'alias', 'embedding', 'llm', 'llm_no_match', 'unresolved'],
+  },
+  resolution_confidence: Number,
+  concept_context: mongoose.Schema.Types.Mixed,
+}, { _id: false });
+
+const implicitGapSchema = new mongoose.Schema({
+  concept_id: String,
+  injected: {
+    type: Boolean,
+    default: true,
+  },
+  reason: String,
+}, { _id: false });
+
+const unverifiedPrerequisiteSchema = new mongoose.Schema({
+  concept_id: String,
+  blocks: String,
+}, { _id: false });
+
+const augmentedProfileSchema = new mongoose.Schema({
+  implicit_gaps: [implicitGapSchema],
+  unverified_prerequisites: [unverifiedPrerequisiteSchema],
+  coverage_snapshot: {
+    totalNodes: Number,
+    coveredNodes: Number,
+    coveragePct: Number,
+  },
 }, { _id: false });
 
 const masteryProfileSchema = new mongoose.Schema({
+  schema_version: {
+    type: String,
+    default: 'kaa-lmg-v1.0',
+  },
   student_id: {
     type: String,
     index: true,
@@ -38,10 +87,25 @@ const masteryProfileSchema = new mongoose.Schema({
     min: 0,
     max: 100,
   },
+  mastery_profile: {
+    overall_mastery_score: {
+      type: Number,
+      min: 0,
+      max: 100,
+    },
+    knowledge_gaps: [knowledgeGapSchema],
+    strengths: mongoose.Schema.Types.Mixed,
+  },
   knowledge_gaps: [knowledgeGapSchema],
+  augmented_profile: augmentedProfileSchema,
   strengths: mongoose.Schema.Types.Mixed,
   recommendations: mongoose.Schema.Types.Mixed,
   data_sources: mongoose.Schema.Types.Mixed,
+  gap_topic_ids: {
+    type: [String],
+    default: [],
+  },
+  raw_analysis_payload: mongoose.Schema.Types.Mixed,
   n8n_triggered: {
     type: Boolean,
     default: false,

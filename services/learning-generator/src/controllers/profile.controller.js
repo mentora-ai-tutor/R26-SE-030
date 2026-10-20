@@ -1,14 +1,24 @@
+const mongoose = require('mongoose');
 const MasteryProfile = require('../models/MasteryProfile');
 const GenerationJob = require('../models/GenerationJob');
 const n8nService = require('../services/n8n.service');
 const userServiceClient = require('../services/userService.client');
+const conceptGraphService = require('../services/conceptGraph.service');
 const ServiceError = require('../utils/ServiceError');
 const apiResponse = require('../utils/apiResponse');
 const logger = require('../utils/logger');
 
 const submitMasteryProfile = async (req, res, next) => {
   try {
-    const { student_id, mastery_profile, analysis_timestamp, recommendations, data_sources } = req.body;
+    const {
+      schema_version,
+      student_id,
+      mastery_profile,
+      analysis_timestamp,
+      recommendations,
+      data_sources,
+      raw_analysis_payload,
+    } = req.body;
     const tokenStudentId = req.student.id;
 
     if (student_id !== tokenStudentId) {
@@ -24,13 +34,21 @@ const submitMasteryProfile = async (req, res, next) => {
     }
 
     const masteryProfile = new MasteryProfile({
+      schema_version: schema_version || 'kaa-lmg-v1.0',
       student_id,
       analysis_timestamp: analysis_timestamp ? new Date(analysis_timestamp) : new Date(),
       overall_mastery_score: mastery_profile.overall_mastery_score,
+      mastery_profile: {
+        overall_mastery_score: mastery_profile.overall_mastery_score,
+        knowledge_gaps: mastery_profile.knowledge_gaps,
+        strengths: mastery_profile.strengths || [],
+      },
       knowledge_gaps: mastery_profile.knowledge_gaps,
       strengths: mastery_profile.strengths || [],
       recommendations: recommendations,
       data_sources: data_sources,
+      gap_topic_ids: mastery_profile.knowledge_gaps.map((g) => g.topic_id),
+      raw_analysis_payload: raw_analysis_payload || {},
       submission_ip: req.ip,
       n8n_triggered: false,
     });
@@ -43,6 +61,60 @@ const submitMasteryProfile = async (req, res, next) => {
       gaps_count: mastery_profile.knowledge_gaps.length,
     });
 
+    // effectiveGaps is the single source of truth for the gap count actually
+    // sent to n8n — reused for the GenerationJob document below so the job
+    // counters always match the augmented list (explicit resolved gaps +
+    // injected implicit prerequisites).
+    let effectiveGaps = mastery_profile.knowledge_gaps;
+
+    try {
+      const graph = await conceptGraphService.loadGraph();
+
+      if (graph.size > 0) {
+        const augmentation = await conceptGraphService.augmentGaps(
+          mastery_profile.knowledge_gaps,
+          mastery_profile.strengths || [],
+          graph,
+          conceptGraphService.embedder,
+          conceptGraphService.ollamaClient
+        );
+
+        const coverageSnapshot = await conceptGraphService.computeCoverage(student_id, null);
+
+        effectiveGaps = augmentation.effectiveGaps;
+
+        masteryProfile.knowledge_gaps = augmentation.resolvedGaps;
+        masteryProfile.augmented_profile = {
+          implicit_gaps: augmentation.injectedGaps.map((g) => ({
+            concept_id: g.resolved_concept_id,
+            injected: true,
+            reason: g.reason,
+          })),
+          unverified_prerequisites: augmentation.closure.unverified,
+          coverage_snapshot: {
+            totalNodes: coverageSnapshot.totalNodes,
+            coveredNodes: coverageSnapshot.coveredNodes,
+            coveragePct: coverageSnapshot.coveragePct,
+          },
+        };
+        await masteryProfile.save();
+
+        logger.info('Concept-graph gate applied', {
+          student_id,
+          gaps_total: effectiveGaps.length,
+          implicit_gaps: augmentation.injectedGaps.length,
+          unverified: augmentation.closure.unverified.length,
+          coverage_pct: coverageSnapshot.coveragePct,
+        });
+      }
+    } catch (gateError) {
+      logger.warn('Concept-graph gate failed - continuing with raw gaps (fail-open)', {
+        error: gateError.message,
+        student_id,
+      });
+      effectiveGaps = mastery_profile.knowledge_gaps;
+    }
+
     const jobId = 'JOB_' + Date.now();
 
     const generationJob = new GenerationJob({
@@ -50,9 +122,9 @@ const submitMasteryProfile = async (req, res, next) => {
       student_id,
       profile_id: masteryProfile._id,
       status: 'queued',
-      gaps_total: mastery_profile.knowledge_gaps.length,
-      gaps_queued: mastery_profile.knowledge_gaps.length,
-      gap_topic_ids: mastery_profile.knowledge_gaps.map((g) => g.topic_id),
+      gaps_total: effectiveGaps.length,
+      gaps_queued: effectiveGaps.length,
+      gap_topic_ids: effectiveGaps.map((g) => g.topic_id),
     });
 
     await generationJob.save();
@@ -63,7 +135,10 @@ const submitMasteryProfile = async (req, res, next) => {
       const n8nPayload = {
         student_id,
         analysis_timestamp: analysis_timestamp || new Date().toISOString(),
-        mastery_profile,
+        mastery_profile: {
+          ...mastery_profile,
+          knowledge_gaps: effectiveGaps,
+        },
         recommendations,
         data_sources,
         job_id: jobId,
@@ -121,8 +196,8 @@ const submitMasteryProfile = async (req, res, next) => {
         return apiResponse.accepted(res, {
           job_id: jobId,
           student_id,
-          gaps_queued: mastery_profile.knowledge_gaps.length,
-          topics: mastery_profile.knowledge_gaps.map((g) => g.topic),
+          gaps_queued: effectiveGaps.length,
+          topics: effectiveGaps.map((g) => g.topic),
           check_status_at: '/api/agent/jobs/' + jobId,
           materials_available_at: '/api/materials/' + student_id,
         }, 'n8n response timed out, but LLM processing continues in background. Check status periodically.');
@@ -141,14 +216,14 @@ const submitMasteryProfile = async (req, res, next) => {
     }
 
     userServiceClient.updateStudentStatsAsync(student_id, {
-      materials_generated_increment: mastery_profile.knowledge_gaps.length,
+      materials_generated_increment: effectiveGaps.length,
     });
 
     return apiResponse.accepted(res, {
       job_id: jobId,
       student_id,
-      gaps_queued: mastery_profile.knowledge_gaps.length,
-      topics: mastery_profile.knowledge_gaps.map((g) => g.topic),
+      gaps_queued: effectiveGaps.length,
+      topics: effectiveGaps.map((g) => g.topic),
       check_status_at: '/api/agent/jobs/' + jobId,
       materials_available_at: '/api/materials/' + student_id,
     }, 'Material generation queued. LLM processing takes 2-10 minutes.');
@@ -179,6 +254,43 @@ const getMasteryProfile = async (req, res, next) => {
         success: false,
         error: 'No mastery profile found for this student',
         code: 'NOT_FOUND',
+      });
+    }
+
+    return apiResponse.success(res, profile);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getMasteryProfileById = async (req, res, next) => {
+  try {
+    const { profileId } = req.params;
+    const tokenStudentId = req.student.id;
+
+    if (!mongoose.isValidObjectId(profileId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'No mastery profile found for this id',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    const profile = await MasteryProfile.findById(profileId);
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: 'No mastery profile found for this id',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    if (profile.student_id !== tokenStudentId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You can only access your own mastery profile',
+        code: 'FORBIDDEN',
       });
     }
 
@@ -235,5 +347,6 @@ const getMasteryHistory = async (req, res, next) => {
 module.exports = {
   submitMasteryProfile,
   getMasteryProfile,
+  getMasteryProfileById,
   getMasteryHistory,
 };

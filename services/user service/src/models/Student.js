@@ -26,7 +26,6 @@ const studentSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
       select: false,
     },
@@ -58,6 +57,22 @@ const studentSchema = new mongoose.Schema(
         type: String,
         default: '',
       },
+    },
+    github: {
+      linked: { type: Boolean, default: false },
+      gh_login: { type: String },
+      linked_at: { type: Date },
+      credential_ref: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'GithubCredential',
+      },
+    },
+    google: {
+      linked: { type: Boolean, default: false },
+      google_id: { type: String },
+      email: { type: String },
+      picture: { type: String },
+      linked_at: { type: Date },
     },
     stats: {
       overall_mastery_score: {
@@ -193,6 +208,10 @@ studentSchema.pre('save', async function (next) {
 
 // Instance Methods
 studentSchema.methods.comparePassword = async function (candidatePassword) {
+  // OAuth-only accounts (e.g. Google sign-up) have no password set.
+  if (!this.password) {
+    return false;
+  }
   return bcrypt.compare(candidatePassword, this.password);
 };
 

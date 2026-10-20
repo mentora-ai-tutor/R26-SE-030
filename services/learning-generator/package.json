@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "node --test",
+    "seed:concept-graph": "node scripts/seedConceptGraph.js"
   },
   "keywords": ["mentora", "learning", "ai", "agentic", "n8n"],
   "author": "MENTORA Team",

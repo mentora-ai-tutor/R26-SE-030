@@ -5,46 +5,130 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
-  # ── Build & Push AI Engine ──
-  ai-engine:
+  # ══════════════════════════════════════════════════════════════
+  # Tests
+  # ══════════════════════════════════════════════════════════════
+  test-node:
+    name: Tests (Node · user-service, assessment-agent, learning-generator)
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to GHCR
-        if: github.event_name == 'push'
-        uses: docker/login-action@v3
+      - name: Setup Node 22 (LTS)
+        uses: actions/setup-node@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          node-version: 22
+          cache: npm
+          cache-dependency-path: test/package-lock.json
 
-      - name: Build AI Engine
-        uses: docker/build-push-action@v5
+      - name: Install test dependencies
+        working-directory: test
+        run: npm ci
+
+      - name: Jest · user-service (unit/integration/performance)
+        working-directory: test
+        run: npx jest --silent user-service
+
+      - name: Jest · assessment-agent (unit/integration/performance)
+        working-directory: test
+        run: npx jest --silent assessment-agent
+
+      - name: node:test · learning-generator (unit/integration/performance)
+        working-directory: test
+        run: node --test --test-reporter=dot "learning-generator/**/*.test.js"
+
+  test-python:
+    name: Tests (Python · knowledge-analysis, peer-learning, ai-engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
         with:
-          context: ./ai-engine/learning-generator
-          push: ${{ github.event_name == 'push' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ai-engine:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ai-engine:${{ github.sha }}
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/peer-learning/requirements.txt
 
-  # ── Build & Push User Service ──
+      - name: Install service and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/knowledge-analysis/requirements.txt
+          pip install -r services/peer-learning/requirements.txt
+          pip install -r ai-engine/learning-generator/requirements.txt
+
+      # Each service owns a top-level `app` package, so they must run as
+      # separate pytest processes (collecting them together clashes).
+      - name: pytest · knowledge-analysis
+        run: python -m pytest test/knowledge-analysis -q
+
+      - name: pytest · peer-learning
+        run: python -m pytest test/peer-learning -q
+
+      - name: pytest · ai-engine
+        run: python -m pytest test/ai-engine -q
+
+  # ══════════════════════════════════════════════════════════════
+  # Detect which services changed, so we only rebuild & push those
+  # ══════════════════════════════════════════════════════════════
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      user-service: ${{ steps.filter.outputs.user-service }}
+      lmg-service: ${{ steps.filter.outputs.lmg-service }}
+      assessment-agent: ${{ steps.filter.outputs.assessment-agent }}
+      knowledge-analysis: ${{ steps.filter.outputs.knowledge-analysis }}
+      peer-learning: ${{ steps.filter.outputs.peer-learning }}
+      ai-engine: ${{ steps.filter.outputs.ai-engine }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter changed service paths
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            user-service:
+              - 'services/user service/**'
+            lmg-service:
+              - 'services/learning-generator/**'
+            assessment-agent:
+              - 'services/assessment-agent/**'
+            knowledge-analysis:
+              - 'services/knowledge-analysis/**'
+            peer-learning:
+              - 'services/peer-learning/**'
+            ai-engine:
+              - 'ai-engine/**'
+
+  # ══════════════════════════════════════════════════════════════
+  # Build & Push images (changed services only; pushed on push to main)
+  # ══════════════════════════════════════════════════════════════
   user-service:
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.user-service == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Normalize image namespace (GHCR requires lowercase repo names)
+        run: echo "IMAGE_PREFIX=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: github.event_name == 'push'
@@ -54,7 +138,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build User Service
+      - name: Build & push User Service
         uses: docker/build-push-action@v5
         with:
           context: ./services/user service
@@ -63,14 +147,18 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/user-service:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/user-service:${{ github.sha }}
 
-  # ── Build & Push LMG Service ──
   lmg-service:
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.lmg-service == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Normalize image namespace (GHCR requires lowercase repo names)
+        run: echo "IMAGE_PREFIX=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: github.event_name == 'push'
@@ -80,7 +168,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build LMG Service
+      - name: Build & push LMG Service
         uses: docker/build-push-action@v5
         with:
           context: ./services/learning-generator
@@ -88,3 +176,123 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/lmg-service:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/lmg-service:${{ github.sha }}
+
+  assessment-agent:
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.assessment-agent == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize image namespace (GHCR requires lowercase repo names)
+        run: echo "IMAGE_PREFIX=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Assessment Agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/assessment-agent
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/assessment-agent:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/assessment-agent:${{ github.sha }}
+
+  knowledge-analysis:
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.knowledge-analysis == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize image namespace (GHCR requires lowercase repo names)
+        run: echo "IMAGE_PREFIX=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Knowledge Analysis Agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/knowledge-analysis
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/knowledge-analysis:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/knowledge-analysis:${{ github.sha }}
+
+  peer-learning:
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.peer-learning == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize image namespace (GHCR requires lowercase repo names)
+        run: echo "IMAGE_PREFIX=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Peer Learning Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/peer-learning
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/peer-learning:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/peer-learning:${{ github.sha }}
+
+  ai-engine:
+    needs: [changes, test-node, test-python]
+    if: needs.changes.outputs.ai-engine == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize image namespace (GHCR requires lowercase repo names)
+        run: echo "IMAGE_PREFIX=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push AI Engine
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ai-engine/learning-generator
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ai-engine:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ai-engine:${{ github.sha }}

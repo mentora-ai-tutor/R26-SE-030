@@ -6,6 +6,8 @@ const { masterySubmitSchema, paginationQuerySchema } = require('../utils/validat
 
 router.post('/submit', validateBody(masterySubmitSchema), masteryController.submitMasteryProfile);
 
+router.get('/profile/:profileId', masteryController.getMasteryProfileById);
+
 router.get('/:studentId', masteryController.getMasteryProfile);
 
 router.get('/:studentId/history', validateQuery(paginationQuerySchema), masteryController.getMasteryHistory);

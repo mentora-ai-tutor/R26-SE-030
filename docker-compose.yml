@@ -1,6 +1,16 @@
-version: "3.8"
-
 services:
+  # ── n8n Workflow Automation ──
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n-container
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - /Volumes/My Data/n8n-data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # ── User Service ──
   user-service:
     build:
@@ -14,7 +24,7 @@ services:
       - ./services/user service/.env
     environment:
       PORT: 3001
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3002,https://mentora.kaweesha.com
 
   # ── Learning Material Generator Service ──
   lmg-service:
@@ -29,9 +39,72 @@ services:
       - ./services/learning-generator/.env
     environment:
       PORT: 3002
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3002,https://mentora.kaweesha.com
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - user-service
+
+  # ── Assessment & Mastery Evaluation (AME) Agent ──
+  assessment-agent:
+    build:
+      context: ./services/assessment-agent
+      dockerfile: Dockerfile
+    container_name: mentora-assessment-agent
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    env_file:
+      - ./services/assessment-agent/.env
+    environment:
+      PORT: 5002
+      N8N_BASE_URL: http://n8n-container:5678
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      FRONTEND_URL: http://localhost:3000,https://mentora.kaweesha.com
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - user-service
+
+  # ── Peer Learning Service ──
+  peer-learning:
+    build:
+      context: ./services/peer-learning
+      dockerfile: Dockerfile
+    container_name: mentora-peer-learning
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./services/peer-learning/.env
+    environment:
+      PORT: 8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Knowledge Analysis Agent (KAA) ──
+  knowledge-analysis:
+    build:
+      context: ./services/knowledge-analysis
+      dockerfile: Dockerfile
+    container_name: mentora-knowledge-analysis
+    restart: unless-stopped
+    ports:
+      - "5007:8000"
+    env_file:
+      - ./services/knowledge-analysis/.env
+    environment:
+      USER_SERVICE_INTERNAL_URL: http://user-service:3001
+      AI_ENGINE_URL: http://ai-engine:5010
+      OLLAMA_URL: http://host.docker.internal:11434
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-sa.json
+    volumes:
+      - ./services/knowledge-analysis/gcp-sa.json:/app/gcp-sa.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - user-service
+      - ai-engine
 
   # ── AI Engine ──
   ai-engine:

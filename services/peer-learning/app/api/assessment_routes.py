@@ -241,7 +241,6 @@ async def evaluate_code(
                     "passed": passed if sequence_complete else False,
                     "task_progress": task_progress,
                     "tasks_passed": sum(1 for item in task_progress if item.get("passed")),
-                    "mastery_score": int((sum(1 for item in task_progress if item.get("passed")) / len(tasks)) * 100),
                     "updated_at": now,
                 },
             },

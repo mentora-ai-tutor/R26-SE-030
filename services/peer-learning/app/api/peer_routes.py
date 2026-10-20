@@ -5,6 +5,7 @@ from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.agents.student_agent import generate_peer_coding_tasks
 from app.api.student_routes import verify_jwt_student
@@ -14,6 +15,10 @@ from app.services.mongodb import get_collection, save_peer_match, upsert_collab_
 logger = logging.getLogger("peer_routes")
 
 router = APIRouter(prefix="/api/peer", tags=["Peer Matching"])
+
+
+class PeerMatchTopicRequest(BaseModel):
+    topic: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
 
 # ==========================================
@@ -342,6 +347,7 @@ def _extract_learner_gap_details(student: dict, topic: str) -> dict:
 @router.post("/match", response_model=PeerMatchResponse)
 def match_peer(
     token_student_id: str = Depends(verify_jwt_student),
+    request: Optional[PeerMatchTopicRequest] = None,
 ):
     """
     Finds a complementary peer pair using a strength-vs-gap model.
@@ -349,7 +355,7 @@ def match_peer(
     the room_id so they can join the live collaboration room.
     """
     student_id = token_student_id
-    request_topic = None
+    request_topic = request.topic.strip() if request and request.topic else None
     target_role = "peer_learner"
 
     try:

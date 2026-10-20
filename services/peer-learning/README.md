@@ -14,10 +14,29 @@ A FastAPI backend for personalized Java learning. The platform combines mastery-
 - Peer matching based on strengths and knowledge gaps
 - MongoDB persistence for students, analyses, sessions, assessments, rooms, notifications, and chat summaries
 - Collaborative WebSocket code editing
+- Project workspaces with member roles, shared files, chat, comments, and tasks
 - Learner and Peer Teacher task-progress synchronization
 - Live named learner/Peer Teacher cursors with presence cleanup
 - Shared collaborative whiteboard with drawing and text annotations
 - WebSocket reconnect/refresh state restoration
+
+## Project Workspace — Phases 1 through 3
+
+Workspace access reuses the existing student JWT (`Authorization: Bearer <token>`). New workspaces record the authenticated student as the `leader`; membership roles are `leader`, `member`, and `viewer` (`owner`/`editor` are normalized when reading older workspace records). `peer_pool_id` and `project_id` can be supplied when creating a workspace.
+
+Leaders can search registered students with `GET /api/workspaces/students/search?q=...` and send a direct invite with `POST /api/workspaces/{workspace_id}/invite`. Invites remain pending until the invited student calls `POST /api/workspaces/invitations/{invite_id}/accept` or `/decline`; pending invitations are listed at `GET /api/workspaces/invitations/pending`. Student lookup uses the existing `students` MongoDB collection.
+
+Join keys are generated at `POST /api/workspaces/{workspace_id}/keys`, shown only in that response, and stored as SHA-256 hashes. The leader can list active keys, revoke one with `DELETE /api/workspaces/{workspace_id}/keys/{key_id}`, or rotate it with `POST /api/workspaces/{workspace_id}/keys/{key_id}/regenerate`. Students join at `POST /api/workspaces/join`. Keys have bounded expiry and uses; join attempts are limited per student and IP using MongoDB-backed counters with TTL cleanup. Startup creates the workspace indexes, including TTL indexes for expired keys and rate-limit counters. No additional environment variables or dependencies are required.
+
+Workspace lifecycle can be changed by the leader using `PUT /api/workspaces/{workspace_id}` with `{"status":"archived"}` or `{"status":"closed"}`. Archived and closed workspaces are read-only and no longer accept members through invites or keys.
+
+Workspace file routes provide a shared file tree for members. Create files with `POST /api/workspaces/{workspace_id}/files` and folders with `POST /api/workspaces/{workspace_id}/folders`; file creation accepts `name` plus an optional `parent_path`, or a relative `path`. Rename entries with `PUT /api/workspaces/{workspace_id}/files/{file_id}`, move them with `POST /api/workspaces/{workspace_id}/files/{file_id}/move`, and duplicate files or entire folder trees with `POST /api/workspaces/{workspace_id}/files/{file_id}/duplicate`. Deleting a file or folder moves it and its descendants to trash; list trash at `GET /api/workspaces/{workspace_id}/trash`, restore with `POST /api/workspaces/{workspace_id}/trash/{trash_id}/restore`, or permanently delete a trash item with `DELETE /api/workspaces/{workspace_id}/trash/{trash_id}`. Trash expires after 30 days.
+
+Workspace paths are relative, use `/` separators, and reject traversal, absolute paths, invalid characters, and segments over 100 characters. Each workspace is limited to 500 file/folder entries, 1 MiB per text file, and 10 MiB total file content. Export a workspace with `GET /api/workspaces/{workspace_id}/export`; import a ZIP by sending its raw bytes to `POST /api/workspaces/{workspace_id}/import`. ZIP import rejects traversal paths, symlinks, binary/non-UTF-8 files, oversized entries, and path conflicts. Startup creates a MongoDB TTL index for 30-day trash cleanup. No additional dependencies or environment variables are required.
+
+The workspace WebSocket is `/api/workspaces/ws/{workspace_id}`. Authenticate with the existing student JWT in the `Authorization: Bearer ...` header (or `token` query parameter). Membership is checked on connect and revalidated every 30 seconds. Supported client events are `YJS_UPDATE` (editor roles only), `SYNC_REQUEST`, `PRESENCE_UPDATE`/`AWARENESS`, `CHAT_MESSAGE`, and `PING`; unknown events are rejected. Yjs update envelopes are forwarded and persisted in order, so clients must apply Yjs CRDT updates rather than send whole-document last-write-wins replacements. Connections are limited to 1 MiB per event and 120 events per minute.
+
+The server broadcasts `PRESENCE`, `PRESENCE_LEFT`, `FILE_TREE`, and `ACTIVITY` events. File tree notifications cover create/update/move/duplicate/delete/restore/import; presence can include the active file, cursor, and selection. Activity entries are persisted and visible to leaders through `GET /api/workspaces/{workspace_id}/activity`, filterable by `actor_student_id` and `action`. Events are capped at 2 MiB, with per-connection limits of 600 events and 20 MiB per minute.
 
 ## Architecture
 
@@ -50,6 +69,7 @@ The application registers these routers in `app/main.py`:
 - `app/api/peer_routes.py`
 - `app/api/chat_routes.py`
 - `app/api/collab_routes.py`
+- `app/api/workspace_routes.py` and `app/api/workspace_ws.py`
 
 `app/api/agent_routes.py`, `app/api/rag_routes.py`, and `app/api/websocket_routes.py` contain additional/legacy implementations but are not registered by the current `app/main.py`.
 
@@ -201,6 +221,15 @@ POST /api/student/onboard-and-diagnose
 Authorization: Bearer <jwt-token>
 ```
 
+Send the unlocked gap's `topic_id` and `topic` in an optional JSON body to target that gap. Omitting the body retains the legacy behavior of selecting the first gap. Reuse the same topic for subsequent task requests; switching topics during an active session returns `409`.
+
+```json
+{
+  "topic_id": "JAVA_OOP",
+  "topic": "OOP and Class Design"
+}
+```
+
 The first request generates and stores seven tasks, but returns only Task 1. The seven task types are always intended to be ordered as follows:
 
 1. `write_code`
@@ -278,7 +307,7 @@ POST /api/peer/match
 Authorization: Bearer <jwt-token>
 ```
 
-The service searches saved students and imported analyses for a complementary strength/gap match. On success it creates a room ID and notifications for both participants.
+Optionally send `{"topic": "OOP and Class Design"}` to match against the learner's unlocked gap. Without a body, the service uses the first gap. On success it creates a room ID and notifications for both participants.
 
 ### 2. Initialize or join the room
 

@@ -30,6 +30,42 @@ COLLECTIONS = {
     "knowledge_chunks": [("chunk_index", ASCENDING)],
 }
 
+WORKSPACE_COLLECTIONS = {
+    "workspaces": [
+        ("workspace_id", ASCENDING),
+        ("owner_student_id", ASCENDING),
+        ("members.student_id", ASCENDING),
+    ],
+    "join_keys": [("key_hash", ASCENDING), ("workspace_id", ASCENDING)],
+    "workspace_invites": [
+        ("workspace_id", ASCENDING),
+        ("student_id", ASCENDING),
+        ("status", ASCENDING),
+    ],
+    "workspace_files": [("workspace_id", ASCENDING), ("path", ASCENDING)],
+    "file_versions": [
+        ("workspace_id", ASCENDING),
+        ("file_id", ASCENDING),
+        ("created_at", ASCENDING),
+    ],
+    "workspace_chat": [
+        ("workspace_id", ASCENDING),
+        ("student_id", ASCENDING),
+        ("created_at", ASCENDING),
+    ],
+    "workspace_chat_reads": [
+        ("workspace_id", ASCENDING),
+        ("student_id", ASCENDING),
+    ],
+    "workspace_comments": [("workspace_id", ASCENDING), ("file_id", ASCENDING)],
+    "workspace_tasks": [("workspace_id", ASCENDING)],
+    "activity_log": [("workspace_id", ASCENDING), ("created_at", ASCENDING)],
+    "workspace_sync": [("workspace_id", ASCENDING), ("file_id", ASCENDING)],
+    "workspace_trash": [("workspace_id", ASCENDING)],
+    "workspace_notifications": [("student_id", ASCENDING), ("workspace_id", ASCENDING)],
+}
+COLLECTIONS.update(WORKSPACE_COLLECTIONS)
+
 
 def get_client() -> MongoClient:
     """Lazily creates and reuses the MongoDB client."""
@@ -68,6 +104,61 @@ def init_db() -> bool:
                     db[name].create_index([(field, direction)])
                 except Exception:
                     pass
+
+        try:
+            db["join_keys"].create_index(
+                [("key_hash", ASCENDING)],
+                unique=True,
+                name="workspace_join_key_hash_unique",
+            )
+        except Exception:
+            logger.exception("Failed to create unique workspace join-key index")
+
+        try:
+            db["join_keys"].create_index(
+                [("expires_at", ASCENDING)],
+                expireAfterSeconds=0,
+                name="workspace_join_key_expiry_ttl",
+            )
+        except Exception:
+            logger.exception("Failed to create workspace join-key expiry index")
+
+        try:
+            db["workspace_invites"].create_index(
+                [("workspace_id", ASCENDING), ("student_id", ASCENDING)],
+                unique=True,
+                partialFilterExpression={"status": "pending"},
+                name="workspace_pending_invite_unique",
+            )
+        except Exception:
+            logger.exception("Failed to create unique pending workspace invitation index")
+
+        try:
+            db["workspace_join_attempts"].create_index(
+                [("expires_at", ASCENDING)],
+                expireAfterSeconds=0,
+                name="workspace_join_attempt_expiry_ttl",
+            )
+        except Exception:
+            logger.exception("Failed to create workspace join-attempt expiry index")
+
+        try:
+            db["workspace_trash"].create_index(
+                [("expires_at", ASCENDING)],
+                expireAfterSeconds=0,
+                name="workspace_trash_expiry_ttl",
+            )
+        except Exception:
+            logger.exception("Failed to create workspace trash expiry index")
+
+        try:
+            db["workspace_chat_reads"].create_index(
+                [("workspace_id", ASCENDING), ("student_id", ASCENDING)],
+                unique=True,
+                name="workspace_chat_read_marker_unique",
+            )
+        except Exception:
+            logger.exception("Failed to create unique workspace chat read-marker index")
 
         logger.info(f"MongoDB connected. Database ready: {DB_NAME}")
         return True

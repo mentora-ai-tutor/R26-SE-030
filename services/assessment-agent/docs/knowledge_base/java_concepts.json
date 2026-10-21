@@ -1,0 +1,80 @@
+[
+  {
+    "id": "exc_001",
+    "topic": "Exception Handling",
+    "sub_concept": "try-catch",
+    "text": "In Java, a try block contains code that might throw an exception. A catch block, placed right after try, catches a specific exception type and handles it. You can chain multiple catch blocks to handle different exception types differently. Example: try { int x = 10/0; } catch (ArithmeticException e) { System.out.println('Cannot divide by zero'); }"
+  },
+  {
+    "id": "exc_002",
+    "topic": "Exception Handling",
+    "sub_concept": "finally",
+    "text": "The finally block always runs after try/catch, whether or not an exception was thrown, and even if the try block contains a return statement. The only cases it does not run are System.exit() or a JVM crash. This is a common misconception: learners often think finally is skipped if try already returned a value, but Java executes finally before the method actually returns."
+  },
+  {
+    "id": "exc_003",
+    "topic": "Exception Handling",
+    "sub_concept": "checked vs unchecked exceptions",
+    "text": "Checked exceptions (like IOException) must be declared with 'throws' or handled with try-catch at compile time. Unchecked exceptions (like NullPointerException, ArithmeticException) extend RuntimeException and are not checked by the compiler. Checked exceptions represent recoverable conditions; unchecked usually represent programming bugs."
+  },
+  {
+    "id": "exc_004",
+    "topic": "Exception Handling",
+    "sub_concept": "custom exceptions",
+    "text": "You create a custom exception by extending Exception (checked) or RuntimeException (unchecked). Example: class InvalidAgeException extends Exception { public InvalidAgeException(String message) { super(message); } }. Custom exceptions let you name domain-specific error conditions instead of using generic ones."
+  },
+  {
+    "id": "exc_005",
+    "topic": "Exception Handling",
+    "sub_concept": "try-with-resources",
+    "text": "try-with-resources automatically closes resources (like files or database connections) that implement AutoCloseable, even if an exception occurs. Example: try (FileReader fr = new FileReader('file.txt')) { ... }. This avoids the common bug of forgetting to close resources in a finally block."
+  },
+  {
+    "id": "oop_001",
+    "topic": "OOP - Inheritance",
+    "sub_concept": "extends keyword",
+    "text": "A class inherits fields and methods from a parent class using 'extends'. Example: class Dog extends Animal. Java supports single inheritance for classes (one parent only), but multiple inheritance of interfaces."
+  },
+  {
+    "id": "oop_002",
+    "topic": "OOP - Inheritance",
+    "sub_concept": "method overriding",
+    "text": "A subclass overrides a parent method by redefining it with the same name, parameters, and return type (or covariant return type). Overriding requires the @Override annotation for safety. Private and static methods cannot be overridden -- private methods are not inherited at all, and static methods are hidden, not overridden, which is a frequent misconception."
+  },
+  {
+    "id": "oop_003",
+    "topic": "OOP - Inheritance",
+    "sub_concept": "super",
+    "text": "The 'super' keyword accesses the parent class's methods, fields, or constructor. super() must be the first statement in a subclass constructor if used. It's commonly used to extend rather than fully replace parent behavior, e.g., super.toString() + extra info."
+  },
+  {
+    "id": "oop_004",
+    "topic": "OOP - Inheritance",
+    "sub_concept": "abstract classes",
+    "text": "An abstract class cannot be instantiated and may contain both abstract methods (no body) and regular methods. Subclasses must implement all abstract methods unless they are also abstract. Abstract classes are used when related classes share common code but each needs specialized behavior for some methods."
+  },
+  {
+    "id": "col_001",
+    "topic": "Collections - ArrayList",
+    "sub_concept": "add/remove",
+    "text": "ArrayList.add() appends to the end in amortized O(1) time. remove(int index) shifts subsequent elements left, costing O(n). remove(Object o) removes the first matching element by equals()."
+  },
+  {
+    "id": "col_002",
+    "topic": "Collections - ArrayList",
+    "sub_concept": "iteration",
+    "text": "Removing an element with list.remove() while iterating with a for-each loop throws ConcurrentModificationException. Use an Iterator's remove() method instead, or iterate backwards with an index-based loop, to safely remove elements during iteration."
+  },
+  {
+    "id": "col_003",
+    "topic": "Collections - ArrayList",
+    "sub_concept": "generics with ArrayList",
+    "text": "ArrayList<String> list = new ArrayList<>() uses generics to enforce type safety at compile time, avoiding ClassCastException at runtime that plagued raw-typed collections in old Java code."
+  },
+  {
+    "id": "col_004",
+    "topic": "Collections - ArrayList",
+    "sub_concept": "ArrayList vs LinkedList performance",
+    "text": "ArrayList offers O(1) random access (get by index) but O(n) insertion/removal in the middle. LinkedList offers O(1) insertion/removal at known positions but O(n) random access. Choose ArrayList when you read often; choose LinkedList when you insert/remove often at the ends or middle via an iterator."
+  }
+]

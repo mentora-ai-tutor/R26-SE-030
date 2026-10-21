@@ -7,7 +7,7 @@ services:
     ports:
       - "5678:5678"
     volumes:
-      - /Volumes/My Data/n8n-data:/home/node/.n8n
+      - n8n-data:/home/node/.n8n
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -121,3 +121,5 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3:8b}
       OLLAMA_CODE_MODEL: ${OLLAMA_CODE_MODEL:-qwen2.5-coder:7b}
+volumes:
+  n8n-data:

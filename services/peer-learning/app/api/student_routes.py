@@ -65,6 +65,48 @@ class StudentOnboardRequest(BaseModel):
     )
 
 
+class DiagnosticSessionStartRequest(BaseModel):
+    topic_id: Optional[str] = None
+    topic: Optional[str] = None
+
+
+def _select_knowledge_gap(
+    knowledge_gaps: List[dict],
+    topic_id: Optional[str],
+    topic: Optional[str],
+) -> Optional[dict]:
+    if topic_id:
+        return next(
+            (gap for gap in knowledge_gaps if gap.get("topic_id") == topic_id),
+            None,
+        )
+    if topic:
+        normalized_topic = topic.strip().casefold()
+        return next(
+            (
+                gap
+                for gap in knowledge_gaps
+                if str(gap.get("topic", "")).strip().casefold() == normalized_topic
+            ),
+            None,
+        )
+    return knowledge_gaps[0] if knowledge_gaps else None
+
+
+def _count_passed_diagnostic_tasks(session: dict) -> int:
+    task_progress = session.get("task_progress")
+    if isinstance(task_progress, list) and task_progress:
+        return sum(1 for task in task_progress if task.get("passed"))
+
+    passed_task_numbers = {
+        result.get("task_number")
+        for result in session.get("results", [])
+        if (result.get("passed") or result.get("grade") == "pass")
+        and result.get("task_number") is not None
+    }
+    return len(passed_task_numbers)
+
+
 # --- JWT Authentication Dependency ---
 
 
@@ -243,6 +285,7 @@ class StudentAnalysisImportRequest(BaseModel):
 )
 def onboard_and_diagnose_student(
     token_student_id: str = Depends(verify_jwt_student),
+    request: Optional[DiagnosticSessionStartRequest] = None,
 ):
     """Manages a stateful 7-question diagnostic coding session.
 
@@ -256,6 +299,8 @@ def onboard_and_diagnose_student(
     try:
         now = datetime.now(timezone.utc).isoformat()
         sessions = get_collection("diagnostic_sessions")
+        requested_topic_id = request.topic_id.strip() if request and request.topic_id else None
+        requested_topic = request.topic.strip() if request and request.topic else None
 
         # Check for existing session
         existing_session = sessions.find_one(
@@ -263,10 +308,23 @@ def onboard_and_diagnose_student(
             sort=[("created_at", -1)],
         )
 
+        if existing_session and (requested_topic_id or requested_topic):
+            session_matches_topic = (
+                existing_session.get("topic_id") == requested_topic_id
+                if requested_topic_id
+                else str(existing_session.get("topic", "")).strip().casefold()
+                == requested_topic.casefold()
+            )
+            if not session_matches_topic:
+                raise HTTPException(
+                    status_code=409,
+                    detail="An active diagnostic session exists for a different knowledge gap. Reset it before switching topics.",
+                )
+
         # A completed sequence can be revisited to retrieve its summary.
         if existing_session and existing_session.get("status") == "completed":
             results = existing_session.get("results", [])
-            tasks_passed = sum(1 for result in results if result.get("passed") or result.get("grade") == "pass")
+            tasks_passed = _count_passed_diagnostic_tasks(existing_session)
             return {
                 "status": "session_complete",
                 "student_id": token_student_id,
@@ -274,7 +332,6 @@ def onboard_and_diagnose_student(
                 "session_summary": {
                     "total_tasks": len(existing_session.get("tasks", [])),
                     "tasks_passed": tasks_passed,
-                    "mastery_score": existing_session.get("mastery_score", int((tasks_passed / 7) * 100)),
                     "results": results,
                 },
             }
@@ -287,8 +344,7 @@ def onboard_and_diagnose_student(
             # If all 7 tasks completed, mark session complete
             if current_index >= 7:
                 results = existing_session.get("results", [])
-                tasks_passed = sum(1 for r in results if r.get("grade") == "pass")
-                mastery_score = int((tasks_passed / 7) * 100)
+                tasks_passed = _count_passed_diagnostic_tasks(existing_session)
 
                 sessions.update_one(
                     {"_id": existing_session["_id"]},
@@ -296,7 +352,6 @@ def onboard_and_diagnose_student(
                         "status": "completed",
                         "completed_at": now,
                         "tasks_passed": tasks_passed,
-                        "mastery_score": mastery_score,
                     }},
                 )
 
@@ -307,7 +362,6 @@ def onboard_and_diagnose_student(
                     "session_summary": {
                         "total_tasks": 7,
                         "tasks_passed": tasks_passed,
-                        "mastery_score": mastery_score,
                         "results": results,
                     },
                 }
@@ -341,8 +395,17 @@ def onboard_and_diagnose_student(
                 ),
             )
 
-        # Use first knowledge gap's first weak subskill for diagnostic
-        first_gap = knowledge_gaps[0]
+        first_gap = _select_knowledge_gap(
+            knowledge_gaps,
+            requested_topic_id,
+            requested_topic,
+        )
+        if not first_gap:
+            raise HTTPException(
+                status_code=404,
+                detail="The requested knowledge gap was not found in the student's mastery analysis.",
+            )
+
         topic_id = first_gap.get("topic_id", "TOPIC_GENERIC")
         topic = first_gap.get("topic", "Java Programming")
         weak_subskills = first_gap.get("weak_subskills", [])

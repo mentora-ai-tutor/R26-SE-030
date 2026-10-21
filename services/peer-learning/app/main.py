@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+﻿from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
@@ -13,7 +13,9 @@ from app.api.individual_quiz_routes import router as individual_quiz_router
 from app.api.peer_routes import router as peer_router
 from app.api.rag_routes import recommend_learning_materials, router as rag_router
 from app.api.student_routes import router as student_router
-from app.api.question_generator_routes import router as question_generator_router  # 👈 1. මෙතැන Import කළා
+from app.api.workspace_routes import router as workspace_router
+from app.api.question_generator_routes import router as question_generator_router
+from app.api import workspace_ws
 from app.models.schemas import RecommendationRequest, RecommendationResponse
 
 # ---------------------------------------------------------------------------
@@ -99,7 +101,9 @@ fastapi_app.include_router(peer_router)            # Agent 4: Peer Matching Agen
 fastapi_app.include_router(chat_router)            # Agent 5: Chat Moderator Agent
 fastapi_app.include_router(collab_router)          # Live Code Editor Router
 fastapi_app.include_router(individual_quiz_router) # Individual Quiz Router (/api/individual-quiz)
-fastapi_app.include_router(question_generator_router) # 👈 2. මෙතැන Router එක Register කළා
+fastapi_app.include_router(workspace_router)
+fastapi_app.include_router(question_generator_router)
+fastapi_app.include_router(workspace_ws.router)
 
 
 # ---------------------------------------------------------------------------
